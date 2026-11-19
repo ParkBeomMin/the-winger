@@ -486,6 +486,11 @@ function kitClash(a, b) {
   const [x, y] = [h(a), h(b)];
   return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]) < 110;
 }
+function teamBadge(T, kit) {
+  if (crestId(T.name)) return `<div class="crest-big">${crestHTML(T.name, 66)}</div>`;
+  if (T.nat) return `<div class="crest nat">${NATIONS[T.nat].flag}</div>`;
+  return `<div class="crest" style="background:${kit[0]};border-color:${kit[1]}">${esc(T.name.slice(0, 1))}</div>`;
+}
 const tStr = (T) => T.xi.reduce((s, p) => s + pOvr(p), 0) / Math.max(1, T.xi.length);
 /* o = { title, sub, mine:팀, opp:팀, mySide:"home"|"away", forceQuick } → { r(내 기준 요약), res(엔진 결과), m } */
 async function matchFlow(o) {
@@ -501,7 +506,11 @@ async function matchFlow(o) {
   const race = o.race;
   body.innerHTML = `
     <div class="pre">
-      <div class="pre-vs"><div id="pre-me"></div><div class="pre-mid"><b>VS</b><span>${esc(o.opp.name)}</span><small>상대 ${Math.round(tStr(o.opp))} · 우리 ${Math.round(tStr(o.mine))}</small></div><div id="pre-opp"></div></div>
+      <div class="pre-vs">
+        <div class="pre-team"><div id="pre-me"></div><b>${esc(o.mine.name)}</b><small>전력 ${Math.round(tStr(o.mine))}</small></div>
+        <div class="pre-mid"><b>VS</b></div>
+        <div class="pre-team"><div id="pre-opp"></div><b>${esc(o.opp.name)}</b><small>전력 ${Math.round(tStr(o.opp))}</small></div>
+      </div>
       ${rvOpp ? `<div class="pre-rv">⚔️ 라이벌 <b>${esc(S.rival.name)}</b> ${o.opp.xi.some((p) => p.id === "rv") ? "선발" : "벤치"}! 상대 전적 ${S.h2h.w}승 ${S.h2h.d}무 ${S.h2h.l}패</div>` : rvMate ? `<div class="pre-rv">🤝 라이벌 <b>${esc(S.rival.name)}</b>과 같은 편</div>` : ""}
       ${race && !absent ? `<div class="pre-race">${ROLE_KO[S.pos]} ${race.slots}자리 주전 경쟁 (선발 확률 ${Math.round(race.p * 100)}%)<b>${race.rivals.slice(0, 3).map((p) => `${esc(p.n)} ${Math.round(pOvr(p))}`).join(" · ")}</b></div>` : ""}
       <div class="pre-info"><div>${absent ? (S.ban > 0 && S.injured <= 0 ? "⛔ 출전 정지로 못 뛰어요" : "🤕 이번 경기는 못 뛰어요") : starter ? "✅ 선발 출전" : "🪑 벤치 대기 · 교체 투입 기회를 기다려요"}</div><div>🩹 컨디션 ${Math.round(S.cond)} · 폼 ${formStr(S.form)}</div></div>
@@ -510,9 +519,11 @@ async function matchFlow(o) {
       <button class="btn btn-primary" id="b-watch">${absent ? "📺 결과 확인" : "▶️ 경기 보기"}</button>
       ${absent ? "" : `<button class="btn btn-ghost" id="b-quick">⚡ 결과만 보기</button>`}
     </div>`;
-  $("pre-me").appendChild(avatarCanvas(S.look, o.mine.kit, 70, { mood: "angry" }));
-  if (rvOpp) $("pre-opp").appendChild(avatarCanvas(S.rival.look, oppKit, 70, { mood: "smug" }));
-  else $("pre-opp").innerHTML = crestId(o.opp.name) ? `<div class="crest-big">${crestHTML(o.opp.name, 66)}</div>` : `<div class="crest" style="background:${oppKit[0]};border-color:${oppKit[1]}">${esc(o.opp.name.slice(0, 1))}</div>`;
+  // 양쪽 모두 팀 엠블럼 (대표팀은 국기, 유스팀은 유니폼 색). 나·라이벌 얼굴은 엠블럼 옆 작은 배지로
+  $("pre-me").innerHTML = teamBadge(o.mine, o.mine.kit);
+  $("pre-opp").innerHTML = teamBadge(o.opp, oppKit);
+  const meB = document.createElement("div"); meB.className = "pre-face"; meB.appendChild(avatarCanvas(S.look, o.mine.kit, 30, { mood: "angry" })); $("pre-me").appendChild(meB);
+  if (rvOpp) { const rB = document.createElement("div"); rB.className = "pre-face rv"; rB.appendChild(avatarCanvas(S.rival.look, oppKit, 30, { mood: "smug" })); $("pre-opp").appendChild(rB); }
   const choice = o.forceQuick ? "quick" : await new Promise((res) => {
     $("b-watch").onclick = () => res(absent ? "quick" : "watch");
     const q = $("b-quick"); if (q) q.onclick = () => res("quick");
