@@ -479,6 +479,14 @@ async function openAuto() {
 
 /* ---------- 경기 공통 ---------- */
 /* ---------- 경기 공통 (모든 경기가 world.js 엔진으로) ---------- */
+/* 원정 유니폼: 주색·보조색·흰색·검정 중 우리 팀 색과 잔디색에서 가장 먼 걸로 */
+function awayKit(home, away) {
+  const h = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  const d = (a, b) => { const [x, y] = [h(a), h(b)]; return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]); };
+  if (d(home[0], away[0]) >= 150) return away;
+  const cands = [[away[1], away[0]], ["#f2f2f2", away[0]], ["#111111", away[0]], ["#f6d23a", "#111111"]];
+  return cands.map((k) => [k, Math.min(d(k[0], home[0]), d(k[0], "#2a7f44") * 1.2)]).sort((x, y) => y[1] - x[1])[0][0];
+}
 function kitClash(a, b) {
   const h = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
   const [x, y] = [h(a), h(b)];
@@ -499,18 +507,18 @@ async function matchFlow(o) {
   const absent = !meP;
   const rvOpp = [...o.opp.xi, ...(o.opp.bench || [])].some((p) => p.id === "rv");
   const rvMate = o.mine.xi.some((p) => p.id === "rv");
-  const oppKit = kitClash(o.mine.kit[0], o.opp.kit[0]) ? [o.opp.kit[1], o.opp.kit[0]] : o.opp.kit;
+  const oppKit = awayKit(o.mine.kit, o.opp.kit);
   const body = $("mt-body");
   const race = o.race;
   body.innerHTML = `
     <div class="pre">
       <div class="pre-vs">
-        <div class="pre-team"><div id="pre-me"></div><b>${esc(o.mine.name)}</b><small>전력 ${Math.round(tStr(o.mine))}</small></div>
+        <div class="pre-team"><div id="pre-me"></div><b>${esc(o.mine.name)}</b><small>${o.mine.form ? `${o.mine.form} · ${STYLES[o.mine.style || "bal"].name} · ` : ""}전력 ${Math.round(tStr(o.mine))}</small></div>
         <div class="pre-mid"><b>VS</b></div>
-        <div class="pre-team"><div id="pre-opp"></div><b>${esc(o.opp.name)}</b><small>전력 ${Math.round(tStr(o.opp))}</small></div>
+        <div class="pre-team"><div id="pre-opp"></div><b>${esc(o.opp.name)}</b><small>${o.opp.form ? `${o.opp.form} · ${STYLES[o.opp.style || "bal"].name} · ` : ""}전력 ${Math.round(tStr(o.opp))}</small></div>
       </div>
       ${rvOpp ? `<div class="pre-rv">⚔️ 라이벌 <b>${esc(S.rival.name)}</b> ${o.opp.xi.some((p) => p.id === "rv") ? "선발" : "벤치"}! 상대 전적 ${S.h2h.w}승 ${S.h2h.d}무 ${S.h2h.l}패</div>` : rvMate ? `<div class="pre-rv">🤝 라이벌 <b>${esc(S.rival.name)}</b>과 같은 편</div>` : ""}
-      ${race && !absent ? `<div class="pre-race">${ROLE_KO[S.pos]} ${race.slots}자리 주전 경쟁 (선발 확률 ${Math.round(race.p * 100)}%)<b>${race.rivals.slice(0, 3).map((p) => `${esc(p.n)} ${Math.round(pOvr(p))}`).join(" · ")}</b></div>` : ""}
+      ${race && !absent ? `<div class="pre-race">${race.slots ? `${race.form}의 ${ROLE_KO[S.pos]} ${race.slots}자리 주전 경쟁` : `⚠️ 감독의 ${race.form}엔 ${ROLE_KO[S.pos]} 자리가 없어요 · 다른 자리로 경쟁`} (선발 확률 ${Math.round(race.p * 100)}%)<b>${race.rivals.slice(0, 3).map((p) => `${esc(p.n)} ${Math.round(pOvr(p))}`).join(" · ")}</b></div>` : ""}
       <div class="pre-info"><div>${absent ? (S.ban > 0 && S.injured <= 0 ? "⛔ 출전 정지로 못 뛰어요" : "🤕 이번 경기는 못 뛰어요") : starter ? "✅ 선발 출전" : "🪑 벤치 대기 · 교체 투입 기회를 기다려요"}</div><div>🩹 컨디션 ${Math.round(S.cond)} · 폼 ${formStr(S.form)}</div></div>
       <div class="pre-xi">${o.mine.xi.map((p) => `<span class="${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}">${ROLE_KO[p.r]} ${esc(p.n)}</span>`).join("")}</div>
       ${S.cond < 45 && !absent ? `<div class="warn">⚠️ 컨디션이 낮아 능력치가 떨어진 채로 뛰어요</div>` : ""}
@@ -539,7 +547,7 @@ async function matchFlow(o) {
       home: { name: o.mine.name, kit: o.mine.kit, str: tStr(o.mine) }, away: { name: o.opp.name, kit: oppKit, str: tStr(o.opp) },
       m, mySide: o.mySide, auto: !!SET.auto, diffShot: DIFF[S.diff || "normal"].shot,
       me: { name: S.name, look: S.look, pos: S.pos, stats: S.stats, starter, subMin: mySubs ? mySubs.min : null },
-      rival: rvSide ? { name: S.rival.name, pos: S.rival.pos, side: rvSide, slot: rvSide === "home" && S.rival.pos === S.pos ? (S.pos === "wg" ? 8 : 5) : undefined } : null,
+      rival: rvSide ? { name: S.rival.name, pos: S.rival.pos, side: rvSide, number: S.rival.look.number } : null,
       onAutoChange: (v) => { SET.auto = v; saveSet(); },
     });
   } else resolveAuto(m);
@@ -653,7 +661,7 @@ function youthSquad(name, kit, nat, base, extra = []) {
   });
   const all = [...extra, ...ps];
   const xi = bestXI(all), bench = benchOf(all, xi);
-  return { name, kit, xi, bench, adv: 0, meBench: bench.some((p) => p.id === "me") };
+  return { name, kit, xi, bench, form: "4-3-3", style: "bal", adv: 0, meBench: bench.some((p) => p.id === "me") };
 }
 async function runTournament() {
   const final = S.month === 12;
@@ -718,12 +726,13 @@ function offerList(score, opts = {}) {
   }
   return list;
 }
-function starterProb(club) {
-  if (!W || !W.c[club]) return .5;
-  const mine = OVR() + S.form * 1.2;
-  const others = clubPlayers(club).filter((p) => p.id !== "me" && p.r === S.pos).map((p) => pOvr(p)).sort((a, b) => b - a);
-  const kth = others[SLOTS[S.pos] - 1];
-  return kth == null ? .97 : clamp(.5 + (mine - kth) / 7, .04, .97);
+function starterProb(club) { return !W || !W.c[club] ? .5 : startChance(club, "me", 30); }
+/* 감독 한 줄 + 포메이션 그림 */
+function coachLine(club) { const co = coachOf(club); return `👔 ${esc(co.n)} ${NATIONS[co.nat] ? NATIONS[co.nat].flag : ""} · <b>${co.f}</b> · ${STYLES[co.s].name}`; }
+function formationHTML(club, xi) {
+  const F = FORMS[formOf(club)];
+  return `<div class="fpitch">${xi.map((p, i) => { const [x, y] = F.pos[i] || [.5, .5];
+    return `<span class="fdot ${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}" style="left:${8 + x * 84 / .72}%;top:${y * 100}%"><i>${p.id === "me" ? S.look.number : p.id === "rv" ? S.rival.look.number : p.no || ""}</i><em>${esc(p.n.includes(" ") ? p.n.split(" ").slice(-1)[0] : p.n)}</em></span>`; }).join("")}</div>`;
 }
 function salaryOf(lg) { return Math.round(LEAGUES[lg].pay * Math.pow(OVR() / 65, 2) * (S.flags.agent ? .9 : 1)); }
 function rivalPickClub() {
@@ -740,7 +749,7 @@ function rivalPickClub() {
   moveToClub("rv", best.club);
 }
 function ensureWorld() {
-  if (S.world && S.world.p && S.world.p.me && S.world.p.me.cs) { W = S.world; return; }
+  if (S.world && S.world.p && S.world.p.me && S.world.p.me.cs) { W = S.world; ensureCoaches(); return; }
   // 옛 세이브(v0.3 이하): 새 세계를 깔고 이번 시즌을 처음부터
   const keepClub = S.pro && S.pro.club;
   initWorld(); initLeagues(); initCups(null);
@@ -787,6 +796,7 @@ function joinClub(o) {
   S.pro = S.pro || {};
   Object.assign(S.pro, { league: o.league, club: o.club, kit: [c[2], c[3]] });
   moveToClub("me", o.club);
+  for (const p of clubPlayers(o.club)) if (p.id !== "me" && p.id !== "rv" && p.no === S.look.number) p.no = pickNo(o.club, p.r);   // 내 등번호는 내가 달아요
   S.career.peakTier = Math.max(S.career.peakTier, LEAGUES[o.league].tier);
   if (!S.career.clubs) S.career.clubs = [];
   if (S.career.clubs[S.career.clubs.length - 1] !== o.club) S.career.clubs.push(o.club);
@@ -806,7 +816,8 @@ function offerScreen({ title, hint, offers, stay }) {
       return `<button class="offer" data-i="${i}"><div class="crest-big">${crestHTML(o.club, 54)}</div>
         <div class="of-mid"><b>${esc(o.club)}</b><span>${LEAGUES[o.league].flag} ${LEAGUES[o.league].name} · 전력 ${Math.round(o.str)} · 순위 ${prevRank}</span>
         <span>선발 가능성 <em class="${p >= 60 ? "up" : p < 35 ? "dn" : ""}">${p}%</em> · 라운드 수당 ${salaryOf(o.league)}만</span>
-        <span class="race">${ROLE_KO[S.pos]} ${SLOTS[S.pos]}자리 경쟁: ${others.slice(0, 3).map((x) => `${esc(x.n)}${x.id === "rv" ? "⚔️" : ""} ${Math.round(pOvr(x))}`).join(" · ")}</span>
+        <span class="coach">${coachLine(o.club)}${FORMS[formOf(o.club)].roles.includes(S.pos) ? "" : ` · ⚠️ ${ROLE_KO[S.pos]} 자리 없음`}</span>
+        <span class="race">${ROLE_KO[S.pos]} 경쟁: ${others.slice(0, 3).map((x) => `${esc(x.n)}${x.id === "rv" ? "⚔️" : ""} ${Math.round(pOvr(x))}`).join(" · ")}</span>
         ${rv ? `<span class="rv">⚔️ 라이벌 ${esc(S.rival.name)}의 팀${S.rival.pos === S.pos ? " (같은 포지션 주전 경쟁!)" : " (한 팀에서 뛰어요)"}</span>` : ""}</div></button>`;
     }).join("") || `<p class="hint">이번에는 제안이 없어요.</p>`;
     list.querySelectorAll("[data-i]").forEach((b) => b.onclick = () => { Sfx.good(); resolve(offers[+b.dataset.i]); });
@@ -1203,13 +1214,13 @@ function openLeague(lgId = S.pro.league, tab = "table") {
 function openSquad(club = S.pro.club) {
   const order = ["gk", "df", "mf", "wg", "fw"];
   const ps = clubPlayers(club).sort((a, b) => order.indexOf(a.r) - order.indexOf(b.r) || pOvr(b) - pOvr(a));
-  const xi = bestXI(ps, false);
+  const xi = bestXI(ps, false, formOf(club));
   const race = club === S.pro.club ? spotRace(club) : null;
   modal({
     title: `${crestHTML(club, 30)} ${esc(club)}`, wide: true,
-    html: `${race ? `<p class="small">${ROLE_KO[S.pos]} ${race.slots}자리 · 선발 가능성 <b>${Math.round(race.p * 100)}%</b>${race.kth ? ` · 넘어야 할 상대 <b>${esc(race.kth.n)} ${Math.round(pOvr(race.kth))}</b>` : ""}</p>` : `<p class="small">${LEAGUES[W.c[club].l].flag} ${LEAGUES[W.c[club].l].name} ${rankOf(club)}위</p>`}
+    html: `<p class="small coach">${coachLine(club)}</p>${formationHTML(club, xi)}${race ? `<p class="small">${race.slots ? `${ROLE_KO[S.pos]} ${race.slots}자리` : `⚠️ ${race.form}엔 ${ROLE_KO[S.pos]} 자리가 없어요`} · 선발 가능성 <b>${Math.round(race.p * 100)}%</b>${race.kth ? ` · 넘어야 할 상대 <b>${esc(race.kth.n)} ${Math.round(pOvr(race.kth))}</b>` : ""}</p>` : `<p class="small">${LEAGUES[W.c[club].l].flag} ${LEAGUES[W.c[club].l].name} ${rankOf(club)}위</p>`}
       <table class="tbl"><tr><th>자리</th><th>선수</th><th>나이</th><th>능력</th><th>경기</th><th>⚽</th><th>🅰️</th><th>평점</th></tr>${ps.map((p) =>
-        `<tr class="${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}"><td>${ROLE_KO[p.r]}${xi.includes(p) ? "" : " <small>후보</small>"}</td><td>${NATIONS[p.nat].flag}<a class="pl" data-pid="${p.id}">${esc(p.n)}</a>${p.inj > 0 ? " 🚑" : ""}</td><td>${ageOf(p)}</td><td><b>${Math.round(pOvr(p))}</b></td><td>${p.s.ap}</td><td>${p.s.g}</td><td>${p.s.a}</td><td>${p.s.ap ? pAvg(p).toFixed(1) : "-"}</td></tr>`).join("")}</table>`,
+        `<tr class="${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}"><td>${ROLE_KO[p.r]}${xi.includes(p) ? (xi.roles[xi.indexOf(p)] !== p.r ? `→${ROLE_KO[xi.roles[xi.indexOf(p)]]}` : "") : " <small>후보</small>"}</td><td><small>${p.id === "me" ? S.look.number : p.id === "rv" ? S.rival.look.number : p.no || ""}</small> ${NATIONS[p.nat].flag}<a class="pl" data-pid="${p.id}">${esc(p.n)}</a>${p.inj > 0 ? " 🚑" : ""}</td><td>${ageOf(p)}</td><td><b>${Math.round(pOvr(p))}</b></td><td>${p.s.ap}</td><td>${p.s.g}</td><td>${p.s.a}</td><td>${p.s.ap ? pAvg(p).toFixed(1) : "-"}</td></tr>`).join("")}</table>`,
     buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }],
   });
   setTimeout(() => bindPlayerLinks($("modal")), 0);

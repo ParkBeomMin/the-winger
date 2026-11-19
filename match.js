@@ -72,7 +72,13 @@ const MINI_LABEL = {
 function playMatch(root, cfg) {
   return new Promise((resolve) => {
     const me = cfg.me;
-    const mySlot = SLOT_BY_POS[me.pos] ?? 9;
+    const mySide0 = cfg.mySide || "home";
+    const myT0 = mySide0 === "home" ? cfg.m.H : cfg.m.A, opT0 = mySide0 === "home" ? cfg.m.A : cfg.m.H;
+    const roster = { home: [...myT0.xi], away: [...opT0.xi] };          // 화면 슬롯 순서 = 포메이션 자리 순서
+    const formOfSide = { home: myT0.form || "4-3-3", away: opT0.form || "4-3-3" };
+    let mySlot = roster.home.findIndex((p) => p.id === "me");
+    if (mySlot < 0) { const s = myT0.subs.find((x) => x.in.id === "me"); mySlot = s ? roster.home.indexOf(s.out) : -1; }
+    if (mySlot < 0) mySlot = 99;
     const homeStr = cfg.home.str || 60, awayStr = cfg.away.str || 60;
     let auto = !!cfg.auto, speed = 1, skipping = false;
 
@@ -117,13 +123,15 @@ function playMatch(root, cfg) {
     const other = (s) => s === "home" ? "away" : "home";
     function kickPos(side, bx) { return side === "home" ? Math.min(bx * .9, .46) : Math.max(1 - (1 - bx) * .9, .54); }
     function mkTeam(side) {
-      return FORMATION.map((f, i) => {
+      const F = FORMS[formOfSide[side]] || FORMS["4-3-3"];
+      return roster[side].map((_, i) => F.pos[i] || F.pos[F.pos.length - 1]).map((f, i) => {
         const bx = side === "home" ? f[0] : 1 - f[0], by = side === "home" ? f[1] : 1 - f[1];
-        return { i, side, bx, by, x: kickPos(side, bx), y: by, vx: 0, vy: 0, ph: Math.random() * 6, runT: 0 };
+        return { i, side, role: (FORMS[formOfSide[side]] || FORMS["4-3-3"]).roles[i] || "mf", bx, by, x: kickPos(side, bx), y: by, vx: 0, vy: 0, ph: Math.random() * 6, runT: 0 };
       });
     }
     const teams = { home: mkTeam("home"), away: mkTeam("away") };
-    const rivalSlot = cfg.rival ? (cfg.rival.slot ?? SLOT_BY_POS[cfg.rival.pos] ?? 9) : -1;
+    const rvSide = cfg.rival ? cfg.rival.side || "away" : null;
+    const rivalSlot = rvSide ? roster[rvSide].findIndex((p) => p.id === "rv") : -1;
     let onPitch = !!me.starter;                         // 벤치면 교체 시간에 들어와요
     const subMin = me.starter ? 0 : (me.subMin ?? 999);
 
@@ -134,14 +142,18 @@ function playMatch(root, cfg) {
     let gf = 0, ga = 0;
     const st = { goals: 0, assists: 0, saves: 0, moments: [], events: [], ge: [] };
     const strOf = (s) => s === "home" ? homeStr : awayStr;
-    const active = (p) => !(p.side === "home" && p.i === mySlot && !onPitch);
+    const isMeP = (p) => p.side === "home" && roster.home[p.i] && roster.home[p.i].id === "me";
+    const active = (p) => !p.gone && !(isMeP(p) && !onPitch);
+    const fwdIdx = (side) => { const t = teams[side]; const f = t.find((p) => p.role === "fw" && active(p)) || t.find((p) => p.role !== "gk" && active(p)); return f || t[t.length - 1]; };
+    const numOf = (side, i) => { const p = roster[side][i]; if (!p) return ""; return p.id === "me" ? (me.look && me.look.number) || "" : p.id === "rv" ? (cfg.rival && cfg.rival.number) || "" : p.no || ""; };
+    const shortN = (n) => { const s = String(n || ""); return s.includes(" ") ? s.split(" ").slice(-1)[0] : s; };
     const dist = (a, b) => Math.hypot((a.x - b.x) * 1.6, a.y - b.y);   // 경기장이 가로로 길어서 x를 늘려 재요
     const nearest = (side, pt, excl) => { let best = null, bd = 9; for (const p of teams[side]) { if (!active(p) || p === excl) continue; const d = dist(p, pt); if (d < bd) { bd = d; best = p; } } return [best, bd]; };
     const progOf = (side, x) => side === "home" ? x : 1 - x;   // 0 = 우리 골문, 1 = 상대 골문
 
     function kickoff(side) {
       for (const s of ["home", "away"]) for (const p of teams[s]) { p.x = kickPos(s, p.bx); p.y = p.by; p.vx = p.vy = 0; }
-      possession = side; carrier = teams[side][9]; carrier.x = .5 - DIR[side] * .01; carrier.y = .5;
+      possession = side; carrier = fwdIdx(side); carrier.x = .5 - DIR[side] * .01; carrier.y = .5;
       flight = null; ball = { x: .5, y: .5 }; decide = .5;
     }
     function goalKick(side) {
@@ -183,7 +195,7 @@ function playMatch(root, cfg) {
         if (want === s && prog > .72) sc -= 2;   // 찬스 직전엔 공을 지켜요
         if (sc > bs) { bs = sc; best = m; }
       }
-      if (c.i === 0) best = pick(mates.filter((m) => m.i >= 1 && m.i <= 7));
+      if (c.i === 0) best = pick(mates.filter((m) => m.role === "df" || m.role === "mf")) || best;
       if (best) passTo(c, best, c.i === 0 && Math.random() < .5);
       decide = rand(.5, 1.1);
     }
@@ -198,9 +210,9 @@ function playMatch(root, cfg) {
       const wide = has ? 1.08 : .78;
       let y = .5 + (p.by - .5) * wide + (ball.y - .5) * (has ? .18 : .32);
       // 수비 라인은 자기 진영 끝을 넘지 않게
-      if (p.i <= 4) x = s === "home" ? Math.min(x, .62) : Math.max(x, .38);
+      if (p.role === "df") x = s === "home" ? Math.min(x, .62) : Math.max(x, .38);
       // 공격 3선 침투: 공이 상대 진영이면 박스 쪽으로
-      if (has && p.i >= 8 && prog > .55) { x = s === "home" ? Math.max(x, .78 + (p.i === 9 ? .08 : 0)) : Math.min(x, .22 - (p.i === 9 ? .08 : 0)); if (p.i === 9) y = .5 + (ball.y - .5) * .3; }
+      if (has && (p.role === "fw" || p.role === "wg") && prog > .55) { x = s === "home" ? Math.max(x, .78 + (p.role === "fw" ? .08 : 0)) : Math.min(x, .22 - (p.role === "fw" ? .08 : 0)); if (p.role === "fw") y = .5 + (ball.y - .5) * .3; }
       y += Math.sin(performance.now() / 1300 + p.ph) * .02;
       return { x: clamp(x, .03, .97), y: clamp(y, .05, .95) };
     }
@@ -232,7 +244,7 @@ function playMatch(root, cfg) {
         ball.x = flight.from.x + (flight.to.x - flight.from.x) * e; ball.y = flight.from.y + (flight.to.y - flight.from.y) * e;
         if (k >= 1) { carrier = flight.recv; possession = carrier.side; flight = null; decide = rand(.35, .8); }
       } else if (carrier) {
-        if (!active(carrier)) { carrier = teams[possession][6]; }
+        if (!active(carrier)) { carrier = teams[possession].find((p) => active(p) && p.role === "mf") || teams[possession].find(active); }
         const d = DIR[carrier.side];
         ball.x += (carrier.x + d * .014 - ball.x) * Math.min(1, sdt * 12);
         ball.y += (carrier.y + .01 - ball.y) * Math.min(1, sdt * 12);
@@ -260,7 +272,7 @@ function playMatch(root, cfg) {
       ctx.fillRect(px(1), py(.43), 6, py(.57) - py(.43));
     }
     function drawPlayer(p, pos, kit, highlight, label, ring) {
-      const x = px(pos.x), y = py(pos.y), r = highlight ? 7 : 5;
+      const x = px(pos.x), y = py(pos.y), r = highlight ? 8 : 6.5;
       if (highlight) {
         ctx.fillStyle = "rgba(255,230,90,.28)"; ctx.beginPath(); ctx.arc(x, y, r + 7 + Math.sin(performance.now() / 160) * 1.5, 0, Math.PI * 2); ctx.fill();
       }
@@ -269,6 +281,13 @@ function playMatch(root, cfg) {
       ctx.fillStyle = p.i === 0 ? "#222" : grassy ? kit[1] : kit[0];
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = grassy ? kit[0] : kit[1]; ctx.lineWidth = 1.5; ctx.stroke();
+      const no = numOf(p.side, p.i);
+      if (no !== "") { ctx.font = `bold ${highlight ? 8 : 7}px Jua, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = p.i === 0 ? "#fff" : grassy ? kit[0] : kit[1]; ctx.fillText(String(no), x, y + .5); ctx.textBaseline = "alphabetic"; }
+      if (!label && p === carrier && roster[p.side][p.i]) {
+        const nmx = shortN(roster[p.side][p.i].n); ctx.font = "9px Jua, sans-serif"; ctx.textAlign = "center";
+        const w = ctx.measureText(nmx).width + 6; ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(x - w / 2, y - r - 14, w, 11);
+        ctx.fillStyle = "#fff"; ctx.fillText(nmx, x, y - r - 5.5);
+      }
       if (label) {
         ctx.font = "bold 10px Jua, sans-serif"; ctx.textAlign = "center";
         const w = ctx.measureText(label).width + 8;
@@ -290,13 +309,13 @@ function playMatch(root, cfg) {
       for (const side of ["home", "away"]) for (const p of teams[side]) {
         let pos = { x: p.x, y: p.y };
         if (seq && seq.runner === p && (seq.si || 0) >= (seq.follow || 0)) pos = { x: ball.x - (seq.side === "home" ? .025 : -.025), y: ball.y + .02 };
-        if (side === "home" && p.i === mySlot && !onPitch) continue;
+        if (!active(p)) continue;
         p.x = pos.x; p.y = pos.y; all.push([p, pos]);
       }
       for (const [p, pos] of all) {
         const kit = p.side === "home" ? cfg.home.kit : cfg.away.kit;
-        const isMe = p.side === "home" && p.i === mySlot;
-        const isRival = cfg.rival && p.side === (cfg.rival.side || "away") && p.i === rivalSlot;
+        const isMe = isMeP(p);
+        const isRival = rvSide && p.side === rvSide && p.i === rivalSlot && roster[p.side][p.i] && roster[p.side][p.i].id === "rv";
         drawPlayer(p, pos, kit, isMe, isMe ? me.name : isRival ? cfg.rival.name : null, isRival ? "#ff5a5a" : null);
       }
       // 공과 궤적
@@ -322,7 +341,7 @@ function playMatch(root, cfg) {
       if (!paused && !seq) {
         minute = Math.min(90, minute + dt * 4.5 * speed);
         root.querySelector("#m-min").textContent = Math.floor(minute) + "'";
-        if (!onPitch && minute >= subMin) { onPitch = true; const mp = teams.home[mySlot]; mp.x = .5; mp.y = .02; feed(`🔁 ${me.name} 교체 투입!`, "me"); }
+        if (!onPitch && minute >= subMin && teams.home[mySlot]) { onPitch = true; const s = myT0.subs.find((x) => x.in.id === "me"); if (s) roster.home[mySlot] = s.in; const mp = teams.home[mySlot]; mp.x = .5; mp.y = .02; feed(`🔁 ${me.name} 교체 투입!`, "me"); }
         const sdt = dt * Math.min(speed, 4);
         stepBall(sdt); stepPlayers(sdt);
         waiters = waiters.filter((w) => { if (minute >= w.min) { w.res(); return false; } return true; });
@@ -411,12 +430,14 @@ function playMatch(root, cfg) {
     /* --- 사건 연출 --- */
     const mySide = cfg.mySide || "home";
     const vis = (s) => s === mySide ? "home" : "away";
-    const ROLE_SLOTS = { gk: [0], df: [1, 2, 3, 4], mf: [5, 6, 7], wg: [8, 10], fw: [9] };
     const slotOf = (p, side) => {
       if (p.id === "me" && side === "home") return mySlot;
-      if (p.id === "rv" && rivalSlot >= 0) return rivalSlot;
-      const l = ROLE_SLOTS[p.r] || [9]; return l[(p.n || "").length % l.length];
+      const i = roster[side].indexOf(p);
+      if (i >= 0) return i;
+      const t = teams[side].filter((q) => active(q) && q.role === p.r);
+      return (t[0] || fwdIdx(side)).i;
     };
+    function swapIn(side, out, inn) { const i = roster[side].indexOf(out); if (i >= 0) roster[side][i] = inn; return i; }
     const nm = (p) => !p ? "" : p.id === "me" ? `<b>${esc(me.name)}</b>` : p.id === "rv" ? `<b class="rvn">${esc(p.n)}⚔️</b>` : esc(p.n);
     const myP = () => teams.home[mySlot];
     function zoomOn(p) { focus = p; zoomTarget = skipping ? 1 : 1.7; }
@@ -474,6 +495,8 @@ function playMatch(root, cfg) {
         : `🚑 ${nm(i.p)} 부상${i.sub ? ` → ${nm(i.sub)} 교체 투입` : " (교체 카드가 없어 10명으로)"}`;
       feed(t + (mine ? "" : ` <small>(${esc(cfg.away.name)})</small>`), isMe ? "me" : i.kind === "yc" ? "" : "bad");
       if (i.kind !== "yc") { if (!mine) Sfx.good(); else Sfx.bad(); }
+      const sd = vis(i.side), idx = roster[sd].indexOf(i.p);
+      if (i.kind !== "yc" && idx >= 0) { if (i.kind === "inj" && i.sub) roster[sd][idx] = i.sub; else teams[sd][idx].gone = true; }
       if (isMe && i.kind !== "yc") { onPitch = false; await flashText(i.kind === "inj" ? "부상…" : "퇴장…", "bad", 900); }
       else if (i.kind === "rc" || i.kind === "yc2") await flashText("🟥", mine ? "bad" : "goal", 600);
     }
@@ -488,13 +511,14 @@ function playMatch(root, cfg) {
       paused = false;
       const myT = mySide === "home" ? cfg.m.H : cfg.m.A;
       const items = [...cfg.m.evs.map((e) => ({ min: e.min, ev: e })), ...(cfg.m.inc || []).map((i) => ({ min: i.min, inc: i })),
-        ...myT.subs.filter((s) => !s.inj && s.in.id !== "me").map((s) => ({ min: s.min, sub: s }))].sort((a, b) => a.min - b.min);
+        ...myT.subs.filter((s) => !s.inj && s.in.id !== "me").map((s) => ({ min: s.min, sub: s, side: "home" })),
+        ...opT0.subs.filter((s) => !s.inj).map((s) => ({ min: s.min, sub: s, side: "away", quiet: true }))].sort((a, b) => a.min - b.min);
       for (const it of items) {
         director = it.ev ? { side: vis(it.ev.side), min: it.min } : null;
         await waitMin(it.min);
         paused = true;
         if (it.ev) await showEv(it.ev);
-        else if (it.sub) feed(`🔁 교체: ${nm(it.sub.in)} IN · ${nm(it.sub.out)} OUT`);
+        else if (it.sub) { swapIn(it.side, it.sub.out, it.sub.in); if (!it.quiet) feed(`🔁 교체: ${nm(it.sub.in)} IN · ${nm(it.sub.out)} OUT`); }
         else await showInc(it.inc);
         if (!skipping) await sleepMs(it.ev ? 180 : 80);
         paused = false;

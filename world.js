@@ -8,6 +8,55 @@ const ROUNDS = 18;
 const ROLE_XI = ["gk", "df", "df", "df", "df", "mf", "mf", "mf", "wg", "wg", "fw"];
 const ROLE_SQUAD = [...ROLE_XI, "gk", "df", "mf", "wg", "fw"];
 const SLOTS = { gk: 1, df: 4, mf: 3, wg: 2, fw: 1 };
+/* ---------- 감독 · 포메이션 · 전술 ----------
+ * 포메이션마다 자리(역할)와 2D 위치가 달라요. 홈 기준(오른쪽으로 공격) 좌표예요. */
+const FORMS = {
+  "4-3-3": { roles: ["gk", "df", "df", "df", "df", "mf", "mf", "mf", "wg", "wg", "fw"],
+    pos: [[.05, .5], [.22, .14], [.2, .38], [.2, .62], [.22, .86], [.42, .3], [.38, .5], [.42, .7], [.64, .18], [.68, .5], [.64, .82]] },
+  "4-2-3-1": { roles: ["gk", "df", "df", "df", "df", "mf", "mf", "mf", "wg", "wg", "fw"],
+    pos: [[.05, .5], [.22, .14], [.2, .38], [.2, .62], [.22, .86], [.35, .38], [.35, .62], [.52, .5], [.55, .17], [.7, .5], [.55, .83]] },
+  "4-4-2": { roles: ["gk", "df", "df", "df", "df", "mf", "mf", "wg", "wg", "fw", "fw"],
+    pos: [[.05, .5], [.22, .14], [.2, .38], [.2, .62], [.22, .86], [.4, .38], [.4, .62], [.44, .14], [.44, .86], [.65, .38], [.65, .62]] },
+  "3-5-2": { roles: ["gk", "df", "df", "df", "mf", "mf", "mf", "wg", "wg", "fw", "fw"],
+    pos: [[.05, .5], [.2, .26], [.18, .5], [.2, .74], [.38, .32], [.35, .5], [.38, .68], [.46, .1], [.46, .9], [.65, .4], [.65, .6]] },
+  "5-3-2": { roles: ["gk", "df", "df", "df", "df", "df", "mf", "mf", "mf", "fw", "fw"],
+    pos: [[.05, .5], [.27, .1], [.2, .3], [.18, .5], [.2, .7], [.27, .9], [.4, .3], [.38, .5], [.4, .7], [.62, .4], [.62, .6]] },
+};
+/* 전술 성향: 유닛 보정 + 찬스 수(나/상대) + 찬스 질 */
+const STYLES = {
+  pos: { name: "점유", mid: 3, att: 1, def: 0, self: 1.04, opp: .96, xg: 0 },
+  cnt: { name: "역습", mid: -2, att: 2, def: 2, self: .9, opp: .98, xg: .04 },
+  prs: { name: "전방 압박", mid: 1, att: 1, def: -1, self: 1.08, opp: 1.03, xg: 0 },
+  def: { name: "수비적", mid: 0, att: -3, def: 4, self: .88, opp: .9, xg: 0 },
+  bal: { name: "균형", mid: 0, att: 0, def: 0, self: 1, opp: 1, xg: 0 },
+};
+/* 다른 자리에서 뛸 때 능력 배수 (윙어는 최전방·윙백, 미드필더는 측면 등) */
+const COMPAT = { fw: { wg: .92, mf: .8 }, wg: { fw: .9, mf: .9, df: .85 }, mf: { wg: .9, df: .88, fw: .82 }, df: { mf: .86, wg: .82 }, gk: {} };
+const NO_POOL = { gk: [1, 12, 25, 31], df: [2, 3, 4, 5, 13, 15, 22, 23, 24], mf: [6, 8, 10, 14, 16, 18, 26], wg: [7, 11, 17, 19, 21, 29], fw: [9, 20, 27, 28, 30] };
+function pickNo(club, role, prefer) {
+  const used = new Set(W.c[club] ? W.c[club].ids.map((id) => id === "me" ? S.look.number : id === "rv" ? S.rival.look.number : W.p[id] && W.p[id].no).filter(Boolean) : []);
+  if (prefer && !used.has(prefer)) return prefer;
+  const n = [...(NO_POOL[role] || []), ...Array.from({ length: 60 }, (_, i) => i + 32)].find((x) => !used.has(x));
+  return n || randi(32, 99);
+}
+function mkCoach(lgId, base) {
+  const lg = LEAGUES[lgId];
+  const nat = Math.random() < .7 ? lg.nat : pickNat(lg.mix);
+  const big = base >= (lg.tier === 3 ? 82 : lg.tier === 2 ? 72 : 65);
+  const fw = big ? [["4-3-3", 4], ["4-2-3-1", 4], ["4-4-2", 1], ["3-5-2", 1]] : [["4-4-2", 3], ["4-2-3-1", 2], ["5-3-2", 2], ["3-5-2", 2], ["4-3-3", 2]];
+  const sw = big ? [["pos", 4], ["prs", 3], ["bal", 2], ["cnt", 1]] : [["cnt", 3], ["def", 3], ["bal", 3], ["prs", 1], ["pos", 1]];
+  return { n: natName(nat, new Set()), nat, f: pickNat(fw), s: pickNat(sw), a: randi(38, 64), y: 0 };
+}
+function ensureCoaches() {
+  for (const lg of LEAGUES) for (const c of lg.clubs) {
+    const C = W.c[c[0]];
+    if (!C.coach) C.coach = mkCoach(lg.id, C.base);
+    const mine = new Set(C.ids.filter((id) => id === "me" || id === "rv").map((id) => id === "me" ? S.look.number : S.rival.look.number));
+    for (const id of C.ids) { const p = W.p[id]; if (p && id !== "me" && id !== "rv" && (!p.no || mine.has(p.no))) { p.no = 0; p.no = pickNo(c[0], p.r); } }
+  }
+}
+const coachOf = (club) => (W && W.c[club] && W.c[club].coach) || { f: "4-3-3", s: "bal", n: "-" };
+const formOf = (club) => coachOf(club).f;
 const ROLE_KO = { gk: "GK", df: "DF", mf: "MF", wg: "WG", fw: "FW" };
 const GK_W = { def: .7, spd: .1, sta: .1, pas: .1 };
 const G_W = { fw: 3.0, wg: 2.4, mf: 1.6, df: .5, gk: 0 };
@@ -70,6 +119,7 @@ function initWorld() {
   W.p.me = { id: "me", n: S.name, nat: "kr", r: S.pos, c: null, l: null, s: blankS(), cs: blankS(), h: [], inj: 0, fm: 0 };
   W.p.rv = { id: "rv", n: S.rival.name, nat: ORIGINS[S.rival.origin].nat, r: S.rival.pos, c: null, l: null, s: blankS(), cs: blankS(), h: [], inj: 0, fm: 0 };
   S.lgs = {}; S.news = S.news || []; S.cups = {};
+  ensureCoaches();
 }
 /* 클럽 베스트11 평균을 기준 전력 쪽으로 (k=1이면 완전히, .5면 절반) */
 function anchorClub(name, k) {
@@ -82,11 +132,11 @@ function anchorClub(name, k) {
   });
 }
 function clubStr(lg, name) { return W && W.c[name] ? xiAvg(name) : (clubData(lg, name) || [0, 60])[1]; }
-function xiAvg(club) { const xi = bestXI(clubPlayers(club), false); return Math.round(xi.reduce((s, p) => s + pOvr(p), 0) / xi.length * 10) / 10; }
+function xiAvg(club) { const xi = bestXI(clubPlayers(club), false, formOf(club)); return Math.round(xi.reduce((s, p) => s + pOvr(p), 0) / xi.length * 10) / 10; }
 
 /* 선발 11명 — 자리별 능력치 순(폼·로테이션 반영). 부상자는 빠지고, 빈자리는 다른 자리 선수가 메워요 */
 function available(p) { return !(p.id === "me" ? S.injured > 0 || (S.ban || 0) > 0 : p.id === "rv" ? S.rival.hurt > 0 || (S.rival.ban || 0) > 0 : p.inj > 0 || (p.ban || 0) > 0); }
-function bestXI(players, noisy = true) {
+function bestXI(players, noisy = true, form = "4-3-3") {
   const pool = players.filter(available);
   const scored = pool.map((p) => {
     let v = pOvr(p) + (p.id === "me" ? S.form * 1.2 : (p.fm || 0) * 1.2);
@@ -94,24 +144,42 @@ function bestXI(players, noisy = true) {
     if (p.id === "me" && noisy && S.flags && S.flags.forceStart) v += 100;
     return [p, v];
   });
+  const roles = (FORMS[form] || FORMS["4-3-3"]).roles;
   const used = new Set(), xi = [];
-  for (const role of ROLE_XI) {
-    let c = scored.filter(([p]) => !used.has(p) && p.r === role).sort((a, b) => b[1] - a[1])[0];
+  xi.roles = [];
+  // 자리 순서: 원래 포지션 선수부터 채우고, 남는 자리는 적성이 맞는 다른 포지션 선수로
+  const order = roles.map((r, i) => i).sort((a, b) => (roles[a] === "gk" ? -1 : 0) - (roles[b] === "gk" ? -1 : 0));
+  const fill = new Array(roles.length).fill(null);
+  for (const i of order) {
+    const role = roles[i];
+    const cands = scored.filter(([p]) => !used.has(p) && (p.r === role || (role !== "gk" && p.r !== "gk" && COMPAT[p.r][role])))
+      .map(([p, v]) => [p, p.r === role ? v : v * COMPAT[p.r][role]]).sort((a, b) => b[1] - a[1]);
+    // 원래 자리 선수가 있으면 우선 (적성 선수는 확실히 더 잘할 때만)
+    const nat = cands.find(([p]) => p.r === role), alt = cands[0];
+    let c = nat && alt && alt[0] !== nat[0] && alt[1] > nat[1] + 3 ? alt : nat || alt;
     if (!c) c = scored.filter(([p]) => !used.has(p) && p.r !== "gk").sort((a, b) => b[1] - a[1])[0];
-    if (c) { used.add(c[0]); xi.push(c[0]); }
+    if (c) { used.add(c[0]); fill[i] = c[0]; }
   }
+  fill.forEach((p, i) => { if (p) { xi.push(p); xi.roles.push(roles[i]); } });
   return xi;
+}
+/* 선발 확률 — 그 감독 포메이션으로 여러 번 뽑아 봐요 */
+function startChance(club, who = "me", n = 24) {
+  const ps = clubPlayers(club).includes(W.p[who]) ? clubPlayers(club) : [...clubPlayers(club), W.p[who]];
+  let k = 0; for (let i = 0; i < n; i++) if (bestXI(ps, true, formOf(club)).includes(W.p[who])) k++;
+  return k / n;
 }
 function benchOf(players, xi) { return players.filter((p) => available(p) && !xi.includes(p)); }
 const clubPlayers = (club) => W.c[club].ids.map((id) => W.p[id]);
 
 /* 이 클럽에서 내(또는 라이벌) 자리 경쟁 */
 function spotRace(club, who = "me") {
-  const me = W.p[who], role = me.r, mine = pOvr(me);
+  const me = W.p[who], role = me.r, mine = pOvr(me), form = formOf(club);
+  const slots = FORMS[form].roles.filter((r) => r === role).length;
   const rivals = clubPlayers(club).filter((p) => p.id !== who && p.r === role).sort((a, b) => pOvr(b) - pOvr(a));
-  const kth = rivals[SLOTS[role] - 1];
+  const kth = rivals[Math.max(0, slots - 1)];
   const margin = kth ? mine + (who === "me" ? S.form * 1.2 : 0) - pOvr(kth) : 20;
-  return { role, slots: SLOTS[role], rivals, kth, margin, p: clamp(.5 + margin / 7, .04, .97) };
+  return { role, slots, form, rivals, kth, margin, p: startChance(club, who) };
 }
 /* 이적: 들어가는 클럽의 같은 자리 가장 약한 선수와 맞바꿔요 */
 function moveToClub(id, club) {
@@ -128,6 +196,8 @@ function moveToClub(id, club) {
     else { out.c = null; delete W.p[weakest]; }
   }
   dest.ids.push(id); p.c = club; p.l = dest.l;
+  if (id !== "me" && id !== "rv") p.no = pickNo(club, p.r, p.no);
+  if (out && out.c) out.no = pickNo(out.c, out.r, out.no);
   return out;
 }
 
@@ -138,14 +208,23 @@ function eff(p, k) {
   else v *= 1 + (p.fm || 0) * .012;
   return v;
 }
-function units(xi) {
-  const by = (r) => xi.filter((p) => p.r === r);
+function units(xi, T) {
+  const roleAt = (p) => (xi.roles && xi.roles[xi.indexOf(p)]) || p.r;
+  const by = (r) => xi.filter((p) => roleAt(p) === r);
   const mean = (arr, f) => arr.length ? arr.reduce((s, p) => s + f(p), 0) / arr.length : 45;
   return {
     att: mean([...by("fw"), ...by("wg")], (p) => eff(p, "sho") * .4 + eff(p, "dri") * .3 + eff(p, "spd") * .3) * .65 + mean(by("mf"), (p) => eff(p, "pas") * .6 + eff(p, "dri") * .4) * .35,
     mid: mean(by("mf"), (p) => eff(p, "pas") * .45 + eff(p, "sta") * .3 + eff(p, "def") * .25),
     def: mean(by("df"), (p) => eff(p, "def") * .6 + eff(p, "spd") * .2 + eff(p, "sta") * .2),
   };
+}
+function unitsT(T) {
+  const u = units(T.xi, T), st = STYLES[T.style] || STYLES.bal, rs = T.xi.roles || [];
+  const n = (r) => rs.filter((x) => x === r).length;
+  u.att += st.att + (n("fw") + n("wg") - 3) * 1.2;
+  u.def += st.def + (n("df") - 4) * 1.6;
+  u.mid += st.mid + (n("mf") - 3) * 1.5;
+  return u;
 }
 function weighted(list, wfn) {
   const ws = list.map((p) => Math.max(0, wfn(p)));
@@ -195,10 +274,11 @@ function genIncidents(T, side) {
 function genMatch(H, A) {
   H.subs = H.subs || planSubs(H.xi, H.bench || [], H.meBench);
   A.subs = A.subs || planSubs(A.xi, A.bench || [], A.meBench);
-  const uH = units(H.xi), uA = units(A.xi);
+  const uH = unitsT(H), uA = unitsT(A);
+  const sH = STYLES[H.style] || STYLES.bal, sA = STYLES[A.style] || STYLES.bal;
   const posH = clamp(.5 + (uH.mid - uA.mid) / 90 + (H.adv || 0) * .01, .35, .65);
   const lam = (pos, u1, u2) => clamp(6.3 * (pos / .5) * Math.exp((u1.att - u2.def) / 30), 1.5, 14);
-  const nH = poisson(lam(posH, uH, uA)), nA = poisson(lam(1 - posH, uA, uH));
+  const nH = poisson(lam(posH, uH, uA) * sH.self * sA.opp), nA = poisson(lam(1 - posH, uA, uH) * sA.self * sH.opp);
   // 반칙·부상 먼저 — 나간 선수는 그 뒤 찬스에 못 끼고, 사람이 적은 팀은 찬스가 줄어요
   const inc = [];
   for (const [T, side] of [[H, "home"], [A, "away"]]) {
@@ -240,7 +320,7 @@ function genMatch(H, A) {
     const as = Math.random() < .72 ? weighted(on.filter((p) => p !== sh), (p) => A_W[p.r] * Math.pow(eff(p, "pas") / 70, 1.5)) : null;
     const df = weighted(dOn.filter((p) => p.r !== "gk"), (p) => D_W[p.r] * Math.pow(eff(p, "def") / 70, 2));
     const gk = dOn.find((p) => p.r === "gk") || dOn[0];
-    const xg = .06 + Math.pow(Math.random(), 1.6) * .5;
+    const xg = .06 + Math.pow(Math.random(), 1.6) * .5 + ((side === "home" ? sH : sA).xg || 0);
     const ev = { min, side, sh, as, df, gk, xg };
     ev.out = rollShot(ev);
     if (sh.id === "me") ev.mom = (S.pos === "wg" || S.pos === "fw") && Math.random() < .45 ? "dribble" : "shot";
@@ -346,9 +426,9 @@ function credit(res, kind, lgId, hName, aName) {
   }
 }
 function teamFor(club, opts = {}) {
-  const ps = clubPlayers(club), xi = bestXI(ps);
+  const co = coachOf(club), ps = clubPlayers(club), xi = bestXI(ps, true, co.f);
   const bench = benchOf(ps, xi);
-  return { name: club, kit: W.c[club].kit, xi, bench, adv: opts.home ? 1.5 : 0, meBench: bench.some((p) => p.id === "me") };
+  return { name: club, kit: W.c[club].kit, xi, bench, form: co.f, style: co.s, coach: co.n, adv: opts.home ? 1.5 : 0, meBench: bench.some((p) => p.id === "me") };
 }
 function playAI(H, A) { const m = genMatch(H, A), r = finishMatch(m); r.m = m; return r; }
 
@@ -499,6 +579,22 @@ function worldOffseason() {
     }
   }
   for (const name in W.c) anchorClub(name, .5);
+  for (const lg of LEAGUES) {
+    const tbl = S.lgs[lg.id] && S.lgs[lg.id].table && Object.values(S.lgs[lg.id].table)[0].p ? sortedTable(lg.id).map((x) => x[0]) : null;
+    if (!tbl) continue;
+    tbl.forEach((club, i) => {
+      const C = W.c[club], co = C.coach || (C.coach = mkCoach(lg.id, C.base));
+      co.y = (co.y || 0) + 1; co.a++;
+      const expect = [...lg.clubs].sort((a, b) => b[1] - a[1]).findIndex((x) => x[0] === club);
+      const bad = i >= 8 || i - expect >= 4;
+      if ((bad && Math.random() < .6) || co.a >= 68) {
+        const nc = mkCoach(lg.id, C.base);
+        news(`🔄 ${club}, ${co.n} 감독 ${co.a >= 68 ? "은퇴" : "경질"} → 새 감독 ${nc.n}(${NATIONS[nc.nat].flag}) · ${nc.f} ${STYLES[nc.s].name}`);
+        C.coach = nc;
+      }
+    });
+  }
+  ensureCoaches();
   aiTransfers();
 }
 /* AI 이적시장: 리그보다 잘하는 젊은 선수는 위로, 늙고 떨어진 스타는 아래로 */
@@ -535,7 +631,7 @@ function nationSquads(minN = 16) {
   const out = {};
   for (const [nat, ps] of Object.entries(byNat)) {
     if (ps.length < minN) continue;
-    const xi = bestXI(ps, false), bench = benchOf(ps, xi).sort((a, b) => pOvr(b) - pOvr(a)).slice(0, 7);
+    const xi = bestXI(ps, false, NAT_FORM[nat] || "4-3-3"), bench = benchOf(ps, xi).sort((a, b) => pOvr(b) - pOvr(a)).slice(0, 7);
     out[nat] = { nat, xi, bench, str: xi.reduce((s, p) => s + pOvr(p), 0) / xi.length };
   }
   return out;
@@ -548,8 +644,10 @@ function wcField() {
   const field = [...asia, ...rest];
   return { sq, field };
 }
+const NAT_FORM = { kr: "4-2-3-1", jp: "4-2-3-1", br: "4-3-3", ar: "4-4-2", es: "4-3-3", pt: "4-3-3", en: "4-2-3-1", fr: "4-3-3", de: "4-2-3-1", nl: "4-3-3", it: "3-5-2" };
+const NAT_STYLE = { kr: "prs", jp: "pos", br: "bal", ar: "cnt", es: "pos", pt: "bal", en: "prs", fr: "cnt", de: "prs", nl: "pos", it: "def" };
 function natTeam(sq, nat) {
-  const ps = [...sq[nat].xi, ...sq[nat].bench], xi = bestXI(ps);
+  const ps = [...sq[nat].xi, ...sq[nat].bench], xi = bestXI(ps, true, NAT_FORM[nat] || "4-3-3");
   const bench = benchOf(ps, xi);
-  return { name: NATIONS[nat].name, nat, kit: NAT_KIT[nat], xi, bench, adv: 0, meBench: bench.some((p) => p.id === "me") };
+  return { name: NATIONS[nat].name, nat, kit: NAT_KIT[nat], xi, bench, form: NAT_FORM[nat] || "4-3-3", style: NAT_STYLE[nat] || "bal", adv: 0, meBench: bench.some((p) => p.id === "me") };
 }
