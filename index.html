@@ -78,8 +78,8 @@ button:disabled{opacity:.4;cursor:default}
 .hud-id{flex:1;min-width:0}.hud-id b{display:block;font-size:1.1rem;color:var(--acc)}.hud-id b small{color:var(--dim);font-size:.75rem}
 .hud-id span{font-size:.78rem;color:var(--dim)}.hud-id em{color:var(--acc2);font-style:normal;font-family:Jua}
 .hud-r{text-align:right}.hud-r b{display:block;color:var(--sky)}.hud-r span{font-size:.8rem}
-.hud-btns{display:flex;gap:5px;margin:8px 0;flex-wrap:wrap}
-.hud-btns button{flex:1;padding:7px 4px;border-radius:10px;border:1px solid var(--line);font-size:.8rem;color:var(--sky);background:rgba(255,255,255,.02);white-space:nowrap}
+.hud-btns{display:flex;gap:4px;margin:8px 0;flex-wrap:wrap}
+.hud-btns button{flex:1 0 auto;padding:7px 6px;border-radius:10px;border:1px solid var(--line);font-size:.74rem;color:var(--sky);background:rgba(255,255,255,.02);white-space:nowrap}
 .sched{background:rgba(143,196,255,.08);border:1px solid rgba(143,196,255,.35);border-radius:12px;padding:9px 12px;font-size:.88rem}
 .sched.warn-on{border-color:rgba(255,140,90,.7)}
 .sched em.rv{color:var(--red);font-style:normal;font-family:Jua}
@@ -214,6 +214,11 @@ button:disabled{opacity:.4;cursor:default}
 .aw-list{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}.aw-list span{background:rgba(255,228,90,.12);color:var(--acc2);border-radius:8px;padding:2px 8px;font-size:.75rem}
 .help{text-align:left}.help p{margin-bottom:10px}
 ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:#2a5a3c;border-radius:9px}::-webkit-scrollbar-track{background:transparent}
+.race{color:var(--sky)!important}.pre-race{margin-top:8px;text-align:center;font-size:.8rem;color:var(--sky)}
+.ss-card.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.ss-card.two .bl{font-size:.8rem}.ss-card.two .bl small{display:none}
+.bl small{color:var(--dim);font-size:.72rem;margin-right:6px}.aw-row{font-size:.8rem;padding:3px 0;border-bottom:1px solid var(--line)}
+details.rr{margin-top:6px;text-align:left;background:var(--bg2);border-radius:10px;padding:6px 10px;font-size:.8rem}details.rr summary{cursor:pointer;color:var(--sky)}
+.lg-seg{margin-bottom:6px}.lg-seg button{font-size:.78rem;padding:6px}.lg-body{max-height:55vh;overflow:auto}
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#000c;color:#fff;padding:10px 16px;border-radius:12px;z-index:120;font-size:.9rem}
 #toast[hidden]{display:none}
 </style>
@@ -290,6 +295,7 @@ button:disabled{opacity:.4;cursor:default}
 <script src="avatar.js"></script>
 <script src="match.js"></script>
 <script src="events.js"></script>
+<script src="world.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

@@ -117,7 +117,8 @@ function playMatch(root, cfg) {
     let minute = 0, paused = true, zoom = 1, zoomTarget = 1, focus = null;
     let seq = null, trail = [], replayMode = false, banner = null;
     let gf = 0, ga = 0;
-    const st = { goals: 0, assists: 0, saves: 0, moments: [], events: [] };
+    const st = { goals: 0, assists: 0, saves: 0, moments: [], events: [], ge: [] };
+    const PK = matchPicker(cfg);
 
     function playerPos(p) {
       const att = possession === p.side ? 1 : -1;
@@ -391,9 +392,13 @@ function playMatch(root, cfg) {
         // 내가 뛰고 있으면 가끔 도움이 붙어요
         const assisted = onPitch && Math.random() < (me.pos === "mf" ? .3 : me.pos === "wg" ? .22 : .1);
         if (assisted) st.assists++;
-        await goalFor(scorer, false, assisted ? `⚽ 동료의 골! <b>${me.name}</b>의 도움 🅰️` : "⚽ 동료의 골! 팀이 앞서 나가요");
+        const s = PK.sc("mine", true), a = assisted ? PK.me : PK.as("mine", s.id);
+        st.ge.push({ side: "mine", s: s.id, a: a && a.id });
+        await goalFor(scorer, false, `⚽ <b>${esc(s.name)}</b>의 골!${a ? ` ${a === PK.me ? `<b>${me.name}</b>의 도움 🅰️` : `(도움 ${esc(a.name)})`}` : ""}`);
       } else if (ev.kind === "goalAg") {
-        await goalAg(`😱 ${esc(cfg.away.name)}에 실점`);
+        const s = PK.sc("opp"), a = PK.as("opp", s.id);
+        st.ge.push({ side: "opp", s: s.id, a: a && a.id });
+        await goalAg(`😱 ${esc(cfg.away.name)} <b>${esc(s.name)}</b>의 골${a ? ` (도움 ${esc(a.name)})` : ""}`);
       } else if (ev.kind === "chance") {
         possession = ev.side;
         await runSeq(ev.side, teams[ev.side][pick([8, 9, 10])], attackPath(ev.side, false, false), 1, 1.4);
@@ -410,11 +415,11 @@ function playMatch(root, cfg) {
           unzoom();
           st.moments.push({ type: "tackle", ok, rival: true });
           if (ok) { st.saves++; feed(`🛡️ <b>${me.name}</b>, 라이벌을 완벽하게 막아냅니다!`, "me"); await flashText("라이벌 봉쇄!", "goal", 800); }
-          else await goalAg(`💥 라이벌 <b>${esc(rv.name)}</b>의 골… 막지 못했어요`, rivalSlot);
+          else { st.ge.push({ side: "opp", s: "rv", a: PK.as("opp", "rv")?.id }); await goalAg(`💥 라이벌 <b>${esc(rv.name)}</b>의 골… 막지 못했어요`, rivalSlot); }
           if (!ok) st.rivalGoal = true;
         } else {
           const p = clamp(.35 + (rv.ovr - homeStr) / 60, .15, .7);
-          if (Math.random() < p) { st.rivalGoal = true; await goalAg(`💥 라이벌 <b>${esc(rv.name)}</b>의 골!`, rivalSlot); }
+          if (Math.random() < p) { st.rivalGoal = true; st.ge.push({ side: "opp", s: "rv", a: PK.as("opp", "rv")?.id }); await goalAg(`💥 라이벌 <b>${esc(rv.name)}</b>의 골!`, rivalSlot); }
           else { await runSeq("away", teams.away[rivalSlot], attackPath("away", false, false), 1, 1.3); feed(`😤 라이벌의 슛, 골대를 벗어나요`); }
         }
       } else if (ev.kind === "me") {
@@ -428,23 +433,23 @@ function playMatch(root, cfg) {
         st.moments.push({ type, ok });
         unzoom();
         if (type === "shot") {
-          if (ok) { st.goals++; const path = await goalFor(mySlot, true, `⚽ <b>${me.name}</b>의 골!!`); await replay(path); }
+          if (ok) { st.goals++; const a = PK.as("mine", "me"); st.ge.push({ side: "mine", s: "me", a: a && a.id }); const path = await goalFor(mySlot, true, `⚽ <b>${me.name}</b>의 골!!${a ? ` (도움 ${esc(a.name)})` : ""}`); await replay(path); }
           else { await runSeq("home", p, attackPath("home", false, true), 1, 1); Sfx.miss(); feed(`🙈 ${me.name}의 슛, 막혔어요`); }
         } else if (type === "dribble") {
           if (ok) {
             feed(`🏃 <b>${me.name}</b>, 수비를 제쳤다!`, "me");
-            if (Math.random() < (me.pos === "wg" || me.pos === "fw" ? .45 : .3)) { st.goals++; const path = await goalFor(mySlot, true, `⚽ 돌파에 이은 <b>${me.name}</b>의 골!!`); await replay(path); }
-            else if (Math.random() < .6) { st.assists++; await goalFor(9 === mySlot ? 8 : 9, false, `⚽ <b>${me.name}</b>의 돌파 후 컷백, 동료가 마무리! 🅰️`); }
+            if (Math.random() < (me.pos === "wg" || me.pos === "fw" ? .45 : .3)) { st.goals++; st.ge.push({ side: "mine", s: "me", a: null }); const path = await goalFor(mySlot, true, `⚽ 돌파에 이은 <b>${me.name}</b>의 골!!`); await replay(path); }
+            else if (Math.random() < .6) { st.assists++; const s = PK.sc("mine", true); st.ge.push({ side: "mine", s: s.id, a: "me" }); await goalFor(9 === mySlot ? 8 : 9, false, `⚽ <b>${me.name}</b>의 돌파 후 컷백, <b>${esc(s.name)}</b>가 마무리! 🅰️`); }
             else feed("💨 돌파 후 크로스, 아쉽게 머리에 안 맞았어요");
           } else feed(`😵 ${me.name}, 공을 뺏겼어요`);
         } else if (type === "pass") {
           if (ok) {
-            if (Math.random() < .68) { st.assists++; await goalFor(mySlot === 9 ? 10 : 9, false, `⚽ <b>${me.name}</b>의 킬패스! 동료가 마무리 🅰️`); }
+            if (Math.random() < .68) { st.assists++; const s = PK.sc("mine", true); st.ge.push({ side: "mine", s: s.id, a: "me" }); await goalFor(mySlot === 9 ? 10 : 9, false, `⚽ <b>${me.name}</b>의 킬패스! <b>${esc(s.name)}</b>의 마무리 🅰️`); }
             else feed(`🎯 ${me.name}의 패스가 찬스를 만들었지만 키퍼 선방`);
           } else feed(`🙈 ${me.name}의 패스가 끊겼어요`);
         } else {
           if (ok) { st.saves++; feed(`🛡️ <b>${me.name}</b>의 완벽한 태클!`, "me"); }
-          else await goalAg(`😱 ${josa(me.name, "이/가")} 뚫리며 실점`);
+          else { const s = PK.sc("opp"); st.ge.push({ side: "opp", s: s.id, a: null }); await goalAg(`😱 ${josa(me.name, "이/가")} 뚫리며 <b>${esc(s.name)}</b>에게 실점`); }
         }
       }
     }
@@ -483,6 +488,13 @@ function playMatch(root, cfg) {
   });
 }
 
+/* 득점자·도움 이름 — 프로는 실제 명단(cfg.pick), 유스는 기본 이름 */
+function matchPicker(cfg) {
+  const ME = { id: "me", name: cfg.me.name };
+  if (cfg.pick) return { me: ME, sc: (side, exclMe) => cfg.pick.sc(side, exclMe), as: (side, sid) => { const a = cfg.pick.as(side, sid); return a && a.id === "me" ? ME : a; } };
+  return { me: ME, sc: (side) => ({ id: null, name: side === "mine" ? "동료" : "상대 공격수" }), as: () => null };
+}
+
 /* ---------- 결과만 보기 (연출 없이 같은 규칙으로) ---------- */
 function simMatch(cfg) {
   const me = cfg.me, homeStr = cfg.home.str, awayStr = cfg.away.str;
@@ -492,23 +504,32 @@ function simMatch(cfg) {
   const lamAg = clamp(1.15 * Math.exp((awayStr - homeStr) / 20), .2, 3.4);
   const k = me.absent ? 0 : me.starter ? randi(1, 2) + (Math.random() < .3 ? 1 : 0) : (Math.random() < .6 ? 1 : 0);
   let gf = Math.min(5, poisson(Math.max(.15, lamFor - k * .3))), ga = Math.min(5, poisson(lamAg));
-  const st = { goals: 0, assists: 0, saves: 0, moments: [], events: [] };
-  if (!me.absent && gf > 0) for (let i = 0; i < gf; i++) if (Math.random() < (me.pos === "mf" ? .3 : me.pos === "wg" ? .22 : .1) * (me.starter ? 1 : .4)) st.assists++;
+  const st = { goals: 0, assists: 0, saves: 0, moments: [], events: [], ge: [] };
+  const PK = matchPicker(cfg);
+  for (let i = 0; i < gf; i++) {
+    const mine = !me.absent && Math.random() < (me.pos === "mf" ? .3 : me.pos === "wg" ? .22 : .1) * (me.starter ? 1 : .4);
+    if (mine) st.assists++;
+    const s = PK.sc("mine", true), a = mine ? PK.me : PK.as("mine", s.id);
+    st.ge.push({ side: "mine", s: s.id, a: a && a.id });
+  }
+  for (let i = 0; i < ga; i++) { const s = PK.sc("opp"), a = PK.as("opp", s.id); st.ge.push({ side: "opp", s: s.id, a: a && a.id }); }
+  const myGoal = () => { const a = PK.as("mine", "me"); st.ge.push({ side: "mine", s: "me", a: a && a.id }); };
+  const myAst = () => { const s = PK.sc("mine", true); st.ge.push({ side: "mine", s: s.id, a: "me" }); };
   for (let i = 0; i < k; i++) {
     const t = pick(POS[me.pos].moments), ok = Math.random() < autoP(t, awayStr);
     st.moments.push({ type: t, ok });
-    if (t === "shot" && ok) { st.goals++; gf++; }
-    else if (t === "dribble" && ok) { const r = Math.random(); if (r < (me.pos === "wg" || me.pos === "fw" ? .45 : .3)) { st.goals++; gf++; } else if (r < .72) { st.assists++; gf++; } }
-    else if (t === "pass" && ok && Math.random() < .68) { st.assists++; gf++; }
-    else if (t === "tackle") { if (ok) st.saves++; else ga++; }
+    if (t === "shot" && ok) { st.goals++; gf++; myGoal(); }
+    else if (t === "dribble" && ok) { const r = Math.random(); if (r < (me.pos === "wg" || me.pos === "fw" ? .45 : .3)) { st.goals++; gf++; myGoal(); } else if (r < .72) { st.assists++; gf++; myAst(); } }
+    else if (t === "pass" && ok && Math.random() < .68) { st.assists++; gf++; myAst(); }
+    else if (t === "tackle") { if (ok) st.saves++; else { ga++; const s = PK.sc("opp"); st.ge.push({ side: "opp", s: s.id, a: null }); } }
   }
   if (cfg.rival && cfg.rival.side === "away") {
     const canStop = !me.absent && me.starter && (me.pos === "df" || me.pos === "mf");
     if (canStop) {
       const ok = Math.random() < autoP("tackle", cfg.rival.ovr);
       st.moments.push({ type: "tackle", ok, rival: true });
-      if (ok) st.saves++; else { ga++; st.rivalGoal = true; }
-    } else if (Math.random() < clamp(.35 + (cfg.rival.ovr - homeStr) / 60, .15, .7)) { ga++; st.rivalGoal = true; }
+      if (ok) st.saves++; else { ga++; st.rivalGoal = true; st.ge.push({ side: "opp", s: "rv", a: PK.as("opp", "rv")?.id }); }
+    } else if (Math.random() < clamp(.35 + (cfg.rival.ovr - homeStr) / 60, .15, .7)) { ga++; st.rivalGoal = true; st.ge.push({ side: "opp", s: "rv", a: PK.as("opp", "rv")?.id }); }
   }
   const res = gf > ga ? "W" : gf < ga ? "L" : "D";
   let r = 6.0;
