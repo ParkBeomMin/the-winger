@@ -3,9 +3,9 @@
  * 세이브는 gzip + base64로 줄여서 Firestore 문서 하나에 넣어요. */
 "use strict";
 
-const FB = { k: "AIzaSyB_hRwh6kvM4GCoVCgSS9wWc03FmnPYLNg", p: "line-party-9a4ca", app: "1:376895097100:web:7f81379f1eceeb79756129" };
+const FB = { k: "AIzaSyBdFLOz7Oc2qCJFkRO9ysDn6XWZIVWNQLk", p: "fir-test-2e554", app: "1:603862676773:web:01ce2060f71d61772716cc" };   // Firebase 프로젝트 TheWinger (더 윙어 2 전용)
 const FB_BASE = `https://firestore.googleapis.com/v1/projects/${FB.p}/databases/(default)/documents`;
-const FB_KEY = "winger2_fb", CLOUD_SIG = "winger2_cloudsig", COL = "w2saves", TCOL = "w2transfers";
+const FB_KEY = "winger2_fb2", CLOUD_SIG = "winger2_cloudsig2", COL = "w2saves", TCOL = "w2transfers";
 const fbEnc = (v) => typeof v === "string" ? { stringValue: v } : Number.isInteger(v) ? { integerValue: String(v) } : { nullValue: null };
 const fbDec = (f) => !f ? null : "stringValue" in f ? f.stringValue : "integerValue" in f ? +f.integerValue : "timestampValue" in f ? Date.parse(f.timestampValue) : null;
 function fbFetch(url, opt, ms = 6000) { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); return fetch(url, { ...(opt || {}), signal: c.signal }).finally(() => clearTimeout(t)); }
