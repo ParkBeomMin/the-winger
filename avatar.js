@@ -3,7 +3,53 @@
 
 /* look: { skin, hair, hairColor, number }  kit: [주색, 보조색]
  * (cx, top) 기준, size = 전체 높이 */
+/* ---------- Muse 초상화 (assets/faces/pXX.webp) ----------
+ * 셔츠는 마젠타로 그려져 있어서, 그릴 때 팀 유니폼 색으로 바꿔 입혀요 (명암은 그대로) */
+const FACE_IDS = Array.from({ length: 20 }, (_, i) => "p" + String(i + 1).padStart(2, "0"));
+const FACE_IMG = {};
+const faceCache = new Map();
+function preloadFaces() {
+  if (typeof Image === "undefined") return;
+  for (const id of FACE_IDS) { if (!FACE_IMG[id]) { const im = new Image(); im.src = `assets/faces/${id}.webp`; FACE_IMG[id] = im; } }
+}
+function faceReady(id) { const im = FACE_IMG[id]; return !!(im && im.complete && im.naturalWidth); }
+function hexRgb(h) { const n = parseInt((h || "#888888").slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
+function faceSprite(id, kit) {
+  const key = id + "|" + (kit ? kit[0] : "");
+  if (faceCache.has(key)) return faceCache.get(key);
+  if (!faceReady(id)) return null;
+  const im = FACE_IMG[id], c = document.createElement("canvas");
+  c.width = c.height = 320;
+  const x = c.getContext("2d");
+  x.drawImage(im, 0, 0, 320, 320);
+  if (kit) {
+    const d = x.getImageData(0, 0, 320, 320), p = d.data;
+    let [kr, kg, kb] = hexRgb(kit[0]);
+    // 아주 어두운 유니폼은 살짝 밝혀야 명암이 보여요
+    const lum = (kr * .3 + kg * .59 + kb * .11);
+    if (lum < 40) { kr += 30; kg += 30; kb += 30; }
+    for (let i = 0; i < p.length; i += 4) {
+      if (p[i + 3] < 10) continue;
+      const r = p[i], g = p[i + 1], b = p[i + 2];
+      const m = Math.min(r, b) - g;              // 마젠타다움
+      if (m < 40) continue;
+      const k = clamp((m - 40) / 80, 0, 1);       // 가장자리는 부드럽게 섞어요
+      const shade = clamp((r + b) / 2 / 235, .25, 1.15);
+      p[i] = Math.round(r * (1 - k) + clamp(kr * shade, 0, 255) * k);
+      p[i + 1] = Math.round(g * (1 - k) + clamp(kg * shade, 0, 255) * k);
+      p[i + 2] = Math.round(b * (1 - k) + clamp(kb * shade, 0, 255) * k);
+    }
+    x.putImageData(d, 0, 0);
+  }
+  faceCache.set(key, c);
+  return c;
+}
+
 function drawAvatar(ctx, cx, top, size, look, kit, opt = {}) {
+  if (look && look.face) {
+    const sp = faceSprite(look.face, kit);
+    if (sp) { ctx.drawImage(sp, cx - size / 2, top, size, size); return; }
+  }
   const s = size / 112;
   const skin = SKINS[look.skin] || SKINS[0];
   const hc = HAIR_COLORS[look.hairColor] || HAIR_COLORS[0];
@@ -119,7 +165,9 @@ function avatarCanvas(look, kit, px = 64, opt = {}) {
   c.style.width = px + "px"; c.style.height = px + "px";
   const ctx = c.getContext("2d");
   ctx.scale(dpr, dpr);
-  drawAvatar(ctx, px / 2, px * 0.06, px * 0.94, look, kit, opt);
+  const paint = () => { ctx.clearRect(0, 0, px, px); look && look.face && faceReady(look.face) ? drawAvatar(ctx, px / 2, 0, px, look, kit, opt) : drawAvatar(ctx, px / 2, px * 0.06, px * 0.94, look, kit, opt); };
+  paint();
+  if (look && look.face && !faceReady(look.face) && FACE_IMG[look.face]) FACE_IMG[look.face].addEventListener("load", paint, { once: true });
   return c;
 }
 

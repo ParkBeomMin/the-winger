@@ -105,7 +105,7 @@ function drawTitleArt() {
 const C = { step: 1, diff: "normal", name: "", pos: "wg", foot: "R", look: { skin: 1, hair: 0, hairColor: 0, number: 11 }, origin: null, roll: null };
 function startCreate() {
   C.step = 1; C.name = randomName("kr"); C.pos = "wg"; C.foot = "R";
-  C.look = { skin: randi(0, 3), hair: randi(0, 4), hairColor: randi(0, 2), number: 11 };
+  C.look = { skin: randi(0, 3), hair: randi(0, 4), hairColor: randi(0, 2), number: 11, face: pick(FACE_IDS.slice(0, 6)) };
   C.origin = null; C.roll = rollStats(C.pos);
   renderCreate(); show("scr-create");
 }
@@ -136,18 +136,16 @@ function renderCreate() {
     $("b-next").onclick = () => { if (!C.name) { toast("이름을 입력해 주세요"); return; } C.step = 2; renderCreate(); };
   } else if (C.step === 2) {
     el.innerHTML = `
-      <h2>🎨 내 선수 꾸미기</h2>
+      <h2>🎨 내 선수 얼굴</h2>
       <div class="av-preview" id="av-prev"></div>
-      <p class="label">피부</p><div class="sw">${SKINS.map((c, i) => `<button class="${C.look.skin === i ? "on" : ""}" data-skin="${i}" style="background:${c}"></button>`).join("")}</div>
-      <p class="label">헤어</p><div class="seg wrap">${HAIR_STYLES.map((n, i) => `<button class="${C.look.hair === i ? "on" : ""}" data-hair="${i}">${n}</button>`).join("")}</div>
-      <p class="label">헤어 색</p><div class="sw">${HAIR_COLORS.map((c, i) => `<button class="${C.look.hairColor === i ? "on" : ""}" data-hc="${i}" style="background:${c}"></button>`).join("")}</div>
+      <p class="label">얼굴 고르기 <small>(유니폼은 소속팀 색으로 바뀌어요)</small></p>
+      <div class="face-grid">${FACE_IDS.map((id) => `<button class="face-pick ${C.look.face === id ? "on" : ""}" data-face="${id}"></button>`).join("")}</div>
       <p class="label">등번호</p><div class="num-row"><button class="btn btn-ghost sm" id="n-m">－</button><b id="n-v">${C.look.number}</b><button class="btn btn-ghost sm" id="n-p">＋</button></div>
       <button class="btn btn-primary" id="b-next">다음: 유스 고르기 →</button>
       <button class="btn btn-ghost" id="b-back">← 뒤로</button>`;
     $("av-prev").appendChild(avatarCanvas(C.look, ["#2a62c9", "#fff"], 150, { mood: "joy" }));
-    el.querySelectorAll("[data-skin]").forEach((b) => b.onclick = () => { C.look.skin = +b.dataset.skin; renderCreate(); });
-    el.querySelectorAll("[data-hair]").forEach((b) => b.onclick = () => { C.look.hair = +b.dataset.hair; renderCreate(); });
-    el.querySelectorAll("[data-hc]").forEach((b) => b.onclick = () => { C.look.hairColor = +b.dataset.hc; renderCreate(); });
+    el.querySelectorAll("[data-face]").forEach((b) => b.appendChild(avatarCanvas({ ...C.look, face: b.dataset.face }, ["#2a62c9", "#fff"], 64)));
+    el.querySelectorAll("[data-face]").forEach((b) => b.onclick = () => { C.look.face = b.dataset.face; Sfx.tap(); renderCreate(); });
     $("n-m").onclick = () => { C.look.number = C.look.number <= 1 ? 99 : C.look.number - 1; renderCreate(); };
     $("n-p").onclick = () => { C.look.number = C.look.number >= 99 ? 1 : C.look.number + 1; renderCreate(); };
     $("b-next").onclick = () => { C.step = 3; renderCreate(); };
@@ -178,7 +176,7 @@ function makeRival() {
   const type = pick(RIVAL_TYPES);
   return {
     name: randomName(origin), origin, pos, type: type.id, stats: r.stats, talent: r.talent,
-    look: { skin: randi(0, 4), hair: randi(0, 5), hairColor: randi(0, 6), number: pick([7, 9, 10, 17, 19, 23]) },
+    look: { skin: randi(0, 4), hair: randi(0, 5), hairColor: randi(0, 6), number: pick([7, 9, 10, 17, 19, 23]), face: pick(FACE_IDS.filter((f) => f !== C.look.face && (origin === "kr" ? true : !["p01", "p02", "p14", "p18"].includes(f)))) },
     rel: 0, age: 16, league: null, club: null, season: { g: 0, a: 0, r: [], apps: 0 },
     career: { g: 0, a: 0, trophies: 0, ballon: 0, awards: [] }, hurt: 0,
   };
@@ -1386,6 +1384,9 @@ async function resume() {
   if (!S) return initTitle();
   W = S.world || null;
   if (!S.diff) S.diff = "normal";
+  // 옛 세이브는 비슷한 초상화를 골라 입혀요
+  if (!S.look.face) S.look.face = FACE_IDS[((S.look.hair || 0) * 3 + (S.look.skin || 0)) % FACE_IDS.length];
+  if (!S.rival.look.face) S.rival.look.face = FACE_IDS[((S.rival.look.hair || 0) * 3 + (S.rival.look.skin || 0) + 7) % FACE_IDS.length];
   if (S.phase === "pro") ensureWorld();
   show("scr-main"); renderMain();
   if (S.pending === "tournament") await runTournament();
@@ -1399,6 +1400,7 @@ window.addEventListener("unhandledrejection", (e) => { busy = false; console.err
 window.addEventListener("error", (e) => { busy = false; console.error(e.error || e.message); });
 
 /* ---------- 시작 ---------- */
+preloadFaces();
 $("btn-new").onclick = async () => {
   const sv = load();
   if (sv && sv.phase !== "retired") {

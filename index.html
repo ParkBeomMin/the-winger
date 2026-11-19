@@ -294,6 +294,11 @@ a.pl{color:inherit;text-decoration:underline dotted;cursor:pointer}.rvn{color:#f
 .pre-face.rv{border-color:#ff7a7a}
 .crest.nat{background:rgba(255,255,255,.06);border-color:var(--line);font-size:2.2rem}
 .pre-mid b{font-size:1.6rem}
+.face-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.face-pick{aspect-ratio:1;border-radius:14px;border:2.5px solid var(--line);background:radial-gradient(circle at 50% 40%,#24553a,#12291c);overflow:hidden;padding:0}
+.face-pick canvas{width:100%!important;height:100%!important;display:block}
+.face-pick.on{border-color:var(--acc2);box-shadow:0 0 0 2px rgba(255,228,90,.35)}
+.hud-av canvas,.rc-av canvas,.pre-face canvas{border-radius:50%}
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#000c;color:#fff;padding:10px 16px;border-radius:12px;z-index:120;font-size:.9rem}
 #toast[hidden]{display:none}
 </style>
