@@ -197,7 +197,7 @@ function genMatch(H, A) {
   A.subs = A.subs || planSubs(A.xi, A.bench || [], A.meBench);
   const uH = units(H.xi), uA = units(A.xi);
   const posH = clamp(.5 + (uH.mid - uA.mid) / 90 + (H.adv || 0) * .01, .35, .65);
-  const lam = (pos, u1, u2) => clamp(6.6 * (pos / .5) * Math.exp((u1.att - u2.def) / 30), 1.5, 14);
+  const lam = (pos, u1, u2) => clamp(6.3 * (pos / .5) * Math.exp((u1.att - u2.def) / 30), 1.5, 14);
   const nH = poisson(lam(posH, uH, uA)), nA = poisson(lam(1 - posH, uA, uH));
   // 반칙·부상 먼저 — 나간 선수는 그 뒤 찬스에 못 끼고, 사람이 적은 팀은 찬스가 줄어요
   const inc = [];
@@ -225,6 +225,17 @@ function genMatch(H, A) {
     if (offCount(T, min) > offCount(D, min) && Math.random() < .3 * (offCount(T, min) - offCount(D, min))) return null;
     const on = onPitchAt(T.xi, T.subs, min, T.off), dOn = onPitchAt(D.xi, D.subs, min, D.off);
     if (!on.length || !dOn.length) return null;
+    // 페널티킥 — 팀에서 슈팅이 가장 좋은 선수가 차요
+    if (Math.random() < .018) {
+      const taker = on.filter((p) => p.r !== "gk").sort((a, b) => eff(b, "sho") - eff(a, "sho"))[0];
+      const gk = dOn.find((p) => p.r === "gk") || dOn[0];
+      const df = weighted(dOn.filter((p) => p.r !== "gk"), (p) => D_W[p.r]);
+      const ev = { min, side, sh: taker, as: null, df, gk, xg: .78, pen: true };
+      ev.out = rollShot(ev, 0, true);
+      if (taker.id === "me") ev.mom = "pk";
+      if (taker.id === "rv") ev.rv = true;
+      return ev;
+    }
     const sh = weighted(on, (p) => G_W[p.r] * Math.pow(eff(p, "sho") / 70, 1.5));
     const as = Math.random() < .72 ? weighted(on.filter((p) => p !== sh), (p) => A_W[p.r] * Math.pow(eff(p, "pas") / 70, 1.5)) : null;
     const df = weighted(dOn.filter((p) => p.r !== "gk"), (p) => D_W[p.r] * Math.pow(eff(p, "def") / 70, 2));
@@ -257,6 +268,7 @@ function rollShot(ev, bonus = 0, noBlock = false) {
 }
 /* 내 승부처를 자동으로 풀 때 — AI와 같은 확률 */
 function autoMoment(ev) {
+  if (ev.mom === "pk") { const out = rollShot(ev, 0, true); return { ok: out === "goal", out }; }
   if (ev.mom === "tackle") return Math.random() < blockP(ev) * 1.3 ? { ok: true, out: "block" } : { ok: false, out: rollShot(ev, 0, true) };
   if (ev.mom === "pass" || ev.mom === "dribble") return Math.random() < 1 - blockP(ev) ? { ok: true, out: rollShot(ev, 0, true) } : { ok: false, out: "block" };
   const out = rollShot(ev); return { ok: out === "goal", out };
@@ -338,7 +350,7 @@ function teamFor(club, opts = {}) {
   const bench = benchOf(ps, xi);
   return { name: club, kit: W.c[club].kit, xi, bench, adv: opts.home ? 1.5 : 0, meBench: bench.some((p) => p.id === "me") };
 }
-function playAI(H, A) { return finishMatch(genMatch(H, A)); }
+function playAI(H, A) { const m = genMatch(H, A), r = finishMatch(m); r.m = m; return r; }
 
 /* ---------- 리그 일정 / 순위 ---------- */
 function makeRounds(names) {
@@ -382,6 +394,20 @@ function simRoundRest(round, skip) {
   if (S.rival.ban > 0) S.rival.ban--;
 }
 
+/* ---------- 승부차기 ---------- */
+function pkTakers(on) { return on.filter((p) => p.r !== "gk").sort((a, b) => eff(b, "sho") - eff(a, "sho")).slice(0, 5); }
+function pkP(sh, gk) { return clamp(.74 + (eff(sh, "sho") - eff(gk, "def")) / 160, .55, .9); }
+function shootoutAuto(onA, onB) {
+  const A = pkTakers(onA), B = pkTakers(onB), gA = onA.find((p) => p.r === "gk") || onA[0], gB = onB.find((p) => p.r === "gk") || onB[0];
+  let a = 0, b = 0;
+  for (let i = 0; i < 30; i++) {
+    if (Math.random() < pkP(A[i % A.length], gB)) a++;
+    if (Math.random() < pkP(B[i % B.length], gA)) b++;
+    if (i >= 4 && a !== b) break;
+  }
+  return { aWin: a > b, a, b };
+}
+
 /* ---------- 대륙컵 ---------- */
 function initCups(prevTables) {
   S.cups = {};
@@ -396,10 +422,14 @@ function initCups(prevTables) {
 }
 function cupsAt(roundDone) { return Object.entries(CUPS).filter(([, c]) => c.at.includes(roundDone)).map(([k]) => k); }
 function cupPairs(key) { const a = S.cups[key].alive, out = []; for (let i = 0; i + 1 < a.length; i += 2) out.push([a[i], a[i + 1]]); return out; }
-function cupResolve(key, h, a, res) {
+function cupResolve(key, h, a, res, so) {
   const c = S.cups[key];
   let win = res.hg > res.ag ? h : res.ag > res.hg ? a : null, pk = "";
-  if (!win) { win = Math.random() < .5 + (xiAvg(h) - xiAvg(a)) / 100 ? h : a; pk = ` (승부차기 ${win} 승)`; }
+  if (!win) {
+    if (!so && res.m) { const H = res.m.H, A = res.m.A; so = shootoutAuto(onPitchAt(H.xi, H.subs, 90, H.off), onPitchAt(A.xi, A.subs, 90, A.off)); }
+    win = so ? (so.aWin ? h : a) : (Math.random() < .5 ? h : a);
+    pk = ` (승부차기 ${so ? `${so.a}:${so.b}` : ""} ${win} 승)`;
+  }
   c.log.push(`${CUP_STAGE[c.stage] || c.stage + "강"} ${h} ${res.hg}:${res.ag} ${a}${pk}`);
   credit(res, "cup");
   return { win, pk };

@@ -279,66 +279,29 @@ function playMatch(root, cfg) {
     function updScore() { root.querySelector("#m-gf").textContent = gf; root.querySelector("#m-ga").textContent = ga; }
 
     /* --- 승부처 미니게임: 난이도는 엔진 확률에서 나와요 --- */
-    function mini(ev) {
-      const type = ev.mom;
-      if (auto) return Promise.resolve(autoMoment(ev));
-      return new Promise((done) => {
-        overlay.hidden = false;
-        const L = MINI_LABEL[type], ms = me.stats;
-        let finished = false, tick = null;
-        const end = (res) => { if (finished) return; finished = true; clearInterval(tick); (res.ok ? Sfx.good : Sfx.bad)(); setTimeout(() => { overlay.hidden = true; overlay.innerHTML = ""; done(res); }, 380); };
-        const limit = type === "dribble" ? 4 : clamp(2.2 + (type === "pass" ? ms.pas : type === "tackle" ? ms.def : ms.sho) / 90, 2.4, 3.6);
-        let left = limit;
-        const label = type === "tackle" ? `🛡️ ${esc(ev.sh.n)}의 돌파!` : L.title;
-        overlay.innerHTML = `<div class="mg"><div class="mg-h"><b>${label}</b><span>${L.hint}</span></div><div class="mg-body"></div><div class="mg-timer"><i></i></div></div>`;
-        const body = overlay.querySelector(".mg-body"), bar = overlay.querySelector(".mg-timer i");
-        tick = setInterval(() => {
-          left -= .05; bar.style.width = clamp(left / limit, 0, 1) * 100 + "%";
-          if (left <= 0) end({ ok: false, out: type === "tackle" ? rollShot(ev, 0, true) : type === "shot" ? "miss" : "block" });
-        }, 50);
-        if (type === "shot") {
-          const p = goalP(ev) * (cfg.diffShot || 1);
-          body.innerHTML = `<div class="mg-goal">${[0, 1, 2, 3, 4, 5].map((z) => `<button data-z="${z}"></button>`).join("")}<div class="mg-keeper">🧤</div></div>`;
-          body.querySelectorAll("[data-z]").forEach((b) => b.onclick = () => {
-            Sfx.kick();
-            const z = +b.dataset.z, col = z % 3, top = z < 3;
-            const guess = Math.random() < clamp(.85 - p * 1.2, .2, .75);
-            const kCol = guess ? col : pick([0, 1, 2].filter((c) => c !== col));
-            body.querySelector(".mg-keeper").style.left = (kCol * 33.3 + 16.6) + "%";
-            b.classList.add("hit");
-            const corner = col !== 1 && top;
-            const missP = corner ? clamp(.25 - (ms.sho - 50) / 250, .04, .25) : col !== 1 ? .05 : .02;
-            const saved = kCol === col ? Math.random() < .9 : Math.abs(kCol - col) === 1 ? Math.random() < .12 : false;
-            end(Math.random() < missP ? { ok: false, out: "miss" } : saved ? { ok: false, out: "save" } : { ok: true, out: "goal" });
-          });
-        } else if (type === "pass") {
-          const open = randi(0, 2), spots = [[22, 30], [55, 18], [80, 42]];
-          body.innerHTML = `<div class="mg-field">${spots.map((s, k) => `<button class="mate" data-k="${k}" style="left:${s[0]}%;top:${s[1]}%">${k + 1}</button>`).join("")}
-            ${spots.map((s, k) => `<i class="def ${k === open ? "away" : ""}" style="left:${s[0] + (k === open ? 26 : 8)}%;top:${s[1] + (k === open ? 40 : 10)}%"></i>`).join("")}<b class="me" style="left:48%;top:78%">나</b></div>`;
-          body.querySelectorAll(".mate").forEach((b) => b.onclick = () => {
-            Sfx.kick();
-            const ok = +b.dataset.k === open ? Math.random() < .9 : Math.random() < .15;
-            end(ok ? { ok: true, out: rollShot(ev, .12, true) } : { ok: false, out: "block" });
-          });
-        } else if (type === "dribble") {
-          const zw = clamp(14 + (ms.dri - eff(ev.df, "def")) / 2, 8, 34), zc = rand(25, 75);
-          body.innerHTML = `<div class="mg-bar"><i class="zone" style="left:${zc - zw / 2}%;width:${zw}%"></i><i class="mk"></i></div><button class="btn btn-primary mg-tap">탭!</button>`;
-          const mk = body.querySelector(".mk"); let t = 0; const v = 1.1 + eff(ev.df, "def") / 120;
-          const anim = setInterval(() => { t += .016 * v; const q = (Math.sin(t * Math.PI) * .5 + .5) * 100; mk.style.left = q + "%"; mk.dataset.p = q; if (finished) clearInterval(anim); }, 16);
-          body.querySelector(".mg-tap").onclick = () => { Sfx.tap(); const q = +mk.dataset.p; clearInterval(anim); end(Math.abs(q - zc) <= zw / 2 + 1 ? { ok: true, out: rollShot(ev, .15, true) } : { ok: false, out: "block" }); };
-        } else {
-          const goLeft = Math.random() < .5;
-          const truthful = Math.random() < clamp(.55 + (ms.def - eff(ev.sh, "dri")) / 150, .5, .92);
-          const tell = truthful === goLeft ? "left" : "right";
-          body.innerHTML = `<div class="mg-tackle"><div class="att lean-${tell}">🏃</div><div class="mg-two"><button data-d="left">⬅️ 왼쪽</button><button data-d="right">오른쪽 ➡️</button></div></div>`;
-          body.querySelectorAll("[data-d]").forEach((b) => b.onclick = () => {
-            Sfx.tap();
-            const right = (b.dataset.d === "left") === goLeft;
-            const ok = right ? Math.random() < .9 : Math.random() < .15;
-            end(ok ? { ok: true, out: "block" } : { ok: false, out: rollShot(ev, 0, true) });
-          });
-        }
-      });
+    /* --- 승부처 미니게임 (minigames.js). 자동이면 AI와 같은 확률 --- */
+    async function mini(ev) {
+      if (auto) return autoMoment(ev);
+      overlay.hidden = false;
+      const ms = me.stats, d = cfg.diffShot || 1;
+      let r;
+      if (ev.mom === "shot" || ev.mom === "pk") {
+        const gkDef = eff(ev.gk, "def");
+        const smart = ev.mom === "pk" ? clamp(.36 / d, .22, .5) : clamp((.5 - (ms.sho - gkDef) / 220) / d, .22, .72);
+        const x = await MG.shot(overlay, { sho: ms.sho, gk: gkDef, smart, pk: ev.mom === "pk" });
+        r = { ok: x.ok, out: x.out, why: x.why };
+      } else if (ev.mom === "pass") {
+        const x = await MG.pass(overlay, { pas: ms.pas, def: eff(ev.df, "def") });
+        r = x.ok ? { ok: true, out: rollShot(ev, .12, true), why: x.why } : { ok: false, out: "block", why: x.why };
+      } else if (ev.mom === "dribble") {
+        const x = await MG.dribble(overlay, { dri: ms.dri, def: eff(ev.df, "def") });
+        r = x.ok ? { ok: true, out: rollShot(ev, .15, true), why: x.why } : { ok: false, out: "block", why: x.why };
+      } else {
+        const x = await MG.tackle(overlay, { def: ms.def, dri: eff(ev.sh, "dri"), name: ev.sh.n });
+        r = x.ok ? { ok: true, out: "block", why: x.why } : { ok: false, out: rollShot(ev, 0, true), why: x.why, foul: x.foul };
+      }
+      overlay.hidden = true; overlay.innerHTML = "";
+      return r;
     }
 
     /* --- 사건 연출 --- */
@@ -366,13 +329,20 @@ function playMatch(root, cfg) {
     async function showEv(ev) {
       const side = vis(ev.side), mine = side === "home";
       const runner = teams[side][slotOf(ev.sh, side)];
+      if (ev.pen) { feed(`⚠️ 페널티킥 선언! 키커 ${nm(ev.sh)}`, mine ? "goal" : "bad"); await flashText("PK!", mine ? "goal" : "bad", 700); }
       if (ev.mom) {
         possession = mine ? "home" : "away";
-        feed(ev.mom === "tackle" ? `🔥 승부처! ${nm(ev.sh)}의 돌파를 막아라` : `🔥 승부처! 공이 <b>${esc(me.name)}</b>에게`, "me");
+        feed(ev.mom === "tackle" ? `🔥 승부처! ${nm(ev.sh)}의 돌파를 막아라` : ev.mom === "pk" ? `🔥 <b>${esc(me.name)}</b>, 페널티킥 키커로 나서요` : `🔥 승부처! 공이 <b>${esc(me.name)}</b>에게`, "me");
         zoomOn(ev.mom === "tackle" ? runner : myP());
         await sleepMs(skipping ? 0 : 600);
         const r = await mini(ev); ev.res = r; ev.out = r.out;
         st.moments.push({ type: ev.mom, ok: r.ok });
+        if (r.why && !auto) feed(`💬 ${r.why}`, "me");
+        if (r.foul) {
+          // 무리한 태클 → 경고 (이미 경고가 있으면 주심이 한 번 봐줘요)
+          const inc = cfg.m.inc || (cfg.m.inc = []);
+          if (!inc.some((i) => i.p === ev.df && i.kind === "yc")) { inc.push({ min: ev.min, side: ev.side === "home" ? "away" : "home", p: ev.df, kind: "yc" }); feed(`🟨 <b>${esc(me.name)}</b> 경고`, "bad"); }
+        }
         unzoom();
       }
       possession = side;
@@ -381,12 +351,12 @@ function playMatch(root, cfg) {
         const path = attackPath(side, true, fromMe);
         await runSeq(side, runner, path, 1, fromMe ? 1.1 : 1.5);
         mine ? gf++ : ga++; updScore(); mine ? Sfx.goal() : Sfx.miss();
-        feed(`⚽ ${nm(ev.sh)}의 골!${ev.as ? ` (도움 ${nm(ev.as)})` : ""}`, (fromMe || (ev.as && ev.as.id === "me")) ? "me goal" : ev.rv ? "rival" : mine ? "goal" : "bad");
+        feed(`⚽ ${nm(ev.sh)}의 ${ev.pen ? "페널티킥 " : ""}골!${ev.as ? ` (도움 ${nm(ev.as)})` : ""}`, (fromMe || (ev.as && ev.as.id === "me")) ? "me goal" : ev.rv ? "rival" : mine ? "goal" : "bad");
         await flashText(mine ? "GOAL!!" : "실점…", mine ? "goal" : "bad", mine ? 1100 : 800);
         if (fromMe) await replay(path);
       } else {
         await runSeq(side, runner, attackPath(side, false, false), 1, 1.1);
-        const txt = ev.out === "save" ? `🧤 ${nm(ev.gk)} 선방! (${nm(ev.sh)}의 슈팅)` : ev.out === "block" ? `🛡️ ${nm(ev.df)}의 수비 (${nm(ev.sh)} 차단)` : `💨 ${nm(ev.sh)}의 슈팅이 빗나가요`;
+        const txt = ev.pen ? (ev.out === "save" ? `🧤 ${nm(ev.gk)}, 페널티킥 선방!` : `💨 ${nm(ev.sh)} 페널티킥 실축`) : ev.out === "save" ? `🧤 ${nm(ev.gk)} 선방! (${nm(ev.sh)}의 슈팅)` : ev.out === "block" ? `🛡️ ${nm(ev.df)}의 수비 (${nm(ev.sh)} 차단)` : `💨 ${nm(ev.sh)}의 슈팅이 빗나가요`;
         feed(txt, ev.mom ? "me" : ev.rv ? "rival" : "");
       }
     }

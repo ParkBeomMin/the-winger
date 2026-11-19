@@ -138,8 +138,9 @@ button:disabled{opacity:.4;cursor:default}
 .m-flash{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:Jua;font-size:2.6rem;color:var(--acc2);text-shadow:0 4px 0 #000,0 0 30px rgba(255,228,90,.6);pointer-events:none;animation:pop .5s}
 .m-flash.bad{color:var(--red);font-size:2rem}
 @keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
-.m-overlay{position:absolute;inset:0;background:rgba(4,14,8,.72);display:flex;align-items:center;justify-content:center;padding:8px}
-.mg{width:100%;max-width:340px;text-align:center}
+.m-overlay{position:fixed;inset:0;z-index:90;background:rgba(4,14,8,.55);display:flex;align-items:flex-end;justify-content:center;padding:12px 12px 28px}
+.m-overlay .mg{background:#14301f;border:1.5px solid var(--acc2);border-radius:18px;padding:14px;max-width:400px;box-shadow:0 -10px 40px rgba(0,0,0,.5);animation:pop .2s}
+.mg{width:100%;max-width:400px;text-align:center}
 .mg-h b{display:block;color:var(--acc2);font-size:1.15rem}.mg-h span{font-size:.75rem;color:var(--dim)}
 .mg-body{margin:8px 0}
 .mg-timer{height:5px;background:#333;border-radius:9px;overflow:hidden}.mg-timer i{display:block;height:100%;width:100%;background:var(--acc2)}
@@ -240,6 +241,52 @@ a.pl{color:inherit;text-decoration:underline dotted;cursor:pointer}.rvn{color:#f
 .wc-log{text-align:left;font-size:.8rem;max-height:40vh;overflow:auto;color:var(--dim)}
 .crest-img{display:inline-block;vertical-align:middle;flex:none;border-radius:4px}.crest-big{width:66px;height:66px;display:flex;align-items:center;justify-content:center;margin:4px;filter:drop-shadow(0 3px 4px rgba(0,0,0,.5))}.offer .crest-big{width:56px;height:56px}
 .m-team .crest-img{margin:0 4px}
+/* ---- 미니게임 v2 ---- */
+.mg-h span{display:block;min-height:1.2em;line-height:1.4;margin-top:2px}
+.mg-goal3{position:relative;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:2px;height:118px;border:4px solid #fff;border-bottom:0;padding:3px;margin:0 6px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.07) 0 4px,transparent 4px 9px)}
+.mg-goal3 button{border:1.5px dashed rgba(255,255,255,.3);border-radius:6px}
+.mg-goal3 button:hover{background:rgba(255,255,255,.1)}
+.mg-goal3 button.pick{background:rgba(255,228,90,.35);border-color:var(--acc2)}
+.mg-gk{position:absolute;bottom:2px;transform:translate(-50%,0);font-size:2.2rem;transition:left .28s ease-out,transform .28s ease-out;pointer-events:none}
+.mg-ball{position:absolute;left:50%;top:104%;transform:translate(-50%,-50%);font-size:1.2rem;pointer-events:none;transition:left .3s ease-in,top .3s ease-in}
+.mg-power{position:relative;height:22px;margin:30px 6px 0;background:#0a1810;border:2px solid var(--line);border-radius:9px;overflow:hidden}
+.mg-power .sweet{position:absolute;top:0;bottom:0;background:rgba(110,231,160,.55)}
+.mg-power .mk{position:absolute;top:-2px;bottom:-2px;width:5px;background:var(--acc2);transform:translateX(-50%)}
+.mg-power span{position:absolute;left:6px;top:2px;font-size:.65rem;color:var(--dim)}
+.mg-pitch{position:relative;height:150px;background:repeating-linear-gradient(0deg,#2a7f44 0 25px,#2f8a4a 25px 50px);border-radius:10px;overflow:hidden}
+.mg-pitch .line{position:absolute;left:0;right:0;top:34%;border-top:2px dashed rgba(255,255,255,.8)}
+.mg-pitch .run{position:absolute;width:30px;height:30px;border-radius:50%;background:#2a62c9;border:2px solid #fff;color:#fff;font-family:Jua;transform:translate(-50%,-50%)}
+.mg-pitch .run.off{background:#7a7a7a;border-color:#ff7a7a}
+.mg-pitch .dfn{position:absolute;width:16px;height:16px;border-radius:50%;background:#d33;border:2px solid #111;transform:translate(-50%,-50%)}
+.mg-pitch .me{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);background:var(--acc2);color:#000;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:.72rem}
+.mg-duel{position:relative;height:110px;display:flex;flex-direction:column;align-items:center;justify-content:space-between}
+.dfn-big{font-size:2.6rem;position:relative;transition:transform .12s}
+.dfn-big.lean-L{transform:translateX(-18px) rotate(-16deg)}.dfn-big.lean-R{transform:translateX(18px) rotate(16deg)}
+.dfn-big .arrow{position:absolute;top:-6px;left:50%;transform:translateX(-50%);color:#ff5a5a;font-style:normal;font-size:1.4rem;text-shadow:0 0 6px #000}
+.mg-duel .att{font-size:2.2rem;transition:transform .35s}
+.mg-duel .att.go-L{transform:translate(-60px,-50px)}.mg-duel .att.go-R{transform:translate(60px,-50px)}.mg-duel .att.stop{transform:translateY(-20px) rotate(20deg);opacity:.6}
+.mg-touch{position:relative;height:46px;background:#0a1810;border:2px solid var(--line);border-radius:10px;margin:6px 4px}
+.mg-touch .att{position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:1.6rem}
+.mg-touch .zone{position:absolute;top:0;bottom:0;background:rgba(110,231,160,.45)}
+.mg-touch .ball{position:absolute;top:50%;transform:translate(-50%,-50%);font-size:1.1rem}
+.so{display:flex;flex-direction:column;gap:6px;margin:6px 0}
+.so-row{display:flex;align-items:center;gap:8px;background:var(--bg2);border-radius:10px;padding:6px 10px;text-align:left}
+.so-row b{flex:1}.so-row em{font-family:Jua;font-style:normal;font-size:1.3rem;color:var(--acc2);width:24px}.so-row span{font-size:.8rem;letter-spacing:1px}
+.so-msg{min-height:2.6em;line-height:1.5}
+#so-mg .mg{max-width:none}
+/* ---- 가독성 ---- */
+.pre-info{line-height:1.7}.pre-info div{margin-top:2px}
+.pre-race{line-height:1.5}.pre-race b{display:block;color:var(--acc)}
+.r-lines{gap:5px;line-height:1.5}.r-lines>div{padding:3px 0;border-bottom:1px dashed rgba(255,255,255,.07)}
+.r-lines>div:last-child{border-bottom:0}
+.newsbox div{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:3px}
+.of-mid span{line-height:1.5}
+.ss-me>div:last-child{line-height:1.8}
+.m-html p{margin:6px 0}.ev-out{line-height:1.9;text-align:left;display:inline-block}
+.help p{line-height:1.65}.help ul{margin:4px 0 0 18px;line-height:1.7}
+.log div{line-height:1.5}
+
+.mbox.still{animation:none}
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#000c;color:#fff;padding:10px 16px;border-radius:12px;z-index:120;font-size:.9rem}
 #toast[hidden]{display:none}
 </style>
@@ -315,6 +362,7 @@ a.pl{color:inherit;text-decoration:underline dotted;cursor:pointer}.rvn{color:#f
 <script src="data.js"></script>
 <script src="avatar.js"></script>
 <script src="match.js"></script>
+<script src="minigames.js"></script>
 <script src="events.js"></script>
 <script src="world.js"></script>
 <script src="game.js"></script>

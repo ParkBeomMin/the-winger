@@ -408,7 +408,7 @@ async function maybeEvent() {
   });
   const out = ev.choices[choice].fx(S);
   addLog(`${ev.emoji} ${ev.title}: ${ev.choices[choice].label.replace(/^\S+\s/, "")} → ${out}`);
-  await modal({ emoji: ev.emoji, title: "결과", html: `<p>${out}</p>`, buttons: [{ label: "계속", value: 1, cls: "btn-primary" }] });
+  await modal({ emoji: ev.emoji, title: "결과", html: `<p class="ev-out">${out.split(" · ").join("<br/>")}</p>`, buttons: [{ label: "계속", value: 1, cls: "btn-primary" }] });
   return true;
 }
 
@@ -503,8 +503,8 @@ async function matchFlow(o) {
     <div class="pre">
       <div class="pre-vs"><div id="pre-me"></div><div class="pre-mid"><b>VS</b><span>${esc(o.opp.name)}</span><small>상대 ${Math.round(tStr(o.opp))} · 우리 ${Math.round(tStr(o.mine))}</small></div><div id="pre-opp"></div></div>
       ${rvOpp ? `<div class="pre-rv">⚔️ 라이벌 <b>${esc(S.rival.name)}</b> ${o.opp.xi.some((p) => p.id === "rv") ? "선발" : "벤치"}! 상대 전적 ${S.h2h.w}승 ${S.h2h.d}무 ${S.h2h.l}패</div>` : rvMate ? `<div class="pre-rv">🤝 라이벌 <b>${esc(S.rival.name)}</b>과 같은 편</div>` : ""}
-      ${race && !absent ? `<div class="pre-race">${ROLE_KO[S.pos]} ${race.slots}자리 경쟁 · ${race.rivals.slice(0, 3).map((p) => `${esc(p.n)} ${Math.round(pOvr(p))}`).join(" · ")}</div>` : ""}
-      <div class="pre-info">${absent ? (S.ban > 0 && S.injured <= 0 ? "⛔ 출전 정지로 못 뛰어요" : "🤕 이번 경기는 못 뛰어요") : starter ? "✅ 선발 출전" : "🪑 벤치 대기 (교체 투입 기회를 기다려요)"} · 컨디션 ${Math.round(S.cond)} · 폼 ${formStr(S.form)}</div>
+      ${race && !absent ? `<div class="pre-race">${ROLE_KO[S.pos]} ${race.slots}자리 주전 경쟁 (선발 확률 ${Math.round(race.p * 100)}%)<b>${race.rivals.slice(0, 3).map((p) => `${esc(p.n)} ${Math.round(pOvr(p))}`).join(" · ")}</b></div>` : ""}
+      <div class="pre-info"><div>${absent ? (S.ban > 0 && S.injured <= 0 ? "⛔ 출전 정지로 못 뛰어요" : "🤕 이번 경기는 못 뛰어요") : starter ? "✅ 선발 출전" : "🪑 벤치 대기 · 교체 투입 기회를 기다려요"}</div><div>🩹 컨디션 ${Math.round(S.cond)} · 폼 ${formStr(S.form)}</div></div>
       <div class="pre-xi">${o.mine.xi.map((p) => `<span class="${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}">${ROLE_KO[p.r]} ${esc(p.n)}</span>`).join("")}</div>
       ${S.cond < 45 && !absent ? `<div class="warn">⚠️ 컨디션이 낮아 능력치가 떨어진 채로 뛰어요</div>` : ""}
       <button class="btn btn-primary" id="b-watch">${absent ? "📺 결과 확인" : "▶️ 경기 보기"}</button>
@@ -521,7 +521,7 @@ async function matchFlow(o) {
   const m = genMatch(H, A);
   if (choice === "watch") {
     body.innerHTML = `<div id="match-root"></div>`;
-    if (!SET.seenMini) { SET.seenMini = 1; saveSet(); await tip("t-mini", "경기 중 <b>🔥 승부처</b>가 오면 화면이 내 선수에게 확대돼요.<br/>슛은 빈 곳을 탭, 패스는 빈 동료를 탭, 돌파는 타이밍, 수비는 방향 읽기!<br/>귀찮으면 <b>🤖 승부처 자동</b>을 켜두세요. 자동은 AI 선수들과 똑같은 확률로 계산돼요."); }
+    if (!SET.seenMini) { SET.seenMini = 1; saveSet(); await tip("t-mini", "경기 중 <b>🔥 승부처</b>가 오면 화면이 내 선수에게 확대돼요.<br/><br/>⚽ 슈팅: 키퍼 반대쪽 코스 → 파워 초록<br/>🏃 돌파: 수비가 쏠린 반대쪽으로<br/>🎯 패스: 오프사이드 전, 빈 동료에게<br/>🛡️ 태클: 공이 길게 빠진 순간<br/><br/>귀찮으면 <b>🤖 승부처 자동</b>을 켜두세요."); }
     const mySubs = o.mine.subs.find((s) => s.in.id === "me");
     const rvSide = rvOpp ? "away" : rvMate ? "home" : null;
     await playMatch($("match-root"), {
@@ -594,6 +594,43 @@ function applyMatch(r, opts = {}) {
   return lines;
 }
 
+/* ---------- 🥅 승부차기 — 내가 키커 명단에 들면 직접 차요 ---------- */
+const onAt90 = (T) => onPitchAt(T.xi, T.subs || [], 90, T.off || []);
+async function shootoutUI(myOn, oppOn, myName, oppName) {
+  const A = pkTakers(myOn), B = pkTakers(oppOn);
+  const gA = myOn.find((p) => p.r === "gk") || myOn[0], gB = oppOn.find((p) => p.r === "gk") || oppOn[0];
+  const m = $("modal"); m.hidden = false;
+  let a = 0, b = 0, drawn = 0; const ra = [], rb = [];
+  const dots = (arr) => arr.map((x) => x ? "⚽" : "❌").join(" ") || "·";
+  const draw = (msg) => {
+    m.innerHTML = `<div class="mbox wide${drawn++ ? " still" : ""}"><h3>🥅 승부차기</h3>
+      <div class="so"><div class="so-row"><b>${esc(myName)}</b><em>${a}</em><span>${dots(ra)}</span></div>
+      <div class="so-row"><b>${esc(oppName)}</b><em>${b}</em><span>${dots(rb)}</span></div></div>
+      <p class="so-msg">${msg}</p><div id="so-mg"></div></div>`;
+  };
+  const decided = (i) => i < 4 ? (a > b + (4 - i) || b > a + (4 - i)) : a !== b;
+  for (let i = 0; i < 30; i++) {
+    const sh = A[i % A.length];
+    draw(`${i + 1}번째 키커 · <b>${esc(sh.n)}</b>${sh.id === "me" ? " (나!)" : ""}`);
+    await sleepMs(sh.id === "me" ? 200 : 700);
+    let ok;
+    if (sh.id === "me") { const x = await MG.shot($("so-mg"), { sho: S.stats.sho, gk: eff(gB, "def"), smart: clamp(.36 / DF().shot, .22, .5), pk: true }); ok = x.ok; }
+    else ok = Math.random() < pkP(sh, gB);
+    ra.push(ok); if (ok) a++; (ok ? Sfx.good : Sfx.bad)();
+    const sb = B[i % B.length], okb = Math.random() < pkP(sb, gA);
+    draw(`${esc(sh.n)} ${ok ? "성공 ⚽" : "실축 ❌"}<br/>${esc(sb.n)} 키커가 나와요…`);
+    await sleepMs(800);
+    rb.push(okb); if (okb) b++;
+    draw(`${esc(sb.n)} ${okb ? "성공 ⚽" : "실축 ❌"}`);
+    await sleepMs(600);
+    if (decided(i)) break;
+  }
+  draw(a > b ? "🎉 승부차기 승리!" : "💧 승부차기 패배…");
+  await new Promise((res) => { const bt = document.createElement("button"); bt.className = "btn btn-primary"; bt.textContent = "계속"; bt.onclick = res; m.querySelector(".mbox").appendChild(bt); });
+  m.hidden = true; m.innerHTML = "";
+  return { aWin: a > b, a, b };
+}
+
 /* ---------- 유스 대회 (유스 팀도 실제 선수들로) ---------- */
 function youthSquad(name, kit, nat, base, extra = []) {
   const used = new Set(), ps = [];
@@ -623,10 +660,10 @@ async function runTournament() {
     else if (pts >= 3) { opp = youthSquad(ORIGINS[S.rival.origin].team, ORIGINS[S.rival.origin].kit, ORIGINS[S.rival.origin].nat, base + 1, [rv]); rival = true; label = "🏆 결승"; }
     else { const o = YOUTH_OPP.find((x) => !opps.includes(x)); opp = youthSquad(o[0], [o[1], o[2]], "kr", base + rand(-2, 2)); label = "순위 결정전"; }
     const mine = myTeam();
-    const { r, res } = await matchFlow({ title: `🏆 ${S.year}년차 ${name}`, sub: label, mine, opp, mySide: "home" });
+    const { r, res, m } = await matchFlow({ title: `🏆 ${S.year}년차 ${name}`, sub: label, mine, opp, mySide: "home" });
     if (r.res === "W") pts += 3; else if (r.res === "D") pts += 1;
     let pk = "";
-    if (i === 2 && rival && r.res === "D") { const win = Math.random() < .5 + (OVR() - ROVR()) / 100; r.res = win ? "W" : "L"; pk = win ? " (승부차기 승)" : " (승부차기 패)"; }
+    if (i === 2 && rival && r.res === "D") { const so = await shootoutUI(onAt90(m.H), onAt90(m.A), mine.name, opp.name); r.res = so.aWin ? "W" : "L"; pk = ` (승부차기 ${so.a}:${so.b} ${so.aWin ? "승" : "패"})`; }
     const rvRating = rival ? [...res.ratings].find(([p]) => p.id === "rv")?.[1] : null;
     const lines = applyMatch(r, { rival, rvRating });
     if (r.played) { S.youth.apps++; S.youth.g += r.goals; S.youth.a += r.assists; S.youth.ratings.push(r.rating); }
@@ -852,9 +889,16 @@ async function runCups(roundDone, quick) {
       if (h === S.pro.club || a === S.pro.club) {
         const isHome = h === S.pro.club, opp = isHome ? a : h;
         const mine = teamFor(S.pro.club, { home: isHome }), oppT = teamFor(opp, { home: !isHome });
-        const { r, res } = await matchFlow({ title: `${cup.emoji} ${cup.name} ${stageName}`, sub: `${esc(S.pro.club)} vs ${esc(opp)} · ${LEAGUES[W.c[opp].l].flag} ${LEAGUES[W.c[opp].l].name}`,
+        const { r, res, m } = await matchFlow({ title: `${cup.emoji} ${cup.name} ${stageName}`, sub: `${esc(S.pro.club)} vs ${esc(opp)} · ${LEAGUES[W.c[opp].l].flag} ${LEAGUES[W.c[opp].l].name}`,
           mine, opp: oppT, mySide: isHome ? "home" : "away", forceQuick: quick });
-        const { win, pk } = cupResolve(key, h, a, res);
+        let so = null;
+        if (res.hg === res.ag) {
+          const myOn = onAt90(mine), opOn = onAt90(oppT);
+          const s = quick ? shootoutAuto(myOn, opOn) : await shootoutUI(myOn, opOn, S.pro.club, opp);
+          so = isHome ? s : { aWin: !s.aWin, a: s.b, b: s.a };
+          if (!quick) show("scr-match");
+        }
+        const { win, pk } = cupResolve(key, h, a, res, so);
         winners.push(win);
         const rvOpp = [...oppT.xi].some((p) => p.id === "rv");
         const lines = applyMatch(r, { rival: rvOpp, prestige: 3, big: 1.5 });
@@ -971,7 +1015,7 @@ async function seasonEnd() {
       <table class="tbl"><tr><th>#</th><th>클럽</th><th>승</th><th>무</th><th>패</th><th>득실</th><th>승점</th></tr>
       ${tbl.map(([n, t], i) => `<tr class="${myRow(n)}"><td>${i + 1}</td><td>${crestHTML(n, 14)} ${esc(n)}${n === rvp.c ? " ⚔️" : ""}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table></div>
     <div class="ss-card"><h4>내 시즌</h4>
-      <div class="ss-me"><div id="ss-av"></div><div>리그 ${P.s.apps}경기(선발 ${P.s.starts}) · ⚽ ${P.s.g} · 🅰️ ${P.s.a} · 평균 평점 <b>${myAvg ? myAvg.toFixed(2) : "-"}</b> · MOM ${P.s.mom}${P.cup.ap ? `<br/>대륙컵 ${P.cup.ap}경기 ⚽ ${P.cup.g} 🅰️ ${P.cup.a}` : ""}<br/>
+      <div class="ss-me"><div id="ss-av"></div><div>리그 ${P.s.apps}경기 (선발 ${P.s.starts})<br/>⚽ ${P.s.g}골 · 🅰️ ${P.s.a}도움 · MOM ${P.s.mom}<br/>평균 평점 <b>${myAvg ? myAvg.toFixed(2) : "-"}</b>${P.cup.ap ? `<br/>대륙컵 ${P.cup.ap}경기 ⚽ ${P.cup.g} 🅰️ ${P.cup.a}` : ""}<br/>
       ${awards.length ? awards.map((a) => `<span class="aw">${a.name}</span>`).join(" ") : "<small>이번 시즌 수상은 없어요</small>"}
       ${prize ? `<br/>💰 우승 상금 +${prize}만` : ""}<br/>⭐ 명성 +${fameGain}</div></div></div>
     <div class="ss-card two"><div><h4>👟 득점 순위</h4>${topBy(P.league, "g", 5).map((p) => plRow(p, p.s.g + "골")).join("")}</div>
@@ -1024,14 +1068,20 @@ async function worldCup() {
   const play = async (a, b, stage, mustWin) => {
     const A = natTeam(sq, a), B = natTeam(sq, b);
     const mine = (a === "kr" || b === "kr") && meIn;
-    let res, r = null;
+    let res, r = null, mm = null;
+    const krIsA = a === "kr";
     if (mine) {
-      const krIsA = a === "kr";
-      ({ res, r } = await matchFlow({ title: `🌍 월드컵 ${stage}`, sub: `${NATIONS[a].flag} ${NATIONS[a].name} vs ${NATIONS[b].flag} ${NATIONS[b].name}`, mine: krIsA ? A : B, opp: krIsA ? B : A, mySide: krIsA ? "home" : "away" }));
-    } else res = playAI(A, B);
+      ({ res, r, m: mm } = await matchFlow({ title: `🌍 월드컵 ${stage}`, sub: `${NATIONS[a].flag} ${NATIONS[a].name} vs ${NATIONS[b].flag} ${NATIONS[b].name}`, mine: krIsA ? A : B, opp: krIsA ? B : A, mySide: krIsA ? "home" : "away" }));
+    } else { res = playAI(A, B); mm = res.m; }
     for (const g of res.goals) scorer[g.sh.id] = (scorer[g.sh.id] || 0) + 1, scorer[g.sh.id + "_p"] = g.sh;
     let win = res.hg > res.ag ? a : res.ag > res.hg ? b : null, pk = "";
-    if (!win && mustWin) { win = Math.random() < .5 + (sq[a].str - sq[b].str) / 100 ? a : b; pk = " (승부차기)"; }
+    if (!win && mustWin) {
+      const hOn = onAt90(mm.H), aOn = onAt90(mm.A);
+      let so;
+      if (mine) { const s = await shootoutUI(krIsA ? hOn : aOn, krIsA ? aOn : hOn, NATIONS.kr.name, NATIONS[krIsA ? b : a].name); so = krIsA ? s : { aWin: !s.aWin, a: s.b, b: s.a }; }
+      else so = shootoutAuto(hOn, aOn);
+      win = so.aWin ? a : b; pk = ` (승부차기 ${so.a}:${so.b})`;
+    }
     if (mine) {
       S.career.caps = (S.career.caps || 0) + (r.played ? 1 : 0);
       S.career.wcG = (S.career.wcG || 0) + r.goals;
@@ -1297,7 +1347,15 @@ function openHelp() {
       <p><b>🏋️ 훈련과 컨디션</b><br/>훈련하면 능력치↑ 컨디션↓. 컨디션 50 아래면 효율이 떨어지고, 30 아래로 내려가는 훈련은 부상 위험이 있어요. 버튼에 위험도가 떠요.</p>
       <p><b>⭐ 재능</b><br/>별이 많은 능력치일수록 빨리 자라요. 유스마다 잘 크는 능력치도 달라요.</p>
       <p><b>⚔️ 라이벌</b><br/>라이벌도 매달 자라요. 대회 결승, 리그 맞대결, 득점왕, 발롱도르에서 계속 부딪혀요. 이벤트 선택으로 관계가 바뀌고 결말이 달라져요.</p>
-      <p><b>🔥 승부처</b><br/>경기 중 내 선수에게 찬스가 오면 미니게임으로 직접 해결해요. 🤖 자동을 켜면 능력치로 판정해요.</p>
+      <p><b>🔥 승부처 미니게임</b><br/>경기 중 내 선수가 끼는 찬스가 오면 직접 해결해요. 포지션마다 자주 나오는 게 달라요.</p>
+      <ul>
+        <li><b>⚽ 슈팅</b> (공격수·윙어): 키퍼가 서 있는 반대쪽 코스를 9칸 중에 고르고, 파워 게이지를 초록에서 멈춰요. 너무 세면 크로스바를 넘기고, 약하면 막혀요.</li>
+        <li><b>🏃 1:1 돌파</b> (윙어·공격수): 수비수 무게중심이 한쪽으로 쏠린 순간(빨간 화살표) 반대쪽으로 치고 나가요.</li>
+        <li><b>🎯 침투 패스</b> (미드필더): 달려드는 동료 셋 중, 오프사이드 라인을 넘기 전에 마크 없는 동료를 탭해요.</li>
+        <li><b>🛡️ 태클</b> (수비수·미드필더): 상대가 공을 길게 친 순간(초록) 태클! 너무 빨리 뻗으면 파울로 경고를 받아요.</li>
+        <li><b>🥅 페널티킥 · 승부차기</b>: 팀에서 슈팅이 가장 좋으면 내가 키커예요. 컵·결승 무승부는 승부차기로 가요.</li>
+      </ul>
+      <p>능력치가 높을수록 판정 구간이 넓어지고 게이지가 느려져요. 🤖 자동을 켜면 AI 선수들과 똑같은 확률로 계산돼요.</p>
       <p><b>🌍 축구 세계</b><br/>6개 리그(K리그1, J리그, 네덜란드, 포르투갈, 스페인, 잉글랜드) 60개 클럽의 960명이 매 라운드 실제로 경기를 치러요. 모든 경기는 같은 엔진이에요: 미드필드 싸움으로 찬스가 나고, 슈터·패서·수비수·키퍼의 실제 능력치로 결과가 정해져요. 선수들은 나이 들고, 성장하고, 이적하고, 은퇴해요.</p>
       <p><b>📅 프로</b><br/>한 시즌 ${ROUNDS}라운드(홈·원정). 같은 자리 동료보다 잘해야 선발이에요. 리그 상위권이면 다음 시즌 대륙컵(챔피언스 컵·아시아 챔피언스 컵), 4시즌마다 월드컵. 31세부터 은퇴 가능, 36세 시즌이 마지막이에요.</p>
       <p><b>🎚️ 난이도</b><br/>쉬움·보통·어려움에 따라 성장 속도, 부상, 라이벌의 독함, 이적 제안, 슈팅 미니게임 난이도가 달라져요.</p></div>`,
