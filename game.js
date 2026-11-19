@@ -514,6 +514,7 @@ async function matchFlow(o) {
       <div class="pre-info"><div>${absent ? (S.ban > 0 && S.injured <= 0 ? "⛔ 출전 정지로 못 뛰어요" : "🤕 이번 경기는 못 뛰어요") : starter ? "✅ 선발 출전" : "🪑 벤치 대기 · 교체 투입 기회를 기다려요"}</div><div>🩹 컨디션 ${Math.round(S.cond)} · 폼 ${formStr(S.form)}</div></div>
       <div class="pre-xi">${o.mine.xi.map((p) => `<span class="${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}">${ROLE_KO[p.r]} ${esc(p.n)}</span>`).join("")}</div>
       ${S.cond < 45 && !absent ? `<div class="warn">⚠️ 컨디션이 낮아 능력치가 떨어진 채로 뛰어요</div>` : ""}
+      ${absent ? "" : `<div class="mode-pick"><span>승부처</span><button data-mode="0" class="${SET.auto ? "" : "on"}">🎮 직접 하기</button><button data-mode="1" class="${SET.auto ? "on" : ""}">🤖 자동</button></div>`}
       <button class="btn btn-primary" id="b-watch">${absent ? "📺 결과 확인" : "▶️ 경기 보기"}</button>
       ${absent ? "" : `<button class="btn btn-ghost" id="b-quick">⚡ 결과만 보기</button>`}
     </div>`;
@@ -522,6 +523,7 @@ async function matchFlow(o) {
   $("pre-opp").innerHTML = teamBadge(o.opp, oppKit);
   const meB = document.createElement("div"); meB.className = "pre-face"; meB.appendChild(avatarCanvas(S.look, o.mine.kit, 30, { mood: "angry" })); $("pre-me").appendChild(meB);
   if (rvOpp) { const rB = document.createElement("div"); rB.className = "pre-face rv"; rB.appendChild(avatarCanvas(S.rival.look, oppKit, 30, { mood: "smug" })); $("pre-opp").appendChild(rB); }
+  body.querySelectorAll("[data-mode]").forEach((b) => b.onclick = () => { SET.auto = b.dataset.mode === "1"; saveSet(); Sfx.tap(); body.querySelectorAll("[data-mode]").forEach((x) => x.classList.toggle("on", x === b)); });
   const choice = o.forceQuick ? "quick" : await new Promise((res) => {
     $("b-watch").onclick = () => res(absent ? "quick" : "watch");
     const q = $("b-quick"); if (q) q.onclick = () => res("quick");
