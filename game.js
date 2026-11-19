@@ -49,10 +49,10 @@ function show(id) {
   document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("active", s.id === id));
   window.scrollTo(0, 0);
 }
-function modal({ emoji = "", title = "", html = "", buttons = [{ label: "확인", value: true, cls: "btn-primary" }], wide = false }) {
+function modal({ emoji = "", title = "", html = "", buttons = [{ label: "확인", value: true, cls: "btn-primary" }], wide = false, img = "" }) {
   return new Promise((resolve) => {
     const m = $("modal");
-    m.innerHTML = `<div class="mbox ${wide ? "wide" : ""}">${emoji ? `<div class="m-emoji">${emoji}</div>` : ""}${title ? `<h3>${title}</h3>` : ""}<div class="m-html">${html}</div>
+    m.innerHTML = `<div class="mbox ${wide ? "wide" : ""}">${img ? `<img class="m-img" src="${img}" alt="" />` : emoji ? `<div class="m-emoji">${emoji}</div>` : ""}${title ? `<h3>${title}</h3>` : ""}<div class="m-html">${html}</div>
       <div class="m-btns">${buttons.map((b, i) => `<button class="btn ${b.cls || "btn-ghost"}" data-i="${i}">${b.label}${b.hint ? `<small>${b.hint}</small>` : ""}</button>`).join("")}</div></div>`;
     m.hidden = false;
     m.querySelectorAll("[data-i]").forEach((b) => b.onclick = () => { Sfx.tap(); m.hidden = true; m.innerHTML = ""; resolve(buttons[+b.dataset.i].value); });
@@ -83,7 +83,6 @@ function initTitle() {
     $("btn-continue").innerHTML = `이어하기 <small>${esc(sv.name)} · ${sv.phase === "youth" ? `유스 ${sv.year}년차` : `${sv.pro.club} ${sv.pro.season}시즌`}</small>`;
   }
   $("ver").textContent = VERSION;
-  drawTitleArt();
   show("scr-title");
 }
 function drawTitleArt() {
@@ -388,7 +387,7 @@ async function maybeEvent() {
   if (!ev) return false;
   S.ev[ev.id] = S.turn;
   const choice = await modal({
-    emoji: ev.emoji, title: ev.title, html: `<p class="ev-text">${esc(ev.text(S)).replace(/\n/g, "<br/>")}</p>`,
+    emoji: ev.emoji, img: `assets/ev_${ev.id}.webp`, title: `${ev.emoji} ${ev.title}`, html: `<p class="ev-text">${esc(ev.text(S)).replace(/\n/g, "<br/>")}</p>`,
     buttons: ev.choices.map((c, i) => ({ label: c.label, hint: c.hint, value: i, cls: i === 0 ? "btn-primary" : "btn-ghost" })),
   });
   const out = ev.choices[choice].fx(S);
@@ -869,7 +868,8 @@ async function seasonEnd() {
   const myRow = (n) => n === P.club ? "me" : n === rvp.c ? "rv" : "";
   const plRow = (p, v) => `<div class="bl ${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}"><b>${esc(p.n)}${p.id === "rv" ? " ⚔️" : ""}</b><small>${esc(shortName(p.c))}</small><em>${v}</em></div>`;
   const awLine = (l) => { const A = AW[l.id]; return `<div class="aw-row"><b>${l.flag} ${l.name}</b> 🏆 ${esc(A.champ)} · 👟 ${A.boot ? `${esc(A.boot.n)} ${A.boot.s.g}골` : "-"} · 👑 ${A.mvp ? esc(A.mvp.n) : "-"}</div>`; };
-  $("ss-body").innerHTML = `
+  const heroAw = awards.find((a) => a.k === "ballon") || awards.find((a) => a.k === "mvp") || awards.find((a) => a.k === "title") || awards[0];
+  $("ss-body").innerHTML = `${heroAw ? `<div class="ss-hero" style="background-image:url(assets/ceremony.webp)"><b>${awards.map((a) => a.name).join(" · ")}</b></div>` : ""}
     <div class="ss-card"><h4>${lg.flag} ${lg.name} 최종 순위</h4>
       <table class="tbl"><tr><th>#</th><th>클럽</th><th>승</th><th>무</th><th>패</th><th>득실</th><th>승점</th></tr>
       ${tbl.map(([n, t], i) => `<tr class="${myRow(n)}"><td>${i + 1}</td><td>${esc(n)}${n === rvp.c ? " ⚔️" : ""}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table></div>
@@ -996,7 +996,7 @@ async function retire() {
   show("scr-end");
   const rv = S.rival;
   const cmp = S.career.g + S.career.a - (rv.career.g + rv.career.a);
-  $("end-body").innerHTML = `
+  $("end-body").innerHTML = `<div class="end-hero"><p>${esc(S.name)}, ${S.age}세. ${S.career.apps}경기의 여정을 마치고 축구화를 벗었어요.</p></div>
     <canvas id="card" width="540" height="820"></canvas>
     <div class="end-rv"><b>⚔️ 라이벌과의 결말</b><p>${rivalEnding()}</p>
       <div>통산 나 ⚽${S.career.g} 🅰️${S.career.a} 🏅${S.career.ballon} · ${esc(rv.name)} ⚽${rv.career.g} 🅰️${rv.career.a} 🏅${rv.career.ballon}</div>
@@ -1147,5 +1147,4 @@ $("btn-hof").onclick = openHof;
 $("btn-hof-back").onclick = initTitle;
 $("btn-create-home").onclick = initTitle;
 $("b-again").onclick = () => { localStorage.removeItem(SAVE_KEY); initTitle(); };
-document.fonts && document.fonts.ready.then(() => { if ($("scr-title").classList.contains("active")) drawTitleArt(); });
 initTitle();

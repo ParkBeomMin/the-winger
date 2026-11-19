@@ -7,6 +7,8 @@
 <meta name="description" content="운명의 라이벌과 함께 크는 축구선수 육성 게임. 유스에서 발롱도르까지, 승부처는 직접 해결하세요." />
 <meta property="og:title" content="더 윙어 2 : 라이벌" />
 <meta property="og:description" content="운명의 라이벌과 함께 크는 축구선수 육성 게임" />
+<meta property="og:image" content="https://parkbeommin.github.io/the-winger/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
 <meta name="theme-color" content="#0b1e14" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -36,11 +38,14 @@ button:disabled{opacity:.4;cursor:default}
 .warn{margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(255,120,80,.15);border:1px solid rgba(255,140,90,.5);color:#ffc7a8;font-size:.85rem}
 
 /* 타이틀 */
-.title-box{text-align:center;padding-top:6vh}
-#title-art{width:300px;height:150px}
-.title-box h1{font-size:3rem;color:var(--acc);text-shadow:0 4px 0 rgba(0,0,0,.4);margin-top:4px}
+.title-box{text-align:center;padding-top:2vh}
+.hero{position:relative;max-width:330px;margin:0 auto;aspect-ratio:3/4;border-radius:22px;overflow:hidden;box-shadow:0 12px 30px rgba(0,0,0,.5)}
+.hero img{width:100%;height:100%;object-fit:cover;display:block}
+.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,30,20,.15) 0,transparent 35%,transparent 70%,rgba(11,30,20,.85) 100%)}
+.hero-txt{position:absolute;top:5%;left:0;right:0;z-index:1}
+.title-box h1{font-size:3rem;color:var(--acc);text-shadow:0 4px 0 rgba(0,0,0,.55),0 0 20px rgba(0,0,0,.5);margin-top:4px}
 .title-box h1 span{color:var(--red);font-size:1.6rem;display:block;margin-top:-4px}
-.title-box .desc{color:var(--dim);line-height:1.7;margin:12px 0 22px}
+.title-box .desc{color:var(--dim);line-height:1.7;margin:12px 0 14px}
 .ver{color:var(--dim);font-size:.75rem;margin-top:18px;opacity:.7}
 
 /* 만들기 */
@@ -65,7 +70,7 @@ button:disabled{opacity:.4;cursor:default}
 /* 라이벌 등장 */
 .kicker{color:var(--dim);text-align:center;margin-top:4vh}
 .rv-h{text-align:center;color:var(--red);font-size:2rem;margin:4px 0}
-.vs-row{display:flex;align-items:center;justify-content:center;gap:10px}
+.vs-row{display:flex;align-items:center;justify-content:center;gap:10px;background:linear-gradient(rgba(11,30,20,.35),rgba(11,30,20,.85)),url(assets/stadium.webp) center/cover;border-radius:16px;padding:10px 0;margin-bottom:10px}
 .vs-row .vs{font-size:2rem;color:var(--acc2)}
 .rv-card{background:var(--card);border:1.5px solid rgba(255,122,122,.5);border-radius:16px;padding:14px;text-align:center;display:flex;flex-direction:column;gap:6px}
 .rv-card b{font-size:1.4rem}.rv-card span{color:var(--dim);font-size:.85rem}
@@ -117,7 +122,7 @@ button:disabled{opacity:.4;cursor:default}
 
 /* 경기 */
 #mt-title{color:var(--acc);font-size:1.3rem}#mt-sub{color:var(--sky);font-family:Jua;margin:2px 0 10px}
-.pre{background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:14px}
+.pre{background:linear-gradient(rgba(11,30,20,.72),rgba(11,30,20,.93)),url(assets/stadium.webp) center 30%/cover;border:1.5px solid var(--line);border-radius:16px;padding:14px}
 .pre-vs{display:flex;align-items:center;justify-content:space-between}
 .pre-mid{text-align:center;display:flex;flex-direction:column}.pre-mid b{font-size:1.8rem;color:var(--acc2)}.pre-mid small{color:var(--dim);font-size:.75rem}
 .crest{width:62px;height:62px;border-radius:50% 50% 45% 45%;border:4px solid;display:flex;align-items:center;justify-content:center;font-family:Jua;font-size:1.6rem;color:#fff;text-shadow:0 2px 3px #000;margin:4px}
@@ -219,6 +224,11 @@ button:disabled{opacity:.4;cursor:default}
 .bl small{color:var(--dim);font-size:.72rem;margin-right:6px}.aw-row{font-size:.8rem;padding:3px 0;border-bottom:1px solid var(--line)}
 details.rr{margin-top:6px;text-align:left;background:var(--bg2);border-radius:10px;padding:6px 10px;font-size:.8rem}details.rr summary{cursor:pointer;color:var(--sky)}
 .lg-seg{margin-bottom:6px}.lg-seg button{font-size:.78rem;padding:6px}.lg-body{max-height:55vh;overflow:auto}
+.m-img{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:12px;margin-bottom:10px;background:#12291c}
+.ss-hero{height:150px;border-radius:14px;background:center 40%/cover;margin-bottom:10px;display:flex;align-items:flex-end;padding:10px 12px;box-shadow:inset 0 -60px 40px -20px rgba(0,0,0,.75)}
+.ss-hero b{color:var(--acc2);font-size:1.15rem;text-shadow:0 2px 4px #000}
+.end-hero{position:relative;height:170px;border-radius:16px;background:url(assets/retire.webp) center 60%/cover;margin-bottom:10px;display:flex;align-items:flex-end;padding:12px;box-shadow:inset 0 -70px 50px -20px rgba(0,0,0,.8)}
+.end-hero p{color:#fff;font-size:.9rem;text-shadow:0 2px 4px #000;line-height:1.5}
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#000c;color:#fff;padding:10px 16px;border-radius:12px;z-index:120;font-size:.9rem}
 #toast[hidden]{display:none}
 </style>
@@ -228,8 +238,7 @@ details.rr{margin-top:6px;text-align:left;background:var(--bg2);border-radius:10
 
   <section class="screen" id="scr-title">
     <div class="title-box">
-      <canvas id="title-art"></canvas>
-      <h1>더 윙어 2<span>: 라이벌</span></h1>
+      <div class="hero"><img src="assets/title.webp" alt="등을 맞댄 두 라이벌 축구선수" /><div class="hero-txt"><h1>더 윙어 2<span>: 라이벌</span></h1></div></div>
       <p class="desc">운명의 라이벌과 함께 크는 축구 인생.<br/>유스에서 발롱도르까지, 승부처는 직접 해결하세요.</p>
       <button class="btn btn-primary" id="btn-new">새 선수 만들기</button>
       <button class="btn btn-ghost" id="btn-continue" hidden>이어하기</button>
