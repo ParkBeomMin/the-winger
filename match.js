@@ -51,6 +51,9 @@ const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
 function poisson(lam) { let L = Math.exp(-lam), k = 0, p = 1; do { k++; p *= Math.random(); } while (p > L); return k - 1; }
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
+/* 잔디색과 비슷한 유니폼은 보조색으로 칠해요 */
+function nearGrass(c) { const n = parseInt(c.slice(1), 16); return Math.hypot((n >> 16) - 42, ((n >> 8) & 255) - 127, (n & 255) - 68) < 70; }
+
 /* 4-3-3, 홈이 오른쪽으로 공격 */
 const FORMATION = [[.05, .5], [.22, .14], [.2, .38], [.2, .62], [.22, .86], [.42, .3], [.38, .5], [.42, .7], [.64, .18], [.68, .5], [.64, .82]];
 const SLOT_BY_POS = { fw: 9, wg: 10, mf: 6, df: 2 };
@@ -75,9 +78,9 @@ function playMatch(root, cfg) {
 
     root.innerHTML = `
       <div class="m-board">
-        <div class="m-team home"><i style="background:${cfg.home.kit[0]}"></i>${esc(cfg.home.name)}</div>
+        <div class="m-team home">${crestId(cfg.home.name) ? crestHTML(cfg.home.name, 20) : `<i style="background:${cfg.home.kit[0]}"></i>`}${esc(cfg.home.name)}</div>
         <div class="m-score"><b id="m-gf">0</b><span>:</span><b id="m-ga">0</b><small id="m-min">0'</small></div>
-        <div class="m-team away">${esc(cfg.away.name)}<i style="background:${cfg.away.kit[0]}"></i></div>
+        <div class="m-team away">${esc(cfg.away.name)}${crestId(cfg.away.name) ? crestHTML(cfg.away.name, 20) : `<i style="background:${cfg.away.kit[0]}"></i>`}</div>
       </div>
       <div class="m-pitch-wrap"><canvas class="m-pitch"></canvas><div class="m-overlay" hidden></div><div class="m-flash" hidden></div></div>
       <div class="m-ctrl">
@@ -151,9 +154,10 @@ function playMatch(root, cfg) {
         ctx.fillStyle = "rgba(255,230,90,.28)"; ctx.beginPath(); ctx.arc(x, y, r + 7 + Math.sin(performance.now() / 160) * 1.5, 0, Math.PI * 2); ctx.fill();
       }
       if (ring) { ctx.strokeStyle = ring; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.stroke(); }
-      ctx.fillStyle = p.i === 0 ? "#222" : kit[0];
+      const grassy = nearGrass(kit[0]);
+      ctx.fillStyle = p.i === 0 ? "#222" : grassy ? kit[1] : kit[0];
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = kit[1]; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = grassy ? kit[0] : kit[1]; ctx.lineWidth = 1.5; ctx.stroke();
       if (label) {
         ctx.font = "bold 10px Jua, sans-serif"; ctx.textAlign = "center";
         const w = ctx.measureText(label).width + 8;
@@ -387,6 +391,16 @@ function playMatch(root, cfg) {
       }
     }
 
+    async function showInc(i) {
+      const mine = vis(i.side) === "home", isMe = i.p.id === "me";
+      const t = i.kind === "yc" ? `🟨 ${nm(i.p)} 경고` : i.kind === "yc2" ? `🟨🟥 ${nm(i.p)} 경고 누적 퇴장!` : i.kind === "rc" ? `🟥 ${nm(i.p)} 레드카드, 퇴장!`
+        : `🚑 ${nm(i.p)} 부상${i.sub ? ` → ${nm(i.sub)} 교체 투입` : " (교체 카드가 없어 10명으로)"}`;
+      feed(t + (mine ? "" : ` <small>(${esc(cfg.away.name)})</small>`), isMe ? "me" : i.kind === "yc" ? "" : "bad");
+      if (i.kind !== "yc") { if (!mine) Sfx.good(); else Sfx.bad(); }
+      if (isMe && i.kind !== "yc") { onPitch = false; await flashText(i.kind === "inj" ? "부상…" : "퇴장…", "bad", 900); }
+      else if (i.kind === "rc" || i.kind === "yc2") await flashText("🟥", mine ? "bad" : "goal", 600);
+    }
+
     /* --- 진행 --- */
     (async () => {
       feed(`🏟️ ${esc(cfg.home.name)} vs ${esc(cfg.away.name)} 킥오프!`);
@@ -395,11 +409,16 @@ function playMatch(root, cfg) {
       Sfx.whistle();
       await sleepMs(400);
       paused = false;
-      for (const ev of cfg.m.evs) {
-        await waitMin(ev.min);
+      const myT = mySide === "home" ? cfg.m.H : cfg.m.A;
+      const items = [...cfg.m.evs.map((e) => ({ min: e.min, ev: e })), ...(cfg.m.inc || []).map((i) => ({ min: i.min, inc: i })),
+        ...myT.subs.filter((s) => !s.inj && s.in.id !== "me").map((s) => ({ min: s.min, sub: s }))].sort((a, b) => a.min - b.min);
+      for (const it of items) {
+        await waitMin(it.min);
         paused = true;
-        await showEv(ev);
-        if (!skipping) await sleepMs(180);
+        if (it.ev) await showEv(it.ev);
+        else if (it.sub) feed(`🔁 교체: ${nm(it.sub.in)} IN · ${nm(it.sub.out)} OUT`);
+        else await showInc(it.inc);
+        if (!skipping) await sleepMs(it.ev ? 180 : 80);
         paused = false;
       }
       await waitMin(90);

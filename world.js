@@ -85,7 +85,7 @@ function clubStr(lg, name) { return W && W.c[name] ? xiAvg(name) : (clubData(lg,
 function xiAvg(club) { const xi = bestXI(clubPlayers(club), false); return Math.round(xi.reduce((s, p) => s + pOvr(p), 0) / xi.length * 10) / 10; }
 
 /* 선발 11명 — 자리별 능력치 순(폼·로테이션 반영). 부상자는 빠지고, 빈자리는 다른 자리 선수가 메워요 */
-function available(p) { return !(p.id === "me" ? S.injured > 0 : p.id === "rv" ? S.rival.hurt > 0 : p.inj > 0); }
+function available(p) { return !(p.id === "me" ? S.injured > 0 || (S.ban || 0) > 0 : p.id === "rv" ? S.rival.hurt > 0 || (S.rival.ban || 0) > 0 : p.inj > 0 || (p.ban || 0) > 0); }
 function bestXI(players, noisy = true) {
   const pool = players.filter(available);
   const scored = pool.map((p) => {
@@ -166,20 +166,65 @@ function planSubs(xi, bench, meIn) {
   }
   return subs;
 }
-function onPitchAt(xi, subs, min) { return xi.map((p) => { const s = subs.find((x) => x.out === p && x.min <= min); return s ? s.in : p; }); }
+function onPitchAt(xi, subs, min, off = []) {
+  return xi.map((p) => { let q = p, s; while ((s = subs.find((x) => x.out === q && x.min <= min))) q = s.in; return q; })
+    .filter((p) => !off.some((o) => o.p === p && o.min <= min));
+}
+const offCount = (T, min) => (T.off || []).filter((o) => o.min <= min && !o.replaced).length;
+/* 반칙·부상: 경고(두 번이면 퇴장), 다이렉트 퇴장, 경기 중 부상(교체 카드가 남으면 교체, 없으면 10명) */
+const CARD_P = { df: .2, mf: .16, wg: .09, fw: .08, gk: .015 };
+function genIncidents(T, side) {
+  const inc = [];
+  const span = (p) => {
+    const sOut = T.subs.find((x) => x.out === p), sIn = T.subs.find((x) => x.in === p);
+    return [sIn ? sIn.min + 1 : 3, sOut ? sOut.min : 90];
+  };
+  for (const p of [...T.xi, ...T.subs.map((s) => s.in)]) {
+    const [a, b] = span(p); if (b <= a) continue;
+    if (Math.random() < CARD_P[p.r]) {
+      const m1 = randi(a, b); inc.push({ min: m1, side, p, kind: "yc" });
+      if (Math.random() < .035 && m1 < b) inc.push({ min: randi(m1 + 1, b), side, p, kind: "yc2" });
+    }
+    if (Math.random() < CARD_P[p.r] * .025) inc.push({ min: randi(Math.max(a, 15), b), side, p, kind: "rc" });
+    const injP = p.id === "me" ? .01 * DF().inj * (S.cond < 35 ? 2 : 1) : .01;
+    if (Math.random() < injP) inc.push({ min: randi(a, b), side, p, kind: "inj" });
+  }
+  return inc.sort((x, y) => x.min - y.min);
+}
 /* 경기 하나의 찬스 목록. 결과(out)는 미리 굴려두고, 내가 끼면 승부처(mom)로 표시해요 */
 function genMatch(H, A) {
   H.subs = H.subs || planSubs(H.xi, H.bench || [], H.meBench);
-  A.subs = A.subs || planSubs(A.xi, A.bench || [], false);
+  A.subs = A.subs || planSubs(A.xi, A.bench || [], A.meBench);
   const uH = units(H.xi), uA = units(A.xi);
   const posH = clamp(.5 + (uH.mid - uA.mid) / 90 + (H.adv || 0) * .01, .35, .65);
   const lam = (pos, u1, u2) => clamp(6.6 * (pos / .5) * Math.exp((u1.att - u2.def) / 30), 1.5, 14);
   const nH = poisson(lam(posH, uH, uA)), nA = poisson(lam(1 - posH, uA, uH));
+  // 반칙·부상 먼저 — 나간 선수는 그 뒤 찬스에 못 끼고, 사람이 적은 팀은 찬스가 줄어요
+  const inc = [];
+  for (const [T, side] of [[H, "home"], [A, "away"]]) {
+    T.off = [];
+    for (const i of genIncidents(T, side)) {
+      if (T.off.some((o) => o.p === i.p)) continue;
+      if (i.kind === "yc" && inc.some((x) => x.p === i.p && x.kind === "yc")) continue;
+      inc.push(i);
+      if (i.kind === "rc" || i.kind === "yc2") T.off.push({ p: i.p, min: i.min });
+      if (i.kind === "inj") {
+        const used = new Set(T.subs.map((s) => s.in));
+        const sub = T.subs.length < 3 ? (T.bench || []).find((b) => !used.has(b) && b.r === i.p.r && b.id !== "me") || (T.bench || []).find((b) => !used.has(b) && b.r !== "gk" && b.id !== "me") : null;
+        T.subs = T.subs.filter((s) => !(s.out === i.p && s.min > i.min));
+        if (sub) { T.subs.push({ min: i.min, in: sub, out: i.p, inj: true }); i.sub = sub; }
+        else T.off.push({ p: i.p, min: i.min });
+      }
+    }
+  }
+  inc.sort((a, b) => a.min - b.min);
   const evs = [];
-  const mk = (side) => {
+  const mk = (side, minFrom = 1) => {
     const T = side === "home" ? H : A, D = side === "home" ? A : H;
-    const min = randi(1, 90);
-    const on = onPitchAt(T.xi, T.subs, min), dOn = onPitchAt(D.xi, D.subs, min);
+    const min = randi(minFrom, 90);
+    if (offCount(T, min) > offCount(D, min) && Math.random() < .3 * (offCount(T, min) - offCount(D, min))) return null;
+    const on = onPitchAt(T.xi, T.subs, min, T.off), dOn = onPitchAt(D.xi, D.subs, min, D.off);
+    if (!on.length || !dOn.length) return null;
     const sh = weighted(on, (p) => G_W[p.r] * Math.pow(eff(p, "sho") / 70, 1.5));
     const as = Math.random() < .72 ? weighted(on.filter((p) => p !== sh), (p) => A_W[p.r] * Math.pow(eff(p, "pas") / 70, 1.5)) : null;
     const df = weighted(dOn.filter((p) => p.r !== "gk"), (p) => D_W[p.r] * Math.pow(eff(p, "def") / 70, 2));
@@ -195,8 +240,13 @@ function genMatch(H, A) {
   };
   for (let i = 0; i < nH; i++) evs.push(mk("home"));
   for (let i = 0; i < nA; i++) evs.push(mk("away"));
-  evs.sort((a, b) => a.min - b.min);
-  return { H, A, evs };
+  // 수적 우위: 상대가 퇴장당하면 남은 시간만큼 찬스가 더 나요
+  for (const [T, side, n] of [[H, "away", nA], [A, "home", nH]]) for (const o of T.off) {
+    const extra = poisson(.4 * n * (90 - o.min) / 90);
+    for (let i = 0; i < extra; i++) evs.push(mk(side, o.min + 1));
+  }
+  const evs2 = evs.filter(Boolean).sort((a, b) => a.min - b.min);
+  return { H, A, evs: evs2, inc };
 }
 /* 슈팅 결과 — 블록(수비 vs 드리블) → 득점 확률(xg × 슈팅 vs 키퍼) */
 function blockP(ev) { return clamp(.12 + (eff(ev.df, "def") - eff(ev.sh, "dri")) / 160, .03, .3); }
@@ -216,8 +266,9 @@ function finishMatch(m) {
   const all = new Map();
   const add = (p, side, mins, start) => { if (!all.has(p)) all.set(p, { p, side, mins, start, g: 0, a: 0, sh: 0, kp: 0, blk: 0, sv: 0, fail: 0, okm: 0 }); };
   for (const [T, side] of [[m.H, "home"], [m.A, "away"]]) {
-    T.xi.forEach((p) => { const s = T.subs.find((x) => x.out === p); add(p, side, s ? s.min : 90, true); });
-    T.subs.forEach((s) => add(s.in, side, 90 - s.min, false));
+    const offAt = (p) => { const o = (T.off || []).find((x) => x.p === p); return o ? o.min : 90; };
+    T.xi.forEach((p) => { const s = T.subs.find((x) => x.out === p); add(p, side, Math.min(s ? s.min : 90, offAt(p)), true); });
+    T.subs.forEach((s) => add(s.in, side, Math.max(1, Math.min(offAt(s.in), (T.subs.find((x) => x.out === s.in) || { min: 90 }).min) - s.min), false));
   }
   let hg = 0, ag = 0;
   const goals = [];
@@ -235,18 +286,24 @@ function finishMatch(m) {
     }
     if (ev.mom && ev.res) { const mine = all.get(W && W.p && W.p.me) || [...all.values()].find((x) => x.p.id === "me"); if (mine) ev.res.ok ? mine.okm++ : mine.fail++; }
   }
+  const cards = [];
+  for (const i of m.inc || []) {
+    const x = all.get(i.p); if (!x) continue;
+    if (i.kind === "yc") x.yc = 1; else if (i.kind === "yc2" || i.kind === "rc") x.rc = i.kind; else if (i.kind === "inj") x.inj = true;
+    cards.push(i);
+  }
   const ratings = new Map();
   for (const x of all.values()) {
     const p = x.p, gf = x.side === "home" ? hg : ag, ga = x.side === "home" ? ag : hg;
     let r = 6.3 + x.g * 1.0 + x.a * .65 + x.sh * .06 + x.kp * .12 + x.blk * .3 + x.sv * .3 + x.okm * .2 - x.fail * .2;
     r += gf > ga ? .3 : gf < ga ? -.3 : 0;
     if (p.r === "df" || p.r === "gk") r += ga === 0 ? .5 : -Math.max(0, ga - 1) * .18;
-    r += (pOvr(p) - 70) / 60 + rand(-.35, .35);
+    r += (pOvr(p) - 70) / 60 + rand(-.35, .35) - (x.yc ? .2 : 0) - (x.rc ? 1.2 : 0);
     if (x.mins < 60) r = 6.2 + (r - 6.2) * Math.max(.3, x.mins / 60);
     ratings.set(p, Math.round(clamp(r, 3.5, 10) * 10) / 10);
   }
   let mom = null; for (const [p, r] of ratings) if (!mom || r > ratings.get(mom)) mom = p;
-  return { hg, ag, goals, ratings, mom, all };
+  return { hg, ag, goals, ratings, mom, all, cards };
 }
 
 /* ---------- 세계에 기록 ---------- */
@@ -256,15 +313,21 @@ function credit(res, kind, lgId, hName, aName) {
     const x = res.all.get(p), st = kind === "league" ? p.s : p.cs;
     st.ap++; if (x.start) st.st++;
     st.g += x.g; st.a += x.a; st.rs += r; if (res.mom === p && r >= 7.3) st.mom++;
-    if (p.id !== "me" && p.id !== "rv" && Math.random() < .012) {
-      p.inj = randi(1, 4);
-      if (pOvr(p) >= 82 || (S.pro && p.c === S.pro.club)) news(`🚑 ${p.n}(${shortName(p.c || "")}) 부상, ${p.inj}경기 결장 예상`);
+    if (p.id !== "me") {
+      const tgt = p.id === "rv" ? S.rival : p;
+      if (x.yc && kind === "league") { st.yc = (st.yc || 0) + 1; if (st.yc % 5 === 0) tgt.ban = 1; }
+      if (x.rc) { tgt.ban = x.rc === "rc" ? 2 : 1; if (pOvr(p) >= 80 || p.id === "rv") news(`🟥 ${p.n}(${shortName(p.c || "")}) 퇴장, ${tgt.ban}경기 출전 정지`); }
+      if (x.inj) {
+        const n = randi(1, 5);
+        if (p.id === "rv") { S.rival.hurt = Math.max(S.rival.hurt || 0, n); news(`🚑 라이벌 ${p.n} 경기 중 부상, ${n}경기 결장`); }
+        else { p.inj = n; if (pOvr(p) >= 80 || (S.pro && p.c === S.pro.club)) news(`🚑 ${p.n}(${shortName(p.c || "")}) 부상, ${n}경기 결장 예상`); }
+      }
     }
     if (p.id !== "me") p.fm = clamp((p.fm || 0) + (r >= 7.6 ? .5 : r <= 5.8 ? -.5 : 0), -2, 2);
   }
   if (kind === "league") {
     recordGame(lgId, hName, aName, res.hg, res.ag);
-    S.lgs[lgId].res.push({ h: hName, a: aName, hg: res.hg, ag: res.ag, g: res.goals.map((g) => [g.min, g.side === "home" ? 0 : 1, g.sh.n, g.as ? g.as.n : ""]), mom: res.mom ? [res.mom.n, res.ratings.get(res.mom)] : null });
+    S.lgs[lgId].res.push({ h: hName, a: aName, hg: res.hg, ag: res.ag, g: res.goals.map((g) => [g.min, g.side === "home" ? 0 : 1, g.sh.n, g.as ? g.as.n : ""]), mom: res.mom ? [res.mom.n, res.ratings.get(res.mom)] : null, rc: (res.cards || []).filter((c) => c.kind !== "yc").map((c) => [c.min, c.p.n, c.kind]) });
     if (S.lgs[lgId].res.length > 10) S.lgs[lgId].res.splice(0, S.lgs[lgId].res.length - 10);
     for (const x of res.all.values()) if (x.g >= 3) news(`⚽⚽⚽ ${x.p.n}(${shortName(x.p.c || "")}) 해트트릭! ${LEAGUES[lgId].flag} ${hName} ${res.hg}:${res.ag} ${aName}`);
     if (Math.abs(res.hg - res.ag) >= 4) news(`💥 ${LEAGUES[lgId].flag} ${hName} ${res.hg}:${res.ag} ${aName}`);
@@ -315,7 +378,8 @@ function simRoundRest(round, skip) {
     const leader = sortedTable(lg.id)[0][0];
     if (round >= 5 && leader !== leaderBefore) news(`📈 ${lg.flag} ${leader}, ${lg.name} 선두 등극`);
   }
-  for (const id in W.p) { const p = W.p[id]; if (p.inj > 0) p.inj--; }
+  for (const id in W.p) { const p = W.p[id]; if (p.inj > 0) p.inj--; if (p.ban > 0) p.ban--; }
+  if (S.rival.ban > 0) S.rival.ban--;
 }
 
 /* ---------- 대륙컵 ---------- */

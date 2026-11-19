@@ -122,3 +122,19 @@ function avatarCanvas(look, kit, px = 64, opt = {}) {
   drawAvatar(ctx, px / 2, px * 0.06, px * 0.94, look, kit, opt);
   return c;
 }
+
+/* ---------- 구단 엠블럼 ----------
+ * Muse로 만든 엠블럼(assets/crests/crest_리그_번호.webp)이 있으면 그걸, 없으면 유니폼 색 방패를 그려요 */
+function crestId(club) {
+  for (const l of LEAGUES) { const i = l.clubs.findIndex((c) => c[0] === club); if (i >= 0) return `crest_${l.id}_${i}`; }
+  return null;
+}
+function crestKit(club) { for (const l of LEAGUES) { const c = l.clubs.find((x) => x[0] === club); if (c) return [c[2], c[3]]; } return null; }
+function crestHTML(club, size = 22, cls = "") {
+  const id = crestId(club);
+  if (!id) return "";
+  if (typeof CREST_READY !== "undefined" && CREST_READY.has(id)) return `<img class="crest-img ${cls}" src="assets/crests/${id}.webp" width="${size}" height="${size}" alt="" loading="lazy" />`;
+  const [a, b] = crestKit(club);
+  const ch = club.replace(/^(FC|SC)\s*/, "").slice(0, 1);
+  return `<svg class="crest-img ${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 2.5h18v8.5c0 6.5-4.6 10.2-9 12-4.4-1.8-9-5.5-9-12z" fill="${a}" stroke="${b}" stroke-width="1.6"/><path d="M3 9.5h18v2.6H3z" fill="${b}" opacity=".55"/><text x="12" y="16.2" text-anchor="middle" font-size="9" font-family="Jua,sans-serif" fill="${b === a ? "#fff" : b}" stroke="rgba(0,0,0,.35)" stroke-width=".4">${ch}</text></svg>`;
+}

@@ -1,7 +1,7 @@
 /* 더 윙어 2 : 라이벌 - 데이터 */
 "use strict";
 
-const VERSION = "v0.4 베타";
+const VERSION = "v0.5 베타";
 
 const STATS = [
   { key: "sho", name: "슛", emoji: "⚽", desc: "결정력·마무리" },
@@ -136,3 +136,6 @@ function josa(w, pair) {
   const [a, b] = pair.split("/");
   return w + (has ? a : b);
 }
+
+/* Muse 엠블럼이 준비된 구단 (assets/crests/) */
+const CREST_READY = new Set(["crest_0_0","crest_0_1","crest_0_2","crest_0_3","crest_0_4","crest_0_5","crest_0_6","crest_0_7","crest_0_8","crest_0_9","crest_1_0","crest_1_1","crest_1_2","crest_1_3","crest_1_4","crest_1_5","crest_1_6","crest_1_7","crest_1_8","crest_1_9","crest_2_0","crest_2_1","crest_2_2","crest_2_3","crest_2_4","crest_2_5","crest_2_6","crest_2_7","crest_2_8","crest_2_9","crest_3_0","crest_3_1","crest_3_2","crest_3_3","crest_3_4","crest_3_5","crest_3_6","crest_3_7","crest_3_8","crest_3_9","crest_4_0","crest_4_1","crest_4_2","crest_4_3","crest_4_4","crest_4_5","crest_4_6","crest_4_7","crest_4_8","crest_4_9","crest_5_0","crest_5_1","crest_5_2","crest_5_3","crest_5_4","crest_5_5","crest_5_6","crest_5_7","crest_5_8","crest_5_9"]);

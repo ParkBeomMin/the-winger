@@ -281,7 +281,7 @@ function renderMain() {
   hud.innerHTML = `
     <div class="hud-av" id="hud-av"></div>
     <div class="hud-id"><b>${esc(S.name)} <small>${POS[S.pos].short} · ${S.age}세</small></b>
-      <span>${pro ? `${LEAGUES[S.pro.league].flag} ${esc(S.pro.club)}` : `${ORIGINS[S.origin].flag} ${ORIGINS[S.origin].team}`} · 종합 <em>${OVR()}</em></span></div>
+      <span>${pro ? `${crestHTML(S.pro.club, 15)} ${esc(S.pro.club)}` : `${ORIGINS[S.origin].flag} ${ORIGINS[S.origin].team}`} · 종합 <em>${OVR()}</em></span></div>
     <div class="hud-r"><b>${pro ? `${S.pro.season}시즌` : `${S.year}년차 ${S.month}월`}</b><span>💰 ${fmtMoney(S.money)}</span></div>`;
   $("hud-av").appendChild(avatarCanvas(S.look, myKit(), 48));
   const ns = nextScheduleText();
@@ -504,7 +504,7 @@ async function matchFlow(o) {
       <div class="pre-vs"><div id="pre-me"></div><div class="pre-mid"><b>VS</b><span>${esc(o.opp.name)}</span><small>상대 ${Math.round(tStr(o.opp))} · 우리 ${Math.round(tStr(o.mine))}</small></div><div id="pre-opp"></div></div>
       ${rvOpp ? `<div class="pre-rv">⚔️ 라이벌 <b>${esc(S.rival.name)}</b> ${o.opp.xi.some((p) => p.id === "rv") ? "선발" : "벤치"}! 상대 전적 ${S.h2h.w}승 ${S.h2h.d}무 ${S.h2h.l}패</div>` : rvMate ? `<div class="pre-rv">🤝 라이벌 <b>${esc(S.rival.name)}</b>과 같은 편</div>` : ""}
       ${race && !absent ? `<div class="pre-race">${ROLE_KO[S.pos]} ${race.slots}자리 경쟁 · ${race.rivals.slice(0, 3).map((p) => `${esc(p.n)} ${Math.round(pOvr(p))}`).join(" · ")}</div>` : ""}
-      <div class="pre-info">${absent ? "🤕 이번 경기는 못 뛰어요" : starter ? "✅ 선발 출전" : "🪑 벤치 대기 (교체 투입 기회를 기다려요)"} · 컨디션 ${Math.round(S.cond)} · 폼 ${formStr(S.form)}</div>
+      <div class="pre-info">${absent ? (S.ban > 0 && S.injured <= 0 ? "⛔ 출전 정지로 못 뛰어요" : "🤕 이번 경기는 못 뛰어요") : starter ? "✅ 선발 출전" : "🪑 벤치 대기 (교체 투입 기회를 기다려요)"} · 컨디션 ${Math.round(S.cond)} · 폼 ${formStr(S.form)}</div>
       <div class="pre-xi">${o.mine.xi.map((p) => `<span class="${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}">${ROLE_KO[p.r]} ${esc(p.n)}</span>`).join("")}</div>
       ${S.cond < 45 && !absent ? `<div class="warn">⚠️ 컨디션이 낮아 능력치가 떨어진 채로 뛰어요</div>` : ""}
       <button class="btn btn-primary" id="b-watch">${absent ? "📺 결과 확인" : "▶️ 경기 보기"}</button>
@@ -512,7 +512,7 @@ async function matchFlow(o) {
     </div>`;
   $("pre-me").appendChild(avatarCanvas(S.look, o.mine.kit, 70, { mood: "angry" }));
   if (rvOpp) $("pre-opp").appendChild(avatarCanvas(S.rival.look, oppKit, 70, { mood: "smug" }));
-  else $("pre-opp").innerHTML = `<div class="crest" style="background:${oppKit[0]};border-color:${oppKit[1]}">${esc(o.opp.name.slice(0, 1))}</div>`;
+  else $("pre-opp").innerHTML = crestId(o.opp.name) ? `<div class="crest-big">${crestHTML(o.opp.name, 66)}</div>` : `<div class="crest" style="background:${oppKit[0]};border-color:${oppKit[1]}">${esc(o.opp.name.slice(0, 1))}</div>`;
   const choice = o.forceQuick ? "quick" : await new Promise((res) => {
     $("b-watch").onclick = () => res(absent ? "quick" : "watch");
     const q = $("b-quick"); if (q) q.onclick = () => res("quick");
@@ -533,7 +533,16 @@ async function matchFlow(o) {
     });
   } else resolveAuto(m);
   const res = finishMatch(m);
-  return { res, m, r: summarize(res, m, o.mySide, rvOpp) };
+  const r = summarize(res, m, o.mySide, rvOpp);
+  // 내 경고·퇴장·부상 — 프로에서는 징계가 다음 경기로 이어져요
+  for (const i of res.cards.filter((x) => x.p.id === "me")) {
+    if (i.kind === "inj") { const n = randi(1, 3); S.injured = Math.max(S.injured, n); r.cards.push(`🚑 경기 중 부상, ${n}경기 결장`); addLog(`🚑 경기 중 부상으로 ${n}경기 결장`); }
+    else if (S.phase === "pro") {
+      if (i.kind === "yc") { S.ycount = (S.ycount || 0) + 1; r.cards.push(`🟨 경고 (시즌 누적 ${S.ycount}장)`); if (S.ycount % 5 === 0) { S.ban = Math.max(S.ban || 0, 1); r.cards.push("⛔ 경고 5장 누적, 다음 경기 출전 정지"); } }
+      else { S.ban = i.kind === "rc" ? 2 : 1; r.cards.push(`🟥 퇴장! 다음 ${S.ban}경기 출전 정지`); addLog(`🟥 퇴장, ${S.ban}경기 출전 정지`); }
+    } else r.cards.push(i.kind === "yc" ? "🟨 경고" : "🟥 퇴장");
+  }
+  return { res, m, r };
 }
 function summarize(res, m, mySide, rvOpp) {
   const meX = [...res.all.values()].find((x) => x.p.id === "me");
@@ -544,7 +553,7 @@ function summarize(res, m, mySide, rvOpp) {
     goals: meX ? meX.g : 0, assists: meX ? meX.a : 0, saves: meX ? meX.blk : 0,
     moments: m.evs.filter((e) => e.mom && e.res).map((e) => ({ type: e.mom, ok: e.res.ok })),
     rivalGoal: rvOpp && res.goals.some((g) => g.sh.id === "rv"), rvX: [...res.all.values()].find((x) => x.p.id === "rv"),
-    goalsList: res.goals,
+    goalsList: res.goals, cards: [],
   };
 }
 async function showResult(r, lines, btnLabel = "계속") {
@@ -572,6 +581,7 @@ function applyMatch(r, opts = {}) {
     lines.push(`⚔️ 라이벌 상대 전적 ${S.h2h.w}승 ${S.h2h.d}무 ${S.h2h.l}패${r.rvX ? ` · ${esc(S.rival.name)} 평점 ${opts.rvRating ?? "-"}` : ""}`);
     if (r.rivalGoal) lines.push(`😤 ${esc(S.rival.name)}에게 골을 허용했어요`);
   }
+  lines.push(...(r.cards || []));
   if (!r.played) return lines;
   const prestige = opts.prestige || 1;
   const f = Math.round(((r.rating - 6.3) * 3 + r.goals * 2 + r.assists * 1.5 + (r.mom ? 3 : 0)) * ORIGINS[S.origin].fame * (S.phase === "youth" ? .6 : .6 + prestige * .2) * (opts.big || 1));
@@ -745,7 +755,7 @@ function offerScreen({ title, hint, offers, stay }) {
       const others = clubPlayers(o.club).filter((x) => x.id !== "me" && x.r === S.pos).sort((a, b) => pOvr(b) - pOvr(a));
       const prevRank = S.lgs && S.lgs[o.league] && S.lgs[o.league].table[o.club].p ? rankOf(o.club) + "위" : "-";
       const cup = Object.entries(S.cups || {}).find(([, c]) => c.teams.includes(o.club));
-      return `<button class="offer" data-i="${i}"><div class="crest" style="background:${o.kit[0]};border-color:${o.kit[1]}">${esc(o.club.slice(0, 1))}</div>
+      return `<button class="offer" data-i="${i}"><div class="crest-big">${crestHTML(o.club, 54)}</div>
         <div class="of-mid"><b>${esc(o.club)}</b><span>${LEAGUES[o.league].flag} ${LEAGUES[o.league].name} · 전력 ${Math.round(o.str)} · 순위 ${prevRank}</span>
         <span>선발 가능성 <em class="${p >= 60 ? "up" : p < 35 ? "dn" : ""}">${p}%</em> · 라운드 수당 ${salaryOf(o.league)}만</span>
         <span class="race">${ROLE_KO[S.pos]} ${SLOTS[S.pos]}자리 경쟁: ${others.slice(0, 3).map((x) => `${esc(x.n)}${x.id === "rv" ? "⚔️" : ""} ${Math.round(pOvr(x))}`).join(" · ")}</span>
@@ -769,6 +779,7 @@ function initSeason(first) {
   const prev = first ? null : Object.fromEntries(LEAGUES.map((l) => [l.id, sortedTable(l.id).map((x) => x[0])]));
   initLeagues();
   initCups(prev);
+  S.ycount = 0;
   Object.assign(S.pro, { round: 0, lastBench: false, s: { apps: 0, starts: 0, g: 0, a: 0, ratings: [], mom: 0 }, cup: { ap: 0, g: 0, a: 0 } });
   setSchedule();
   S.cond = Math.max(S.cond, 80);
@@ -789,6 +800,7 @@ function recordMine(r, kind, lgPay) {
 async function proRound(quick = false) {
   const P = S.pro, lg = LEAGUES[P.league], round = P.round;
   const opp = P.schedule[round], isHome = P.home[round];
+  const wasBanned = (S.ban || 0) > 0;
   const mine = teamFor(P.club, { home: isHome }), oppT = teamFor(opp, { home: !isHome });
   S.flags.forceStart = false;
   const starter = mine.xi.some((p) => p.id === "me");
@@ -805,7 +817,8 @@ async function proRound(quick = false) {
   const lines = applyMatch(r, { rival: rvOpp, rvRating: rvR, prestige: lg.prestige });
   const pay = recordMine(r, "league", lg.pay);
   if (pay != null) lines.push(`💰 수당 +${pay}만${r.mom ? " (⭐ MOM 보너스 포함)" : ""}`);
-  if (S.injured > 0) { S.injured--; if (!r.played) lines.push("🤕 부상으로 결장했어요"); }
+  if (wasBanned) { S.ban--; lines.push("⛔ 출전 정지로 결장했어요"); }
+  else if (S.injured > 0 && !r.cards.some((c) => c.startsWith("🚑"))) { S.injured--; if (!r.played) lines.push("🤕 부상으로 결장했어요"); }
   P.lastBench = !starter && S.injured === 0;
   const rvp = W.p.rv;
   if (!rvOpp && rvp.c) {
@@ -956,7 +969,7 @@ async function seasonEnd() {
   $("ss-body").innerHTML = `${heroAw ? `<div class="ss-hero" style="background-image:url(assets/ceremony.webp)"><b>${awards.map((a) => a.name).join(" · ")}</b></div>` : ""}
     <div class="ss-card"><h4>${lg.flag} ${lg.name} 최종 순위</h4>
       <table class="tbl"><tr><th>#</th><th>클럽</th><th>승</th><th>무</th><th>패</th><th>득실</th><th>승점</th></tr>
-      ${tbl.map(([n, t], i) => `<tr class="${myRow(n)}"><td>${i + 1}</td><td>${esc(n)}${n === rvp.c ? " ⚔️" : ""}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table></div>
+      ${tbl.map(([n, t], i) => `<tr class="${myRow(n)}"><td>${i + 1}</td><td>${crestHTML(n, 14)} ${esc(n)}${n === rvp.c ? " ⚔️" : ""}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table></div>
     <div class="ss-card"><h4>내 시즌</h4>
       <div class="ss-me"><div id="ss-av"></div><div>리그 ${P.s.apps}경기(선발 ${P.s.starts}) · ⚽ ${P.s.g} · 🅰️ ${P.s.a} · 평균 평점 <b>${myAvg ? myAvg.toFixed(2) : "-"}</b> · MOM ${P.s.mom}${P.cup.ap ? `<br/>대륙컵 ${P.cup.ap}경기 ⚽ ${P.cup.g} 🅰️ ${P.cup.a}` : ""}<br/>
       ${awards.length ? awards.map((a) => `<span class="aw">${a.name}</span>`).join(" ") : "<small>이번 시즌 수상은 없어요</small>"}
@@ -1106,10 +1119,10 @@ function openLeague(lgId = S.pro.league, tab = "table") {
   const pl = (p) => `<a class="pl" data-pid="${p.id}">${esc(p.n)}</a>`;
   if (tab === "table") {
     body = `<table class="tbl"><tr><th>#</th><th>클럽</th><th>경기</th><th>승</th><th>무</th><th>패</th><th>득실</th><th>승점</th></tr>${sortedTable(lgId).map(([n, t], i) =>
-      `<tr class="${n === S.pro.club ? "me" : n === W.p.rv.c ? "rv" : ""}"><td>${i + 1}</td><td>${esc(n)}</td><td>${t.p}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table>`;
+      `<tr class="${n === S.pro.club ? "me" : n === W.p.rv.c ? "rv" : ""}"><td>${i + 1}</td><td><a class="pl" data-club="${esc(n)}">${crestHTML(n, 14)} ${esc(n)}</a></td><td>${t.p}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table>`;
   } else if (tab === "res") {
     const rs = S.lgs[lgId].res.slice(-5);
-    body = rs.length ? rs.map((x) => `<div class="rep"><div><b>${esc(x.h)}</b> <em>${x.hg}:${x.ag}</em> <b>${esc(x.a)}</b></div><small>${x.g.map((g) => `${g[0]}' ${esc(g[2])}${g[3] ? ` (${esc(g[3])})` : ""}`).join(" · ") || "득점 없음"}${x.mom ? ` · ⭐ ${esc(x.mom[0])} ${x.mom[1]}` : ""}</small></div>`).join("") : "<p>아직 경기가 없어요.</p>";
+    body = rs.length ? rs.map((x) => `<div class="rep"><div>${crestHTML(x.h, 16)} <b>${esc(x.h)}</b> <em>${x.hg}:${x.ag}</em> <b>${esc(x.a)}</b> ${crestHTML(x.a, 16)}</div><small>${x.g.map((g) => `${g[0]}' ${esc(g[2])}${g[3] ? ` (${esc(g[3])})` : ""}`).join(" · ") || "득점 없음"}${x.mom ? ` · ⭐ ${esc(x.mom[0])} ${x.mom[1]}` : ""}${(x.rc || []).map((c) => ` · ${c[2] === "inj" ? "🚑" : "🟥"} ${esc(c[1])} ${c[0]}'`).join("")}</small></div>`).join("") : "<p>아직 경기가 없어요.</p>";
   } else if (tab === "cup") {
     body = Object.entries(S.cups).map(([k, c]) => `<div class="ss-card"><h4>${CUPS[k].emoji} ${CUPS[k].name}</h4><div class="small">출전: ${c.teams.map(esc).join(", ")}</div>${c.log.map((l) => `<div class="small">${esc(l)}</div>`).join("") || `<div class="small">${CUPS[k].at[0]}라운드 뒤에 시작해요</div>`}${c.winner ? `<div>🏆 <b>${esc(c.winner)}</b></div>` : c.alive.length > 1 ? `<div class="small">생존: ${c.alive.map(esc).join(", ")}</div>` : ""}</div>`).join("");
   } else {
@@ -1122,6 +1135,7 @@ function openLeague(lgId = S.pro.league, tab = "table") {
     document.querySelectorAll("#modal [data-lg]").forEach((b) => b.onclick = () => { $("modal").hidden = true; openLeague(+b.dataset.lg, tab); });
     document.querySelectorAll("#modal [data-tab]").forEach((b) => b.onclick = () => { $("modal").hidden = true; openLeague(lgId, b.dataset.tab); });
     bindPlayerLinks($("modal"));
+    document.querySelectorAll("#modal [data-club]").forEach((a) => a.onclick = () => { $("modal").hidden = true; openSquad(a.dataset.club); });
   }, 0);
   return p;
 }
@@ -1131,7 +1145,7 @@ function openSquad(club = S.pro.club) {
   const xi = bestXI(ps, false);
   const race = club === S.pro.club ? spotRace(club) : null;
   modal({
-    title: `👥 ${esc(club)}`, wide: true,
+    title: `${crestHTML(club, 30)} ${esc(club)}`, wide: true,
     html: `${race ? `<p class="small">${ROLE_KO[S.pos]} ${race.slots}자리 · 선발 가능성 <b>${Math.round(race.p * 100)}%</b>${race.kth ? ` · 넘어야 할 상대 <b>${esc(race.kth.n)} ${Math.round(pOvr(race.kth))}</b>` : ""}</p>` : `<p class="small">${LEAGUES[W.c[club].l].flag} ${LEAGUES[W.c[club].l].name} ${rankOf(club)}위</p>`}
       <table class="tbl"><tr><th>자리</th><th>선수</th><th>나이</th><th>능력</th><th>경기</th><th>⚽</th><th>🅰️</th><th>평점</th></tr>${ps.map((p) =>
         `<tr class="${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}"><td>${ROLE_KO[p.r]}${xi.includes(p) ? "" : " <small>후보</small>"}</td><td>${NATIONS[p.nat].flag}<a class="pl" data-pid="${p.id}">${esc(p.n)}</a>${p.inj > 0 ? " 🚑" : ""}</td><td>${ageOf(p)}</td><td><b>${Math.round(pOvr(p))}</b></td><td>${p.s.ap}</td><td>${p.s.g}</td><td>${p.s.a}</td><td>${p.s.ap ? pAvg(p).toFixed(1) : "-"}</td></tr>`).join("")}</table>`,
@@ -1147,7 +1161,7 @@ function openPlayer(id) {
   $("modal").hidden = true;
   modal({
     title: `${NATIONS[p.nat].flag} ${esc(p.n)}${id === "rv" ? " ⚔️" : ""}`, wide: true,
-    html: `<p class="small">${ROLE_KO[p.r]} · ${ageOf(p)}세 · ${NATIONS[p.nat].name} · ${p.c ? `<a class="pl" data-club="${esc(p.c)}">${esc(p.c)}</a>` : "무소속"} · 종합 <b>${Math.round(pOvr(p))}</b> · 시장가치 <b>${fmtMV(marketValue(p))}</b>${p.inj > 0 ? ` · 🚑 부상 ${p.inj}경기` : ""}</p>
+    html: `<p class="small">${ROLE_KO[p.r]} · ${ageOf(p)}세 · ${NATIONS[p.nat].name} · ${p.c ? `<a class="pl" data-club="${esc(p.c)}">${crestHTML(p.c, 14)} ${esc(p.c)}</a>` : "무소속"} · 종합 <b>${Math.round(pOvr(p))}</b> · 시장가치 <b>${fmtMV(marketValue(p))}</b>${p.inj > 0 ? ` · 🚑 부상 ${p.inj}경기` : ""}</p>
       <div class="roll">${STATS.map((s) => `<div><span>${s.emoji} ${s.name}</span><b>${Math.round(st[s.key])}</b></div>`).join("")}</div>
       <table class="tbl"><tr><th>시즌</th><th>클럽</th><th>경기</th><th>⚽</th><th>🅰️</th><th>평점</th></tr>${hist.slice().reverse().map((h) => `<tr><td>${h.y}${h.now ? "*" : ""}</td><td>${esc(shortName(h.c))}</td><td>${h.ap}</td><td>${h.g}</td><td>${h.a}</td><td>${h.r ? h.r.toFixed(2) : "-"}</td></tr>`).join("")}</table>
       <p class="small">통산 ⚽ ${hist.reduce((s, h) => s + h.g, 0)} · 🅰️ ${hist.reduce((s, h) => s + h.a, 0)} (기록 보관 이후)</p>`,
