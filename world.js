@@ -75,7 +75,12 @@ function sOf(p) { return p.id === "me" ? S.stats : p.id === "rv" ? S.rival.stats
 function pOvr(p) { return p.id === "me" ? OVR() : p.id === "rv" ? ROVR() : p.o; }
 function ageOf(p) { return p.id === "me" ? S.age : p.id === "rv" ? S.rival.age : p.a; }
 const pAvg = (p) => p.s && p.s.ap ? p.s.rs / p.s.ap : 0;
-function blankS() { return { ap: 0, st: 0, g: 0, a: 0, rs: 0, mom: 0 }; }
+function blankS() { return { ap: 0, st: 0, g: 0, a: 0, rs: 0, mom: 0, pa: 0, pc: 0, sh: 0, sot: 0, xg: 0, kp: 0, da: 0, dc: 0, ta: 0, tc: 0, sv: 0 }; }
+const PASS_W = { gk: .45, df: 1.15, mf: 1.45, wg: .85, fw: .6 };
+const PASS_ACC = { gk: -.1, df: .07, mf: .05, wg: -.03, fw: -.07 };
+const DRIB_W = { fw: 2.2, wg: 3.2, mf: 1.3, df: .4, gk: 0 };
+const TACK_W = { df: 2.6, mf: 2.2, wg: .9, fw: .5, gk: 0 };
+const passPct = (s) => s && s.pa ? Math.round(s.pc / s.pa * 100) : 0;
 
 function natName(nat, used) {
   const one = () => nat === "kr" ? pick(KR_SUR) + pick([...KR_GIVEN, ...KR_GIVEN2]) : pick(NAME_POOL[nat][0]) + " " + pick(NAME_POOL[nat][1]);
@@ -142,6 +147,7 @@ function bestXI(players, noisy = true, form = "4-3-3") {
     let v = pOvr(p) + (p.id === "me" ? S.form * 1.2 : (p.fm || 0) * 1.2);
     if (noisy) v += rand(-2.5, 2.5) - (Math.random() < .05 ? 12 : 0);
     if (p.id === "me" && noisy && S.flags && S.flags.forceStart) v += 100;
+    if (p.id === "me" && S.pro && S.trust != null && players.every((x) => x.id === "me" || x.c === S.pro.club)) v += (S.trust - 50) / 8;   // 감독 신뢰 ±6
     return [p, v];
   });
   const roles = (FORMS[form] || FORMS["4-3-3"]).roles;
@@ -265,7 +271,7 @@ function genIncidents(T, side) {
       if (Math.random() < .035 && m1 < b) inc.push({ min: randi(m1 + 1, b), side, p, kind: "yc2" });
     }
     if (Math.random() < CARD_P[p.r] * .025) inc.push({ min: randi(Math.max(a, 15), b), side, p, kind: "rc" });
-    const injP = p.id === "me" ? .01 * DF().inj * (S.cond < 35 ? 2 : 1) : .01;
+    const injP = p.id === "me" ? .01 * DF().inj * (S.cond < 35 ? 2 : 1) * (1 - ((S.gear && S.gear.shin) || 0) * .2) : .01;
     if (Math.random() < injP) inc.push({ min: randi(a, b), side, p, kind: "inj" });
   }
   return inc.sort((x, y) => x.min - y.min);
@@ -337,7 +343,7 @@ function genMatch(H, A) {
     for (let i = 0; i < extra; i++) evs.push(mk(side, o.min + 1));
   }
   const evs2 = evs.filter(Boolean).sort((a, b) => a.min - b.min);
-  return { H, A, evs: evs2, inc };
+  return { H, A, evs: evs2, inc, posH, uH, uA };
 }
 /* 슈팅 결과 — 블록(수비 vs 드리블) → 득점 확률(xg × 슈팅 vs 키퍼) */
 function blockP(ev) { return clamp(.12 + (eff(ev.df, "def") - eff(ev.sh, "dri")) / 160, .03, .3); }
@@ -348,6 +354,11 @@ function rollShot(ev, bonus = 0, noBlock = false) {
 }
 /* 내 승부처를 자동으로 풀 때 — AI와 같은 확률 */
 function autoMoment(ev) {
+  const an = typeof S !== "undefined" && S && S.gear ? (S.gear.analyst || 0) * .04 : 0;
+  if (an && ev.mom !== "pk" && Math.random() < an) { const r = autoMoment0(ev); if (!r.ok) return autoMoment0(ev); return r; }   // 전력 분석관: 한 번 더 기회
+  return autoMoment0(ev);
+}
+function autoMoment0(ev) {
   if (ev.mom === "pk") { const out = rollShot(ev, 0, true); return { ok: out === "goal", out }; }
   if (ev.mom === "tackle") return Math.random() < blockP(ev) * 1.3 ? { ok: true, out: "block" } : { ok: false, out: rollShot(ev, 0, true) };
   if (ev.mom === "pass" || ev.mom === "dribble") return Math.random() < 1 - blockP(ev) ? { ok: true, out: rollShot(ev, 0, true) } : { ok: false, out: "block" };
@@ -356,7 +367,7 @@ function autoMoment(ev) {
 /* 경기 마무리: 평점·MOM */
 function finishMatch(m) {
   const all = new Map();
-  const add = (p, side, mins, start) => { if (!all.has(p)) all.set(p, { p, side, mins, start, g: 0, a: 0, sh: 0, kp: 0, blk: 0, sv: 0, fail: 0, okm: 0 }); };
+  const add = (p, side, mins, start) => { if (!all.has(p)) all.set(p, { p, side, mins, start, g: 0, a: 0, sh: 0, sot: 0, xg: 0, kp: 0, blk: 0, sv: 0, fail: 0, okm: 0, pa: 0, pc: 0, da: 0, dc: 0, ta: 0, tc: 0 }); };
   for (const [T, side] of [[m.H, "home"], [m.A, "away"]]) {
     const offAt = (p) => { const o = (T.off || []).find((x) => x.p === p); return o ? o.min : 90; };
     T.xi.forEach((p) => { const s = T.subs.find((x) => x.out === p); add(p, side, Math.min(s ? s.min : 90, offAt(p)), true); });
@@ -366,7 +377,9 @@ function finishMatch(m) {
   const goals = [];
   for (const ev of m.evs) {
     const sh = all.get(ev.sh), as = ev.as && all.get(ev.as), df = all.get(ev.df), gk = all.get(ev.gk);
-    if (sh) sh.sh++;
+    if (sh) { sh.sh++; sh.xg += ev.xg; if (ev.out === "goal" || ev.out === "save") sh.sot++; }
+    if (ev.mom === "dribble" && sh && ev.res) { sh.da++; if (ev.res.ok) sh.dc++; }
+    if (ev.mom === "tackle" && df && ev.res) { df.ta++; if (ev.res.ok) df.tc++; }
     if (ev.out === "goal") {
       ev.side === "home" ? hg++ : ag++;
       if (sh) sh.g++; if (as) as.a++;
@@ -384,10 +397,31 @@ function finishMatch(m) {
     if (i.kind === "yc") x.yc = 1; else if (i.kind === "yc2" || i.kind === "rc") x.rc = i.kind; else if (i.kind === "inj") x.inj = true;
     cards.push(i);
   }
+  // 패스·드리블·태클 — 점유율과 선수 능력치로 같은 기준을 모든 선수에게
+  const posH = m.posH ?? .5, team = {};
+  for (const [T, side, pos, oppU] of [[m.H, "home", posH, m.uA], [m.A, "away", 1 - posH, m.uH]]) {
+    const xs = [...all.values()].filter((x) => x.side === side);
+    const total = Math.round(pos * rand(820, 960) * (xs.length >= 11 ? 1 : .9));
+    const wsum = xs.reduce((s, x) => s + PASS_W[x.p.r] * (x.mins / 90) * (.7 + eff(x.p, "pas") / 200), 0) || 1;
+    const press = oppU ? oppU.mid : 65, oppDef = oppU ? oppU.def : 65, oppAtt = oppU ? oppU.att : 65;
+    for (const x of xs) {
+      const k = x.mins / 90, r = x.p.r;
+      x.pa = Math.round(total * PASS_W[r] * k * (.7 + eff(x.p, "pas") / 200) / wsum);
+      const acc = clamp(.76 + (eff(x.p, "pas") - press) / 220 + PASS_ACC[r] + (pos - .5) * .15 + rand(-.04, .04), .45, .96);
+      x.pc = Math.round(x.pa * acc);
+      const da = poisson(k * DRIB_W[r] * eff(x.p, "dri") / 70);
+      x.da += da; x.dc += Math.round(da * clamp(.45 + (eff(x.p, "dri") - oppDef) / 120, .2, .85));
+      const ta = poisson(k * TACK_W[r] * eff(x.p, "def") / 70) + x.blk;
+      x.ta += ta; x.tc += Math.min(ta, x.blk + Math.round((ta - x.blk) * clamp(.55 + (eff(x.p, "def") - oppAtt) / 120, .3, .9)));
+    }
+    team[side] = { pos: Math.round(pos * 100), sh: xs.reduce((s, x) => s + x.sh, 0), sot: xs.reduce((s, x) => s + x.sot, 0), xg: Math.round(xs.reduce((s, x) => s + x.xg, 0) * 10) / 10,
+      pa: xs.reduce((s, x) => s + x.pa, 0), pc: xs.reduce((s, x) => s + x.pc, 0), ta: xs.reduce((s, x) => s + x.ta, 0) };
+  }
   const ratings = new Map();
   for (const x of all.values()) {
     const p = x.p, gf = x.side === "home" ? hg : ag, ga = x.side === "home" ? ag : hg;
-    let r = 6.3 + x.g * 1.0 + x.a * .65 + x.sh * .06 + x.kp * .12 + x.blk * .3 + x.sv * .3 + x.okm * .2 - x.fail * .2;
+    let r = 6.24 + x.g * 1.0 + x.a * .65 + x.sh * .05 + x.kp * .12 + x.blk * .2 + x.sv * .3 + x.okm * .2 - x.fail * .2
+      + x.dc * .07 + (x.tc - x.blk) * .1 + (x.pa >= 15 ? (x.pc / x.pa - .79 - PASS_ACC[p.r]) * 1.2 : 0);
     r += gf > ga ? .3 : gf < ga ? -.3 : 0;
     if (p.r === "df" || p.r === "gk") r += ga === 0 ? .5 : -Math.max(0, ga - 1) * .18;
     r += (pOvr(p) - 70) / 60 + rand(-.35, .35) - (x.yc ? .2 : 0) - (x.rc ? 1.2 : 0);
@@ -395,7 +429,7 @@ function finishMatch(m) {
     ratings.set(p, Math.round(clamp(r, 3.5, 10) * 10) / 10);
   }
   let mom = null; for (const [p, r] of ratings) if (!mom || r > ratings.get(mom)) mom = p;
-  return { hg, ag, goals, ratings, mom, all, cards };
+  return { hg, ag, goals, ratings, mom, all, cards, team };
 }
 
 /* ---------- 세계에 기록 ---------- */
@@ -405,13 +439,15 @@ function credit(res, kind, lgId, hName, aName) {
     const x = res.all.get(p), st = kind === "league" ? p.s : p.cs;
     st.ap++; if (x.start) st.st++;
     st.g += x.g; st.a += x.a; st.rs += r; if (res.mom === p && r >= 7.3) st.mom++;
+    st.pa = (st.pa || 0) + x.pa; st.pc = (st.pc || 0) + x.pc; st.sh = (st.sh || 0) + x.sh; st.sot = (st.sot || 0) + x.sot; st.xg = (st.xg || 0) + Math.round(x.xg * 100);
+    st.kp = (st.kp || 0) + x.kp + x.a; st.da = (st.da || 0) + x.da; st.dc = (st.dc || 0) + x.dc; st.ta = (st.ta || 0) + x.ta; st.tc = (st.tc || 0) + x.tc; st.sv = (st.sv || 0) + x.sv;
     if (p.id !== "me") {
       const tgt = p.id === "rv" ? S.rival : p;
       if (x.yc && kind === "league") { st.yc = (st.yc || 0) + 1; if (st.yc % 5 === 0) tgt.ban = 1; }
       if (x.rc) { tgt.ban = x.rc === "rc" ? 2 : 1; if (pOvr(p) >= 80 || p.id === "rv") news(`🟥 ${p.n}(${shortName(p.c || "")}) 퇴장, ${tgt.ban}경기 출전 정지`); }
       if (x.inj) {
         const n = randi(1, 5);
-        if (p.id === "rv") { S.rival.hurt = Math.max(S.rival.hurt || 0, n); news(`🚑 라이벌 ${p.n} 경기 중 부상, ${n}경기 결장`); }
+        if (p.id === "rv") { S.rival.hurt = Math.max(S.rival.hurt || 0, n); news(`🚑 라이벌 ${p.n} 경기 중 부상, ${n}경기 결장`); if (typeof pushSig === "function") pushSig("rivalhurt", { n }); }
         else { p.inj = n; if (pOvr(p) >= 80 || (S.pro && p.c === S.pro.club)) news(`🚑 ${p.n}(${shortName(p.c || "")}) 부상, ${n}경기 결장 예상`); }
       }
     }
@@ -419,8 +455,9 @@ function credit(res, kind, lgId, hName, aName) {
   }
   if (kind === "league") {
     recordGame(lgId, hName, aName, res.hg, res.ag);
-    S.lgs[lgId].res.push({ h: hName, a: aName, hg: res.hg, ag: res.ag, g: res.goals.map((g) => [g.min, g.side === "home" ? 0 : 1, g.sh.n, g.as ? g.as.n : ""]), mom: res.mom ? [res.mom.n, res.ratings.get(res.mom)] : null, rc: (res.cards || []).filter((c) => c.kind !== "yc").map((c) => [c.min, c.p.n, c.kind]) });
+    S.lgs[lgId].res.push({ h: hName, a: aName, hg: res.hg, ag: res.ag, g: res.goals.map((g) => [g.min, g.side === "home" ? 0 : 1, g.sh.n, g.as ? g.as.n : ""]), mom: res.mom ? [res.mom.n, res.ratings.get(res.mom)] : null, rc: (res.cards || []).filter((c) => c.kind !== "yc").map((c) => [c.min, c.p.n, c.kind]), ts: res.team ? [res.team.home.pos, res.team.home.sh, res.team.home.sot, res.team.home.xg, res.team.away.sh, res.team.away.sot, res.team.away.xg, passPct(res.team.home), passPct(res.team.away)] : null });
     if (S.lgs[lgId].res.length > 10) S.lgs[lgId].res.splice(0, S.lgs[lgId].res.length - 10);
+    for (const x of res.all.values()) if (x.g >= 3 && x.p.id === "rv" && typeof pushSig === "function") pushSig("rivalhattrick", { club: x.p.c });
     for (const x of res.all.values()) if (x.g >= 3) news(`⚽⚽⚽ ${x.p.n}(${shortName(x.p.c || "")}) 해트트릭! ${LEAGUES[lgId].flag} ${hName} ${res.hg}:${res.ag} ${aName}`);
     if (Math.abs(res.hg - res.ag) >= 4) news(`💥 ${LEAGUES[lgId].flag} ${hName} ${res.hg}:${res.ag} ${aName}`);
   }
@@ -524,7 +561,9 @@ function cupAdvance(key, winners) {
 function leaguePlayers(lgId) { return Object.values(W.p).filter((p) => p.l === lgId && p.c); }
 function topBy(lgId, key, n = 10) {
   const ps = leaguePlayers(lgId).filter((p) => p.s.ap > 0);
-  if (key === "rt") return ps.filter((p) => p.s.ap >= Math.max(3, Math.floor((S.pro.round || ROUNDS) * .55))).sort((a, b) => pAvg(b) - pAvg(a)).slice(0, n);
+  const minAp = Math.max(3, Math.floor((S.pro.round || ROUNDS) * .55));
+  if (key === "rt") return ps.filter((p) => p.s.ap >= minAp).sort((a, b) => pAvg(b) - pAvg(a)).slice(0, n);
+  if (key === "pp") return ps.filter((p) => p.s.ap >= minAp && (p.s.pa || 0) >= p.s.ap * 20).sort((a, b) => passPct(b.s) - passPct(a.s) || b.s.pa - a.s.pa).slice(0, n);
   return ps.sort((a, b) => b.s[key] - a.s[key] || (key === "g" ? b.s.a - a.s.a : b.s.g - a.s.g) || pAvg(b) - pAvg(a)).slice(0, n);
 }
 function marketValue(p) {
@@ -546,7 +585,7 @@ function news(m) {
 function archiveSeason(season) {
   for (const p of Object.values(W.p)) {
     if (!p.c || (!p.s.ap && !p.cs.ap)) continue;
-    p.h.push({ y: season, c: p.c, l: p.l, ap: p.s.ap + p.cs.ap, g: p.s.g + p.cs.g, a: p.s.a + p.cs.a, r: Math.round(pAvg(p) * 100) / 100, o: Math.round(pOvr(p)) });
+    p.h.push({ y: season, c: p.c, l: p.l, ap: p.s.ap + p.cs.ap, g: p.s.g + p.cs.g, a: p.s.a + p.cs.a, r: Math.round(pAvg(p) * 100) / 100, o: Math.round(pOvr(p)), pp: passPct(p.s), kp: p.s.kp || 0, tc: p.s.tc || 0, dc: p.s.dc || 0 });
     if (p.h.length > 16) p.h.shift();
   }
 }

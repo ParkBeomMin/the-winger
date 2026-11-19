@@ -1,0 +1,214 @@
+/* 더 윙어 2 - 선수 생활: 명성 등급 · 상점(장비·전담팀·소모품·기부) · 감독 신뢰 · 계약 */
+"use strict";
+
+/* ---------- ⭐ 명성 등급 ---------- */
+const FAME_GRADES = [
+  [0, "🌱 무명"], [30, "🌿 유망주"], [100, "⭐ 주목받는 신예"], [250, "🌟 리그 스타"],
+  [500, "🏅 국가대표급"], [900, "💫 월드스타"], [1600, "👑 레전드급"], [2800, "🐐 축구 아이콘"],
+];
+function fameGrade(f) {
+  let i = 0; for (let k = 0; k < FAME_GRADES.length; k++) if (f >= FAME_GRADES[k][0]) i = k;
+  const next = FAME_GRADES[i + 1];
+  return { i, name: FAME_GRADES[i][1], next: next ? next[1] : null, need: next ? Math.ceil(next[0] - f) : 0, pct: next ? (f - FAME_GRADES[i][0]) / (next[0] - FAME_GRADES[i][0]) : 1 };
+}
+
+/* ---------- 🛍️ 상점 ----------
+ * gear: 한 번 사면 영구 / staff: 고용(시즌마다 유지비) / item: 바로 쓰는 소모품 / give: 기부·라이프스타일(명성) */
+const SHOP2 = [
+  { id: "boots", cat: "gear", emoji: "👟", name: "맞춤 축구화", desc: "슈팅·드리블 +2", price: [150, 500, 1500, 5000, 15000] },
+  { id: "insole", cat: "gear", emoji: "🦶", name: "스피드 깔창", desc: "스피드 +2", price: [200, 800, 3000, 10000] },
+  { id: "shin", cat: "gear", emoji: "🛡️", name: "카본 정강이 보호대", desc: "부상 위험 -20%", price: [300, 1200, 5000] },
+  { id: "gps", cat: "gear", emoji: "📡", name: "GPS 트래킹 조끼", desc: "훈련 효율 +6%", price: [400, 1500, 6000] },
+  { id: "trainer", cat: "staff", emoji: "🧑‍🏫", name: "개인 트레이너팀", desc: "훈련 효율 +10%", price: [300, 1000, 3000] },
+  { id: "recovery", cat: "staff", emoji: "🧊", name: "재활·회복 센터", desc: "휴식 +8 · 훈련 피로 -2", price: [200, 700, 2000] },
+  { id: "nutrition", cat: "staff", emoji: "🥗", name: "전담 영양사", desc: "매 턴 컨디션 +2", price: [250, 900, 3000] },
+  { id: "mental", cat: "staff", emoji: "🧘", name: "멘탈 코치", desc: "못한 경기에도 폼 유지 25%", price: [400, 1500, 5000] },
+  { id: "analyst", cat: "staff", emoji: "📊", name: "전력 분석관", desc: "자동 승부처 성공 +4%p", price: [600, 2500, 8000] },
+  { id: "agent", cat: "staff", emoji: "💼", name: "에이전트", desc: "이적 제안 +1 · 연봉 협상 +8%", price: [300, 2000, 10000] },
+  { id: "massage", cat: "item", emoji: "💆", name: "스포츠 마사지", desc: "컨디션 +30", cost: () => Math.max(30, payRef() * 1.5) },
+  { id: "camp", cat: "item", emoji: "🏕️", name: "특별 개인 캠프", desc: "다음 훈련 2배", cost: () => Math.max(80, payRef() * 4) },
+  { id: "cryo", cat: "item", emoji: "❄️", name: "크라이오 치료", desc: "부상 1턴 빨리 회복", cost: () => Math.max(100, payRef() * 6) },
+  { id: "clinic", cat: "give", emoji: "⚽", name: "유소년 축구 교실 후원", desc: "명성 +30 (시즌 1회)", price: [1000], repeat: true },
+  { id: "car", cat: "give", emoji: "🏎️", name: "슈퍼카", desc: "명성 +15", price: [20000] },
+  { id: "house", cat: "give", emoji: "🏠", name: "바닷가 저택", desc: "명성 +25", price: [30000] },
+  { id: "foundation", cat: "give", emoji: "🤝", name: "자선 재단 설립", desc: "명성 +150 · 커리어 점수 +20", price: [10000] },
+  { id: "stadium", cat: "give", emoji: "🏟️", name: "고향 축구장 기증", desc: "명성 +400 · 커리어 점수 +40", price: [50000] },
+];
+const SHOP_CAT = [["gear", "🎽 장비"], ["staff", "👥 전담팀"], ["item", "🧴 소모품"], ["give", "💝 기부·생활"]];
+const G = (id) => (S && S.gear && S.gear[id]) || 0;
+function payRef() { return S.contract && S.phase === "pro" ? S.contract.sal : 20; }
+function staffFee() { return SHOP2.filter((x) => x.cat === "staff").reduce((s, x) => s + (G(x.id) ? Math.round(x.price[G(x.id) - 1] * .25) : 0), 0); }
+/* 시즌이 시작될 때 전담팀 유지비를 내요. 돈이 모자라면 비싼 쪽부터 계약이 끝나요 */
+function payStaff() {
+  let fee = staffFee();
+  if (!fee) return null;
+  const lapsed = [];
+  while (fee > S.money) {
+    const it = SHOP2.filter((x) => x.cat === "staff" && G(x.id)).sort((a, b) => b.price[G(b.id) - 1] - a.price[G(a.id) - 1])[0];
+    if (!it) break;
+    S.gear[it.id]--; lapsed.push(it.name); fee = staffFee();
+  }
+  S.money -= fee;
+  return { fee, lapsed };
+}
+function shopBuy(it) {
+  const lv = G(it.id);
+  if (it.cat === "item") {
+    const c = Math.round(it.cost());
+    if (S.money < c) return toast("돈이 모자라요");
+    if (it.id === "cryo" && !(S.injured > 0)) return toast("지금은 다친 곳이 없어요");
+    S.money -= c;
+    if (it.id === "massage") S.cond = clamp(S.cond + 30, 0, 100);
+    if (it.id === "camp") S.buff = Math.max(S.buff || 1, 2);
+    if (it.id === "cryo") S.injured = Math.max(0, S.injured - 1);
+    addLog(`🛍️ ${it.name} (${fmtMoney(c)})`); Sfx.good(); return save();
+  }
+  const once = it.cat === "give" && !it.repeat;
+  if (once && lv) return;
+  if (it.repeat && S.flags["give_" + it.id] === (S.pro ? S.pro.season : S.year)) return toast("이번 시즌은 이미 후원했어요");
+  const price = it.price[it.repeat ? 0 : lv];
+  if (price == null || S.money < price) return toast("돈이 모자라요");
+  S.money -= price;
+  if (!it.repeat) S.gear[it.id] = lv + 1;
+  if (it.id === "boots") { S.stats.sho = clamp(S.stats.sho + 2, 1, 99); S.stats.dri = clamp(S.stats.dri + 2, 1, 99); }
+  if (it.id === "insole") S.stats.spd = clamp(S.stats.spd + 2, 1, 99);
+  const fameAdd = { clinic: 30, car: 15, house: 25, foundation: 150, stadium: 400 }[it.id];
+  if (fameAdd) { S.fame += fameAdd; if (it.id === "foundation" || it.id === "stadium") S.career.awardScore = (S.career.awardScore || 0) + (it.id === "stadium" ? 40 : 20); news(`💝 ${S.name}, ${it.name}${it.id === "clinic" ? "" : "!"}`); }
+  if (it.repeat) S.flags["give_" + it.id] = S.pro ? S.pro.season : S.year;
+  addLog(`🛍️ ${it.name}${it.cat === "gear" || it.cat === "staff" ? ` Lv.${S.gear[it.id]}` : ""} (${fmtMoney(price)})`);
+  Sfx.good(); save();
+}
+async function openShop(cat = "gear") {
+  const row = (it) => {
+    const lv = G(it.id);
+    if (it.cat === "item") return `<div class="shop-row"><span>${it.emoji}</span><div><b>${it.name}</b><small>${it.desc}</small></div><button class="btn btn-primary sm" data-buy="${it.id}" ${S.money < it.cost() ? "disabled" : ""}>${fmtMoney(Math.round(it.cost()))}</button></div>`;
+    const max = it.cat === "give" ? (it.repeat ? 99 : 1) : it.price.length;
+    const done = !it.repeat && lv >= max;
+    const price = it.price[it.repeat ? 0 : lv];
+    const fee = it.cat === "staff" && lv ? ` · 유지비 ${fmtMoney(Math.round(it.price[lv - 1] * .25))}/시즌` : "";
+    const given = it.repeat && S.flags["give_" + it.id] === (S.pro ? S.pro.season : S.year);
+    return `<div class="shop-row"><span>${it.emoji}</span><div><b>${it.name}${it.cat === "gear" || it.cat === "staff" ? ` Lv.${lv}/${max}` : lv ? " ✓" : ""}</b><small>${it.desc}${fee}</small></div>${done ? "<em>보유</em>" : given ? "<em>후원함</em>" : `<button class="btn btn-primary sm" data-buy="${it.id}" ${S.money < price ? "disabled" : ""}>${fmtMoney(price)}</button>`}</div>`;
+  };
+  const html = () => `<p class="small">💰 보유 <b>${fmtMoney(S.money)}</b>${staffFee() ? ` · 전담팀 유지비 ${fmtMoney(staffFee())}/시즌` : ""}</p>
+    <div class="seg wrap lg-seg">${SHOP_CAT.map(([k, n]) => `<button class="${k === cat ? "on" : ""}" data-cat="${k}">${n}</button>`).join("")}</div>
+    ${cat === "staff" ? `<p class="small">전담팀은 시즌이 시작될 때마다 유지비가 나가요. 돈이 모자라면 계약이 끝나요.</p>` : ""}
+    ${SHOP2.filter((x) => x.cat === cat).map(row).join("")}`;
+  const p = modal({ title: "🛍️ 상점", wide: true, html: `<div id="shop-in">${html()}</div>`, buttons: [{ label: "닫기", value: 1, cls: "btn-ghost" }] });
+  const bind = () => {
+    document.querySelectorAll("#shop-in [data-cat]").forEach((b) => b.onclick = () => { cat = b.dataset.cat; $("shop-in").innerHTML = html(); bind(); });
+    document.querySelectorAll("#shop-in [data-buy]").forEach((b) => b.onclick = () => { shopBuy(SHOP2.find((x) => x.id === b.dataset.buy)); $("shop-in").innerHTML = html(); bind(); });
+  };
+  bind();
+  await p; renderMain();
+}
+
+/* ---------- 👔 감독 신뢰 ----------
+ * 0~100. 선발 경쟁에 ±6 정도로 실려요. 감독이 바뀌거나 이적하면 다시 쌓아야 해요. */
+function syncTrust() {
+  if (!S.pro || !W) return false;
+  const co = coachOf(S.pro.club);
+  if (S.trustCoach !== co.n) {
+    const changed = !!S.trustCoach && S.trustClub === S.pro.club;
+    S.trustCoach = co.n; S.trustClub = S.pro.club; S.trust = changed ? 45 : 50;
+    return changed;
+  }
+  return false;
+}
+function addTrust(v, why) {
+  if (S.trust == null) S.trust = 50;
+  const before = S.trust;
+  S.trust = clamp(Math.round(S.trust + v), 0, 100);
+  return S.trust !== before ? `👔 감독 신뢰 ${v > 0 ? "+" : ""}${S.trust - before}${why ? ` (${why})` : ""}` : null;
+}
+function trustLabel(t = S.trust ?? 50) { return t >= 80 ? "💚 절대 신임" : t >= 60 ? "🙂 신뢰" : t >= 40 ? "😐 보통" : t >= 20 ? "😟 의심" : "🧊 냉대"; }
+
+/* ---------- ✍️ 계약 ----------
+ * 기간(년) · 라운드 수당 · 바이아웃. 계약 중 이적은 구단 동의가 필요해요. */
+function baseSalary(lg, str) {
+  return Math.round(LEAGUES[lg].pay * Math.pow(OVR() / 65, 2) * (1 + (str - 70) / 80) * (1 + G("agent") * .08));
+}
+function defaultYears() { return S.age <= 23 ? 4 : S.age <= 28 ? 3 : 2; }
+function releaseOf(sal) { return Math.max(1, Math.round(Math.max(marketValue(W.p.me) * 1.6, sal * 36 / 10000))); }   // 억 단위 (시장가치의 1.6배, 최소 두 시즌 연봉)
+/* 협상: 그대로 / 조금 더 / 크게. 실패하면 처음 제안으로 */
+async function negotiate(o, title) {
+  const base = baseSalary(o.league, o.str), yrs = defaultYears();
+  const pAsk = clamp(.72 + G("agent") * .08 + (S.fame >= 250 ? .08 : 0) + (S.flags.renewWill && S.pro && o.club === S.pro.club ? .1 : 0), .3, .95), pBig = clamp(.38 + G("agent") * .1 + (S.fame >= 500 ? .1 : 0), .15, .85);
+  const v = await modal({
+    emoji: "✍️", title: title || `${esc(o.club)} 계약 협상`, wide: true,
+    html: `<p>구단 제안: <b>${yrs}년</b> · 라운드 수당 <b>${fmtMoney(base)}</b><br/><small>바이아웃 ${fmtMV(releaseOf(base))} · 골·도움마다 수당의 15% 보너스</small></p>
+      <p class="small">에이전트 Lv.${G("agent")} · 명성 ${fameGrade(S.fame).name}</p>`,
+    buttons: [
+      { label: `🤝 그대로 서명 (${fmtMoney(base)})`, value: 1, cls: "btn-primary" },
+      { label: `📈 조금 더 (+15%)`, hint: `성공 확률 ${Math.round(pAsk * 100)}%`, value: 2 },
+      { label: `💰 크게 부르기 (+35%)`, hint: `성공 확률 ${Math.round(pBig * 100)}% · 실패하면 감독 신뢰 -5`, value: 3 },
+    ],
+  });
+  let sal = base, msg = "제안대로 서명했어요";
+  if (v === 2) { if (Math.random() < pAsk) { sal = Math.round(base * 1.15); msg = "협상 성공! 수당 +15%"; } else msg = "구단이 거절해서 처음 제안으로 서명했어요"; }
+  if (v === 3) { if (Math.random() < pBig) { sal = Math.round(base * 1.35); msg = "대박 협상! 수당 +35%"; } else { msg = "구단이 불쾌해했어요. 처음 제안으로 서명"; S.trustPenalty = 5; } }
+  S.contract = { club: o.club, years: yrs, sal, rel: releaseOf(sal), since: S.pro ? S.pro.season || 1 : 1 };
+  addLog(`✍️ ${o.club} ${yrs}년 계약 · 라운드 수당 ${fmtMoney(sal)} · ${msg}`);
+  toast(`✍️ ${msg}`, 2800);
+  return S.contract;
+}
+/* 계약 중 다른 구단 제안을 받아들이면 지금 구단이 동의해야 해요 */
+function releaseChance(o) {
+  const c = S.contract;
+  if (!c || c.club !== S.pro.club || c.years <= 0) return 1;
+  const up = LEAGUES[o.league].tier - LEAGUES[S.pro.league].tier;
+  let p = .35 + up * .22 + (c.years <= 1 ? .35 : 0) + ((S.trust ?? 50) < 35 ? .15 : 0) + (S.pro.lastBench ? .1 : 0);
+  return clamp(p, .12, .95);
+}
+function contractLine() {
+  const c = S.contract;
+  if (!c || !S.pro || c.club !== S.pro.club) return "";
+  return `✍️ 계약 ${c.years}년 남음 · 라운드 수당 ${fmtMoney(c.sal)} · 바이아웃 ${fmtMV(c.rel)}`;
+}
+
+/* ---------- 🇰🇷 A매치: 실제 국가대표 명단(세계 선수 풀에서 뽑은 베스트)으로 소집 · 실제 경기 ---------- */
+function callUp() {
+  if (!W || S.injured > 0) return;
+  const sq = nationSquads(11), kr = sq.kr;
+  if (!kr) return;
+  const inXI = kr.xi.some((p) => p.id === "me"), inBench = kr.bench.some((p) => p.id === "me");
+  const opps = Object.keys(sq).filter((n) => n !== "kr");
+  news(`🇰🇷 A매치 명단 발표 · 주장 ${[...kr.xi].sort((a, b) => pOvr(b) - pOvr(a))[0].n}${inXI || inBench ? ` · ${S.name} 발탁` : ""}`);
+  if (inXI || inBench) pushSig("national", { xi: inXI, opp: pick(opps) });
+}
+function aMatch(S, d) {
+  const sq = nationSquads(11);
+  if (!d || !sq.kr || !sq[d.opp]) return "A매치가 취소됐어요";
+  const A = natTeam(sq, "kr"), B = natTeam(sq, d.opp), m = genMatch(A, B);
+  resolveAuto(m);
+  const res = finishMatch(m), x = [...res.all.values()].find((v) => v.p.id === "me");
+  const out = [`🇰🇷 대한민국 ${res.hg}:${res.ag} ${NATIONS[d.opp].flag} ${NATIONS[d.opp].name}`];
+  if (x) {
+    S.career.caps = (S.career.caps || 0) + 1; S.career.ig = (S.career.ig || 0) + x.g;
+    out.push(`${x.mins}분 출전 · 평점 ${res.ratings.get(x.p)}${x.g ? ` · ⚽${x.g}` : ""}${x.a ? ` · 🅰️${x.a}` : ""} · A매치 ${S.career.caps}경기`);
+    out.push(addFame(S, 8 + x.g * 6 + (res.mom === x.p ? 6 : 0)));
+    if (x.g) news(`🇰🇷 ${S.name}, A매치 ${NATIONS[d.opp].name}전 골!`);
+  } else out.push("벤치에서 지켜봤어요 · " + addFame(S, 3));
+  out.push(addCond(S, -12));
+  return out.join(" · ");
+}
+/* 신호 이벤트 하나 꺼내기 (오래된 건 버려요) */
+function takeSig() {
+  if (!S.sig || !S.sig.length) return null;
+  S.sig = S.sig.filter((x) => S.turn - x.t <= 4 && SIG_EVENTS[x.k]);
+  while (S.sig.length) {
+    const s = S.sig.shift();
+    if (S.ev["sig_" + s.k] != null && S.turn - S.ev["sig_" + s.k] < 3) continue;
+    return s;
+  }
+  return null;
+}
+const EV_IMG = new Set(["ad", "agent", "bench", "boots", "coachpos", "fan", "interview", "knee", "mentor", "mom", "national", "night", "no10", "party", "rivalhurt", "scout", "taunt", "together", "youtube"]);
+const SIG_IMG = { benched3: "bench", awful: "bench", hattrick: "mom", superb: "interview", newclub: "together", rivalhattrick: "taunt", matchinjury: "knee", contractlast: "agent", transferblocked: "agent", winning4: "party", losing3: "night", newcoach: "coachpos", wcdropped: "night" };
+function evImg(id) { const k = SIG_IMG[id] || id; return EV_IMG.has(k) ? `assets/ev_${k}.webp` : null; }
+/* 명성 등급이 오르면 알려줘요 */
+function checkFameUp() {
+  const g = fameGrade(S.fame).i;
+  if (S.fameI == null) { S.fameI = g; return; }
+  if (g > S.fameI) { S.fameI = g; const n = FAME_GRADES[g][1]; addLog(`⭐ 명성 등급 상승: ${n}`); toast(`⭐ 명성 등급 UP! ${n}`, 3000); if (g >= 3) news(`⭐ ${S.name}, 이제 '${n.replace(/^\S+\s/, "")}'`); }
+  else if (g < S.fameI) S.fameI = g;
+}

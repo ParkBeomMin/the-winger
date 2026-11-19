@@ -1,7 +1,7 @@
 /* 더 윙어 2 : 라이벌 - 데이터 */
 "use strict";
 
-const VERSION = "v0.9.1 베타";
+const VERSION = "v1.0 베타";
 
 const STATS = [
   { key: "sho", name: "슛", emoji: "⚽", desc: "결정력·마무리" },
@@ -117,11 +117,6 @@ const HAIR_COLORS = ["#1b1b1b", "#4a2e1a", "#8a5a2b", "#d9b25a", "#c0392b", "#e8
 const HAIR_STYLES = ["짧은 머리", "투블럭", "곱슬", "장발", "모히칸", "삭발"];
 
 /* 상점 */
-const SHOP = [
-  { id: "boots", name: "맞춤 축구화", emoji: "👟", desc: "슛·드리블 +2", price: [150, 500, 1500] },
-  { id: "trainer", name: "개인 트레이너", emoji: "🧑‍🏫", desc: "훈련 효율 +10%", price: [300, 1000, 3000] },
-  { id: "recovery", name: "회복 센터", emoji: "🧊", desc: "휴식 +8 · 훈련 피로 -2", price: [200, 700, 2000] },
-];
 
 const CAREER_GRADES = [
   [0, "🌱 짧지만 빛났던 커리어"], [260, "🧢 꾸준했던 주전"], [460, "💪 리그를 대표한 선수"],
