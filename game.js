@@ -329,7 +329,8 @@ function renderMain() {
     const v = S.stats[s.key], w = POS[S.pos].w[s.key];
     const need = mastNeed(s.key), mp = need ? Math.round(((S.mast && S.mast[s.key]) || 0) / need * 100) : 100;
     return `<div class="st ${w >= .2 ? "key" : ""}" title="숙련 ${need ? `${(S.mast && S.mast[s.key]) || 0}/${need} (다음: ${S.talent[s.key] < 5 ? "★" + (S.talent[s.key] + 1) : TRANS_NAME[trOf(s.key) + 1]})` : "초월 III 완성"} · 최대치 ${statCap(s.key)}"><span>${s.emoji} ${s.name}</span><div class="bar"><i style="width:${Math.min(100, v)}%"></i><u style="width:${mp}%"></u></div><b class="${v > 99 ? "over" : ""}">${Math.round(v)}</b><em class="${S.talent[s.key] === 5 ? "t5" : ""}">${talentStr(s.key)}</em></div>`;
-  }).join("");
+  }).join("") + `<p class="st-legend"><i></i>보라 선은 숙련도예요. 가득 차면 재능 ★이 하나 올라요 · 줄을 누르면 자세히</p>`;
+  $("stats").querySelectorAll(".st").forEach((el, i) => el.onclick = () => openMast(STATS[i].key));
 
   // 행동
   const risk = injuryRisk(), inj = S.injured > 0;
@@ -1532,6 +1533,17 @@ function openCareer() {
       ${S.phase === "pro" ? `<p class="small">현재 커리어 점수 ${careerScore()} · ${gradeOf(careerScore())}</p>` : ""}`,
     buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }],
   });
+}
+/* 능력치 줄을 누르면: 숙련도와 재능 설명 */
+function openMast(k) {
+  const s = STATS.find((x) => x.key === k), have = (S.mast && S.mast[k]) || 0, need = mastNeed(k), star = S.talent[k], tr = trOf(k);
+  const next = !need ? "모두 완성" : star < 5 ? `재능 ★${star + 1}` : TRANS_NAME[tr + 1];
+  modal({ emoji: s.emoji, title: `${s.name} 숙련도`,
+    html: `<ul class="tip-list"><li>지금 재능 <b>${talentStr(k)}</b>, 능력치 <b>${Math.round(S.stats[k])}</b> / 최대 <b>${statCap(k)}</b></li>
+      <li>숙련도 <b>${need ? `${have} / ${need}` : "완성"}</b>${need ? ` · 다 차면 <b>${next}</b>` : ""}</li>
+      <li>이 능력치를 훈련할수록 숙련도가 쌓여요. MOM, 해외 연수, 재능 개발 프로그램으로도 올라요.</li>
+      <li>재능 ★이 높을수록 훈련으로 오르는 폭이 커져요. ★5 다음은 초월(Ⅰ~Ⅲ)이고, 단계마다 최대치가 2씩 올라 105까지 가요.</li></ul>`,
+    buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }] });
 }
 function shortName(n) { return n.length > 7 ? n.slice(0, 7) + "…" : n; }
 function migrateLife() {
