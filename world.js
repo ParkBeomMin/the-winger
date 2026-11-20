@@ -520,12 +520,12 @@ function credit(res, kind, lgId, hName, aName) {
     st.kp = (st.kp || 0) + x.kp + x.a; st.da = (st.da || 0) + x.da; st.dc = (st.dc || 0) + x.dc; st.ta = (st.ta || 0) + x.ta; st.tc = (st.tc || 0) + x.tc; st.sv = (st.sv || 0) + x.sv;
     if (p.id !== "me") {
       const tgt = p.id === "rv" ? S.rival : p;
-      if (x.yc && kind === "league") { st.yc = (st.yc || 0) + 1; if (st.yc % 5 === 0) tgt.ban = 1; }
-      if (x.rc) { tgt.ban = x.rc === "rc" ? 2 : 1; if (pOvr(p) >= 80 || p.id === "rv") news(`🟥 ${p.n}(${shortName(p.c || "")}) 퇴장, ${tgt.ban}경기 출전 정지`); }
+      if (x.yc && kind === "league") { st.yc = (st.yc || 0) + 1; if (st.yc % 5 === 0) { tgt.ban = 1; tgt.nw = 1; } }
+      if (x.rc) { tgt.ban = x.rc === "rc" ? 2 : 1; tgt.nw = 1; if (pOvr(p) >= 80 || p.id === "rv") news(`🟥 ${p.n}(${shortName(p.c || "")}) 퇴장, ${tgt.ban}경기 출전 정지`); }
       if (x.inj) {
         const n = randi(1, 5);
-        if (p.id === "rv") { S.rival.hurt = Math.max(S.rival.hurt || 0, n); news(`🚑 라이벌 ${p.n} 경기 중 부상, ${n}경기 결장`); if (typeof pushSig === "function") pushSig("rivalhurt", { n }); }
-        else { p.inj = n; if (pOvr(p) >= 80 || (S.pro && p.c === S.pro.club)) news(`🚑 ${p.n}(${shortName(p.c || "")}) 부상, ${n}경기 결장 예상`); }
+        if (p.id === "rv") { S.rival.hurt = Math.max(S.rival.hurt || 0, n); S.rival.nw = 1; news(`🚑 라이벌 ${p.n} 경기 중 부상, ${n}경기 결장`); if (typeof pushSig === "function") pushSig("rivalhurt", { n }); }
+        else { p.inj = n; p.nw = 1; if (pOvr(p) >= 80 || (S.pro && p.c === S.pro.club)) news(`🚑 ${p.n}(${shortName(p.c || "")}) 부상, ${n}경기 결장 예상`); }
       }
     }
     if (p.id !== "me") p.fm = clamp((p.fm || 0) + (r >= 7.6 ? .5 : r <= 5.8 ? -.5 : 0), -2, 2);
@@ -584,8 +584,14 @@ function simRoundRest(round, skip) {
     const leader = sortedTable(lg.id)[0][0];
     if (round >= 5 && leader !== leaderBefore && (lg.div === 1 || (S.pro && lg.id === S.pro.league))) news(`📈 ${lg.flag} ${leader}, ${lg.name} 선두 등극`);
   }
-  for (const id in W.p) { const p = W.p[id]; if (p.inj > 0) p.inj--; if (p.ban > 0) p.ban--; }
-  if (S.rival.ban > 0) S.rival.ban--;
+}
+/* 결장 카운트: "N경기 결장"이면 다음 N경기를 정확히 쉬어요.
+ * 라운드가 시작할 때 줄이되, 방금 다친(정지된) 선수(nw)는 이번 라운드가 첫 결장이라 줄이지 않아요.
+ * (예전엔 다친 그 라운드 끝에 바로 하나 줄여서, 1경기 결장이 다음 경기에 그냥 뛰었어요) */
+function tickAvailability() {
+  const tick = (o, ks) => { if (o.nw) { o.nw = 0; return; } for (const k of ks) if (o[k] > 0) o[k]--; };
+  for (const id in W.p) { const p = W.p[id]; if (p.inj > 0 || p.ban > 0 || p.nw) tick(p, ["inj", "ban"]); }
+  tick(S.rival, ["ban", "hurt"]);
 }
 
 /* ---------- 승부차기 ---------- */

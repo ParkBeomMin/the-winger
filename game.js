@@ -65,9 +65,11 @@ function loadingOn(text) {
   el.innerHTML = `<div class="ld-box"><div class="ld-crests"><div class="ld-strip">${strip}${strip}</div></div>
     <div class="ld-run"><div class="ld-runner"><i class="ld-av"></i><b class="ld-ball">⚽</b></div></div>
     <p class="ld-txt">${text}<em>.</em><em>.</em><em>.</em></p></div>`;
-  try { if (S && S.look) el.querySelector(".ld-av").appendChild(avatarCanvas(S.look, myKit(), 40)); } catch { el.querySelector(".ld-av").textContent = "🏃"; }
+  const av = el.querySelector && el.querySelector(".ld-av");
+  if (av) { try { if (S && S.look) av.appendChild(avatarCanvas(S.look, myKit(), 40)); } catch { av.textContent = "🏃"; } }
   el.hidden = false;
-  return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 30))));
+  // 화면에 한 번 그려질 때까지 기다려요. 백그라운드 탭처럼 그리기가 멈춰도 0.15초 뒤엔 넘어가요
+  return new Promise((r) => { let done = false; const fin = () => { if (!done) { done = true; r(); } }; requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(fin, 30))); setTimeout(fin, 150); });
 }
 function loadingOff() { const el = document.getElementById("loading"); if (el) el.hidden = true; }
 function show(id) {
@@ -448,7 +450,7 @@ function applyAction(a, btn) {
 }
 function rivalGrow(scale = 1) {
   const rv = S.rival;
-  if (rv.hurt > 0) { rv.hurt--; return; }
+  if (rv.hurt > 0) { if (S.phase !== "pro") rv.hurt--; return; }   // 프로: 부상 결장은 경기 수로 줄어요(tickAvailability)
   const my = OVR(), ro = ROVR();
   const rubber = clamp(1 + (my - ro) / 12, .6, 1.5) * DF().rival * (S.phase === "pro" ? .55 : 1);
   const age = S.phase === "youth" ? 1 : rv.age <= 23 ? .85 : rv.age <= 27 ? .6 : rv.age <= 30 ? .4 : .2;
@@ -1047,6 +1049,7 @@ function recordMine(r, kind, lgPay) {
 /* 한 라운드: 내 경기 + 6개 리그 나머지 경기 전부 + (있으면) 대륙컵. quick이면 연출 없이 */
 async function proRound(quick = false) {
   const P = S.pro, lg = LEAGUES[P.league], round = P.round;
+  if (P.ticked !== round) { tickAvailability(); P.ticked = round; }   // 이 라운드 결장 카운트 (이어하기로 다시 들어와도 한 번만)
   const opp = P.schedule[round], isHome = P.home[round];
   const wasBanned = (S.ban || 0) > 0;
   const mine = teamFor(P.club, { home: isHome }), oppT = teamFor(opp, { home: !isHome });
