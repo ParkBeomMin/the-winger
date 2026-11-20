@@ -81,7 +81,10 @@ function tip(id, text) {
   const seen = JSON.parse(localStorage.getItem(TIP_KEY) || "{}");
   if (seen[id]) return Promise.resolve();
   seen[id] = 1; localStorage.setItem(TIP_KEY, JSON.stringify(seen));
-  return modal({ emoji: "🧑‍🏫", title: "Coach's Tip", html: `<p>${text}</p>`, buttons: [{ label: "Got it", value: 1, cls: "btn-primary" }] });
+  // 줄(<br/>)과 문장 끝마다 한 칸씩 나눠 카드 목록으로 보여줘요 (가운데 정렬 긴 문단은 폰에서 읽기 힘듦)
+  const items = text.split(/<br\s*\/?>/).map(s => s.trim()).filter(Boolean)
+    .flatMap(s => s.split(/(?<=[.!?。])\s+(?=\S)/)).map(s => s.trim()).filter(Boolean);
+  return modal({ emoji: "🧑‍🏫", title: "Coach's Tip", html: `<ul class="tip-list">${items.map(s => `<li>${s}</li>`).join("")}</ul>`, buttons: [{ label: "Got it", value: 1, cls: "btn-primary" }] });
 }
 function addLog(msg) {
   const when = S.phase === "youth" ? `Year ${S.year} · Month ${S.month}` : `Season ${S.pro.season} R${Math.min(S.pro.round + 1, ROUNDS)}`;
