@@ -28,6 +28,7 @@ const SHOP2 = [
   { id: "massage", cat: "item", emoji: "💆", name: "스포츠 마사지", desc: "컨디션 +30", cost: () => Math.max(30, payRef() * 1.5) },
   { id: "camp", cat: "item", emoji: "🏕️", name: "특별 개인 캠프", desc: "다음 훈련 2배", cost: () => Math.max(80, payRef() * 4) },
   { id: "cryo", cat: "item", emoji: "❄️", name: "크라이오 치료", desc: "부상 1턴 빨리 회복", cost: () => Math.max(100, payRef() * 6) },
+  { id: "talentlab", cat: "item", emoji: "🧬", name: "재능 개발 프로그램", desc: "고른 능력치 숙련 +6 (버튼에서 능력치 선택)", cost: () => Math.max(150, payRef() * 8) },
   { id: "clinic", cat: "give", emoji: "⚽", name: "유소년 축구 교실 후원", desc: "명성 +30 (시즌 1회)", price: [1000], repeat: true },
   { id: "car", cat: "give", emoji: "🏎️", name: "슈퍼카", desc: "명성 +15", price: [20000] },
   { id: "house", cat: "give", emoji: "🏠", name: "바닷가 저택", desc: "명성 +25", price: [30000] },
@@ -51,7 +52,7 @@ function payStaff() {
   S.money -= fee;
   return { fee, lapsed };
 }
-function shopBuy(it) {
+function shopBuy(it, key) {
   const lv = G(it.id);
   if (it.cat === "item") {
     const c = Math.round(it.cost());
@@ -61,6 +62,7 @@ function shopBuy(it) {
     if (it.id === "massage") S.cond = clamp(S.cond + 30, 0, 100);
     if (it.id === "camp") S.buff = Math.max(S.buff || 1, 2);
     if (it.id === "cryo") S.injured = Math.max(0, S.injured - 1);
+    if (it.id === "talentlab") { const o = addMast(key, 6); toast(o.length ? o.map((x) => x.msg).join(" · ") : `🧬 ${STAT_NAME[key]} 숙련 +6`, 3000); if (S.awake) S.awake.length = 0; }
     addLog(`🛍️ ${it.name} (${fmtMoney(c)})`); Sfx.good(); return save();
   }
   const once = it.cat === "give" && !it.repeat;
@@ -70,8 +72,8 @@ function shopBuy(it) {
   if (price == null || S.money < price) return toast("돈이 모자라요");
   S.money -= price;
   if (!it.repeat) S.gear[it.id] = lv + 1;
-  if (it.id === "boots") { S.stats.sho = clamp(S.stats.sho + 2, 1, 99); S.stats.dri = clamp(S.stats.dri + 2, 1, 99); }
-  if (it.id === "insole") S.stats.spd = clamp(S.stats.spd + 2, 1, 99);
+  if (it.id === "boots") { S.stats.sho = clamp(S.stats.sho + 2, 1, statCap("sho")); S.stats.dri = clamp(S.stats.dri + 2, 1, statCap("dri")); }
+  if (it.id === "insole") S.stats.spd = clamp(S.stats.spd + 2, 1, statCap("spd"));
   const fameAdd = { clinic: 30, car: 15, house: 25, foundation: 150, stadium: 400 }[it.id];
   if (fameAdd) { S.fame += fameAdd; if (it.id === "foundation" || it.id === "stadium") S.career.awardScore = (S.career.awardScore || 0) + (it.id === "stadium" ? 40 : 20); news(`💝 ${S.name}, ${it.name}${it.id === "clinic" ? "" : "!"}`); }
   if (it.repeat) S.flags["give_" + it.id] = S.pro ? S.pro.season : S.year;
@@ -81,6 +83,7 @@ function shopBuy(it) {
 async function openShop(cat = "gear") {
   const row = (it) => {
     const lv = G(it.id);
+    if (it.id === "talentlab") return `<div class="shop-row tl"><span>${it.emoji}</span><div><b>${it.name} · ${fmtMoney(Math.round(it.cost()))}</b><small>${it.desc}</small><div class="tl-keys">${STATS.map((s) => { const nd = mastNeed(s.key); return `<button class="btn btn-ghost sm" data-buy="talentlab" data-k="${s.key}" ${S.money < it.cost() || !nd ? "disabled" : ""}>${s.emoji}${s.name} ${nd ? `${(S.mast && S.mast[s.key]) || 0}/${nd}` : "완성"}</button>`; }).join("")}</div></div></div>`;
     if (it.cat === "item") return `<div class="shop-row"><span>${it.emoji}</span><div><b>${it.name}</b><small>${it.desc}</small></div><button class="btn btn-primary sm" data-buy="${it.id}" ${S.money < it.cost() ? "disabled" : ""}>${fmtMoney(Math.round(it.cost()))}</button></div>`;
     const max = it.cat === "give" ? (it.repeat ? 99 : 1) : it.price.length;
     const done = !it.repeat && lv >= max;
@@ -96,7 +99,7 @@ async function openShop(cat = "gear") {
   const p = modal({ title: "🛍️ 상점", wide: true, html: `<div id="shop-in">${html()}</div>`, buttons: [{ label: "닫기", value: 1, cls: "btn-ghost" }] });
   const bind = () => {
     document.querySelectorAll("#shop-in [data-cat]").forEach((b) => b.onclick = () => { cat = b.dataset.cat; $("shop-in").innerHTML = html(); bind(); });
-    document.querySelectorAll("#shop-in [data-buy]").forEach((b) => b.onclick = () => { shopBuy(SHOP2.find((x) => x.id === b.dataset.buy)); $("shop-in").innerHTML = html(); bind(); });
+    document.querySelectorAll("#shop-in [data-buy]").forEach((b) => b.onclick = () => { shopBuy(SHOP2.find((x) => x.id === b.dataset.buy), b.dataset.k); $("shop-in").innerHTML = html(); bind(); });
   };
   bind();
   await p; renderMain();
@@ -212,3 +215,45 @@ function checkFameUp() {
   if (g > S.fameI) { S.fameI = g; const n = FAME_GRADES[g][1]; addLog(`⭐ 명성 등급 상승: ${n}`); toast(`⭐ 명성 등급 UP! ${n}`, 3000); if (g >= 3) news(`⭐ ${S.name}, 이제 '${n.replace(/^\S+\s/, "")}'`); }
   else if (g < S.fameI) S.fameI = g;
 }
+
+/* ---------- 🧬 재능 각성 · 🌌 초월 ----------
+ * 능력치마다 숙련도가 쌓여요(훈련 1, 🔥버프 훈련 2, MOM 2, 연수·프로그램). 다 차면 재능 별 +1.
+ * ★5 다음은 초월 I~III: 최대치 +2씩(99 → 105), 나이 들어 떨어지는 폭 -25%씩. */
+const MAST_NEED = [0, 12, 18, 26, 36, 30, 40, 50];   // [현재 단계] → 다음 단계까지. 단계 = 별(1~5) + 초월(0~3)
+const TRANS_NAME = ["", "초월 I", "초월 II", "초월 III"];
+const trOf = (k) => (S.trans && S.trans[k]) || 0;
+const talentLv = (k) => S.talent[k] + trOf(k);
+function mastNeed(k) { const lv = talentLv(k); return lv >= 8 ? 0 : MAST_NEED[lv]; }
+function statCap(k) { return 99 + trOf(k) * 2; }
+function talentStr(k, tal = S.talent[k], tr = trOf(k)) {
+  return `${"★".repeat(tal)}${"☆".repeat(5 - tal)}${tr ? `<i class="trs">${"✦".repeat(tr)}</i>` : ""}`;
+}
+function addMast(k, n) {
+  if (!S.mast) S.mast = {};
+  if (!S.trans) S.trans = {};
+  const out = [];
+  S.mast[k] = (S.mast[k] || 0) + n;
+  while (mastNeed(k) && S.mast[k] >= mastNeed(k)) {
+    S.mast[k] -= mastNeed(k);
+    const nm = STAT_NAME[k];
+    if (S.talent[k] < 5) { S.talent[k]++; out.push({ k, kind: "awake", msg: `🧬 재능 각성! ${nm} ★${S.talent[k] - 1} → ★${S.talent[k]}` }); }
+    else { S.trans[k] = trOf(k) + 1; out.push({ k, kind: "trans", msg: `🌌 초월! ${nm} ${TRANS_NAME[S.trans[k]]} · 최대치 ${statCap(k)}` }); }
+  }
+  if (!mastNeed(k)) S.mast[k] = 0;
+  for (const o of out) { addLog(o.msg); if (o.kind === "trans" || S.talent[k] === 5) news(`${o.kind === "trans" ? "🌌" : "🧬"} ${S.name}, ${STAT_NAME[k]} ${o.kind === "trans" ? TRANS_NAME[S.trans[k]] + " 도달" : "재능 ★5 각성"}`); }
+  if (out.length) (S.awake = S.awake || []).push(...out);
+  return out;
+}
+const mastLine = (k, n) => { const o = addMast(k, n); return `${STAT_NAME[k]} 숙련 +${n}${o.length ? " · " + o.map((x) => x.msg).join(" · ") : ""}`; };
+/* 각성·초월이 생기면 크게 알려줘요 */
+async function showAwake() {
+  if (!S.awake || !S.awake.length) return;
+  const list = S.awake.splice(0);
+  const tr = list.some((x) => x.kind === "trans");
+  Sfx.good();
+  await modal({ emoji: tr ? "🌌" : "🧬", title: tr ? "한계를 넘어섰어요!" : "재능이 깨어났어요!",
+    html: `${list.map((x) => `<p class="awake ${x.kind}">${x.msg}</p>`).join("")}<p class="small">${tr ? "초월한 능력치는 99를 넘어 자랄 수 있고, 나이 들어도 덜 떨어져요." : "별이 많을수록 훈련으로 더 빨리 자라요. ★5 다음은 초월이에요."}</p>`,
+    buttons: [{ label: "좋아!", value: 1, cls: "btn-primary" }] });
+}
+/* 재능 별 확률 (만들 때): ★1 20% · ★2 27% · ★3 27% · ★4 21% · ★5 5% */
+function rollTalent() { const r = Math.random(); return r < .2 ? 1 : r < .47 ? 2 : r < .74 ? 3 : r < .95 ? 4 : 5; }

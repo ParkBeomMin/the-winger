@@ -5,7 +5,7 @@
 
 const R = (S) => S.rival.name;
 const mainStat = (S) => Object.entries(POS[S.pos].w).sort((a, b) => b[1] - a[1])[0][0];
-const addStat = (S, k, v) => { S.stats[k] = clamp(S.stats[k] + v, 1, 99); return `${STAT_NAME[k]} ${v > 0 ? "+" : ""}${v}`; };
+const addStat = (S, k, v) => { S.stats[k] = clamp(S.stats[k] + v, 1, typeof statCap === "function" ? statCap(k) : 99); return `${STAT_NAME[k]} ${v > 0 ? "+" : ""}${v}`; };
 const addRel = (S, v) => { S.rival.rel = clamp(S.rival.rel + v, -100, 100); return `라이벌 관계 ${v > 0 ? "+" : ""}${v}`; };
 const addFame = (S, v) => { S.fame = Math.max(0, S.fame + v); return `명성 ${v > 0 ? "+" : ""}${v}`; };
 const addCond = (S, v) => { S.cond = clamp(S.cond + v, 0, 100); return `컨디션 ${v > 0 ? "+" : ""}${v}`; };
@@ -13,7 +13,16 @@ const addForm = (S, v) => { S.form = clamp(S.form + v, -3, 3); return `폼 ${v >
 const addMoney = (S, v) => { S.money = Math.max(0, S.money + v); return `💰 ${v > 0 ? "+" : ""}${v}만`; };
 const isPro = (S) => S.phase === "pro";
 
+const abroadCost = (S) => Math.round(Math.max(200, (S.contract && S.phase === "pro" ? S.contract.sal : 30) * 10));
 const EVENTS = [
+  { id: "abroad", emoji: "✈️", title: "해외 단기 연수 제안", cd: 22,
+    when: (S) => S.turn > 8 && S.money >= abroadCost(S),
+    text: (S) => `유럽 명문 아카데미에서 2주 특별 연수를 제안했어요. 비용은 ${fmtMoney(abroadCost(S))}. 잠든 재능이 깨어날지도 몰라요.`,
+    choices: [
+      { label: "🧬 주력 능력치 집중 연수", hint: "💰 · 주력 숙련 +12", fx: (S) => { S.money -= abroadCost(S); return mastLine(mainStat(S), 12); } },
+      { label: "🔀 약점 보완 연수", hint: "💰 · 가장 낮은 주요 능력치 +3 · 숙련 +8", fx: (S) => { const k = Object.entries(POS[S.pos].w).filter(([, w]) => w >= .1).sort((a, b) => S.stats[a[0]] - S.stats[b[0]])[0][0]; S.money -= abroadCost(S); return [addStat(S, k, 3), mastLine(k, 8)].join(" · "); } },
+      { label: "🙅 이번엔 사양", hint: "컨디션↑", fx: (S) => addCond(S, 6) },
+    ] },
   { id: "taunt", emoji: "📱", title: "라이벌의 도발", cd: 10,
     when: (S) => S.turn > 2,
     text: (S) => `${josa(R(S), "이/가")} SNS에 글을 올렸어요.\n"${S.name}? 같은 무대에 서려면 한참 멀었지 ㅋ"`,
@@ -63,7 +72,7 @@ const EVENTS = [
     choices: [
       { label: "👊 좋아", hint: "약한 스탯 둘↑ 관계↑ (라이벌도 성장)", fx: (S) => {
         const low = STAT_KEYS.filter((k) => POS[S.pos].w[k] > 0).sort((a, b) => S.stats[a] - S.stats[b]).slice(0, 2);
-        low.forEach((k) => { S.stats[k] = clamp(S.stats[k] + 3, 1, 99); });
+        low.forEach((k) => { S.stats[k] = clamp(S.stats[k] + 3, 1, statCap(k)); });
         S.rival.stats[mainStatOf(S.rival.pos)] += 2;
         return `${low.map((k) => STAT_NAME[k]).join("·")} +3 · ` + addRel(S, 10);
       } },
@@ -83,7 +92,7 @@ const EVENTS = [
     when: (S) => S.money >= 120,
     text: () => `은퇴한 레전드 선배가 개인 레슨을 해준대요. 레슨비는 120만.`,
     choices: [
-      { label: "🙇 받는다 (120만)", hint: "주력 스탯 크게↑", fx: (S) => [addMoney(S, -120), addStat(S, mainStat(S), 5)].join(" · ") },
+      { label: "🙇 받는다 (120만)", hint: "주력 스탯 크게↑ 숙련↑", fx: (S) => [addMoney(S, -120), addStat(S, mainStat(S), 5), mastLine(mainStat(S), 5)].join(" · ") },
       { label: "🙏 사양한다", hint: "", fx: () => "다음 기회에…" },
     ] },
   { id: "youtube", emoji: "🎬", title: "유튜버 협업 제안", cd: 12,

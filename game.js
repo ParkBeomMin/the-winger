@@ -27,7 +27,7 @@ function randomName(origin) {
 }
 function rollStats(pos) {
   const st = {}, tal = {};
-  for (const k of STAT_KEYS) { st[k] = randi(26, 36); tal[k] = Math.min(5, Math.max(1, Math.round(rand(.6, 4.4)))); }
+  for (const k of STAT_KEYS) { st[k] = randi(26, 36); tal[k] = rollTalent(); }
   const top = Object.entries(POS[pos].w).sort((a, b) => b[1] - a[1]).slice(0, 2).map((x) => x[0]);
   top.forEach((k) => { st[k] += randi(6, 10); });
   if (!STAT_KEYS.some((k) => tal[k] >= 4)) tal[pick(top)] = 4;
@@ -124,7 +124,7 @@ function renderCreate() {
       <div class="seg">${Object.entries(DIFF).map(([k, d]) => `<button class="${C.diff === k ? "on" : ""}" data-diff="${k}">${d.name}</button>`).join("")}</div>
       <p class="small">${C.diff === "easy" ? "성장이 빠르고 부상이 적어요. 처음이라면 추천" : C.diff === "hard" ? "성장이 느리고 라이벌이 더 독해요. 세계 정상은 정말 어려워요" : "실제 축구처럼, 노력과 선택만큼 커요"}</p>
       <p class="label">타고난 재능 <small>(별이 많을수록 그 능력치가 빨리 자라요)</small></p>
-      <div class="roll">${STATS.map((s) => `<div><span>${s.emoji} ${s.name}</span><b>${C.roll.stats[s.key]}</b><i>${starStr(C.roll.talent[s.key])}</i></div>`).join("")}</div>
+      <div class="roll">${STATS.map((s) => `<div><span>${s.emoji} ${s.name}</span><b>${C.roll.stats[s.key]}</b><i class="${C.roll.talent[s.key] === 5 ? "t5" : ""}">${starStr(C.roll.talent[s.key])}</i></div>`).join("")}</div>
       <button class="btn btn-ghost" id="b-reroll">🎲 재능 다시 뽑기</button>
       <button class="btn btn-primary" id="b-next">다음: 외모 꾸미기 →</button>`;
     $("in-name").oninput = (e) => (C.name = e.target.value.trim());
@@ -266,7 +266,7 @@ function trainGain(k, range = false) {
 function bestTrainKey() {
   let best = null, bv = -1;
   for (const [k, w] of Object.entries(POS[S.pos].w)) {
-    if (w <= 0 || S.stats[k] >= 99) continue;
+    if (w <= 0 || S.stats[k] >= statCap(k)) continue;
     const g = trainGain(k, true), v = w * (g[0] + g[1]) / 2;
     if (v > bv) { bv = v; best = k; }
   }
@@ -309,7 +309,8 @@ function renderMain() {
   // 능력치
   $("stats").innerHTML = STATS.map((s) => {
     const v = S.stats[s.key], w = POS[S.pos].w[s.key];
-    return `<div class="st ${w >= .2 ? "key" : ""}"><span>${s.emoji} ${s.name}</span><div class="bar"><i style="width:${v}%"></i></div><b>${Math.round(v)}</b><em>${starStr(S.talent[s.key])}</em></div>`;
+    const need = mastNeed(s.key), mp = need ? Math.round(((S.mast && S.mast[s.key]) || 0) / need * 100) : 100;
+    return `<div class="st ${w >= .2 ? "key" : ""}" title="숙련 ${need ? `${(S.mast && S.mast[s.key]) || 0}/${need} (다음: ${S.talent[s.key] < 5 ? "★" + (S.talent[s.key] + 1) : TRANS_NAME[trOf(s.key) + 1]})` : "초월 III 완성"} · 최대치 ${statCap(s.key)}"><span>${s.emoji} ${s.name}</span><div class="bar"><i style="width:${Math.min(100, v)}%"></i><u style="width:${mp}%"></u></div><b class="${v > 99 ? "over" : ""}">${Math.round(v)}</b><em class="${S.talent[s.key] === 5 ? "t5" : ""}">${talentStr(s.key)}</em></div>`;
   }).join("");
 
   // 행동
@@ -364,7 +365,8 @@ function applyAction(a, btn) {
   const k = a.key, risk = injuryRisk();
   const g = trainGain(k);
   const before = S.stats[k];
-  S.stats[k] = clamp(S.stats[k] + g, 1, 99);
+  S.stats[k] = clamp(S.stats[k] + g, 1, statCap(k));
+  addMast(k, S.buff > 1 ? 2 : 1);
   S.cond = clamp(S.cond - trainCost(), 0, 100);
   const used = S.buff > 1 ? ` (🔥×${S.buff})` : "";
   S.buff = 1;
@@ -428,6 +430,7 @@ async function turn(a, btn, fromAuto = false) {
     const wasInjured = S.injured;
     applyAction(a, btn);
     S.turn++;
+    if (!fromAuto) await showAwake(); else if (S.awake) S.awake.length = 0;
     rivalGrow();
     if (G("nutrition")) S.cond = clamp(S.cond + G("nutrition") * 2, 0, 100);
     if (S.money >= 150 && !S.shopOpen) { S.shopOpen = true; addLog("🛍️ 상점이 열렸어요!"); }
@@ -477,7 +480,7 @@ async function openAuto() {
     if (S.injured > 0 || S.cond < 42 || (left <= 1 && S.cond < 62)) a = { kind: "rest" };
     else {
       let k = v;
-      if (v === "bal" || S.stats[v] >= 99) k = bestTrainKey();
+      if (v === "bal" || S.stats[v] >= statCap(v)) k = bestTrainKey();
       a = { kind: "train", key: k };
     }
     const btn = $("actions").querySelector(a.kind === "rest" ? "[data-rest]" : `[data-train="${a.key}"]`);
@@ -638,6 +641,7 @@ function applyMatch(r, opts = {}) {
   const f = Math.round(((r.rating - 6.3) * 3 + r.goals * 2 + r.assists * 1.5 + (r.mom ? 3 : 0)) * ORIGINS[S.origin].fame * (S.phase === "youth" ? .6 : .6 + prestige * .2) * (opts.big || 1));
   S.fame = Math.max(0, S.fame + f);
   lines.push(`⭐ 명성 ${f >= 0 ? "+" : ""}${f}`);
+  if (r.mom && S.phase === "pro") addMast(mainStatOf(S.pos), 2);
   const pf = S.form;
   if (r.rating >= 7.6) S.form = clamp(S.form + 1, -3, 3); else if (r.rating <= 5.7) S.form = clamp(S.form - 1, -3, 3);
   if (S.form < pf && G("mental") && Math.random() < G("mental") * .25) { S.form = pf; lines.push("🧘 멘탈 코치 덕분에 폼 유지"); }
@@ -1217,7 +1221,7 @@ async function offseason() {
   S.age++; S.rival.age++;
   const decl = [];
   if (S.age >= 31) {
-    for (const k of STAT_KEYS) { const d = (k === "spd" || k === "sta") ? rand(1.5, 3.5) : rand(.4, 1.8); S.stats[k] = clamp(S.stats[k] - d, 1, 99); }
+    for (const k of STAT_KEYS) { const d = (k === "spd" || k === "sta") ? rand(1.5, 3.5) : rand(.4, 1.8); S.stats[k] = clamp(S.stats[k] - d * (1 - trOf(k) * .25), 1, statCap(k)); }
     decl.push("나이가 들며 스피드와 체력이 떨어졌어요");
   }
   if (S.rival.age >= 31) for (const k of STAT_KEYS) S.rival.stats[k] = clamp(S.rival.stats[k] - ((k === "spd" || k === "sta") ? rand(1.5, 3.5) : rand(.4, 1.8)), 1, 99);
@@ -1433,6 +1437,7 @@ function migrateLife() {
   for (const it of SHOP2) if (S.gear[it.id] == null) S.gear[it.id] = 0;
   if (S.flags.agent && !S.gear.agent) S.gear.agent = 1;
   if (S.trust == null) S.trust = 50;
+  S.mast = S.mast || {}; S.trans = S.trans || {};
 }
 function openHelp() {
   modal({
@@ -1443,7 +1448,7 @@ function openHelp() {
       <p><b>📡 방금 일어난 일</b><br/>해트트릭, 연패, 감독 교체, 결승 진출, 라이벌 부상, A매치 발탁처럼 실제 경기·세계에서 생긴 일이 다음 턴 이벤트로 이어져요.</p>
       <p><b>🛍️ 상점 · ⭐ 명성 등급</b><br/>장비는 영구, 전담팀은 시즌마다 유지비, 소모품은 바로 써요. 기부는 명성을 올려요. 명성은 무명 → 유망주 → … → 축구 아이콘 등급으로 보여요.</p>
       <p><b>☁️ 저장</b><br/>매 경기 결과가 바로 저장되고, 자동 클라우드 백업이 돼요. ⚙️ → ☁️에서 8자리 이전 코드로 다른 기기에서 이어하거나 구글 계정에 연동할 수 있어요.</p>
-      <p><b>⭐ 재능</b><br/>별이 많은 능력치일수록 빨리 자라요. 유스마다 잘 크는 능력치도 달라요.</p>
+      <p><b>⭐ 재능 · 🧬 각성 · 🌌 초월</b><br/>별 하나에 훈련 성장 +15%(★1 0.85배 ~ ★5 1.45배). 능력치 바 아래 보라 줄이 숙련도예요. 훈련(🔥버프 훈련은 2배), MOM, 해외 연수, 재능 개발 프로그램으로 차고, 다 차면 별 +1. ★5 다음은 초월 I~III: 최대치가 2씩 올라 105까지, 나이 들어 떨어지는 폭도 줄어요.</p>
       <p><b>⚔️ 라이벌</b><br/>라이벌도 매달 자라요. 대회 결승, 리그 맞대결, 득점왕, 발롱도르에서 계속 부딪혀요. 이벤트 선택으로 관계가 바뀌고 결말이 달라져요.</p>
       <p><b>🔥 승부처 미니게임</b><br/>경기 중 내 선수가 끼는 찬스가 오면 직접 해결해요. 포지션마다 자주 나오는 게 달라요.</p>
       <ul>
