@@ -663,7 +663,7 @@ function summarize(res, m, mySide, rvOpp) {
     goals: meX ? meX.g : 0, assists: meX ? meX.a : 0, saves: meX ? meX.blk : 0,
     moments: m.evs.filter((e) => e.mom && e.res).map((e) => ({ type: e.mom, ok: e.res.ok })),
     rivalGoal: rvOpp && res.goals.some((g) => g.sh.id === "rv"), rvX: [...res.all.values()].find((x) => x.p.id === "rv"),
-    goalsList: res.goals, cards: [],
+    goalsList: res.goals, mySide, cards: [],
     my: meX ? { pa: meX.pa, pc: meX.pc, sh: meX.sh, sot: meX.sot, xg: meX.xg, kp: meX.kp + meX.a, da: meX.da, dc: meX.dc, ta: meX.ta, tc: meX.tc } : null,
     tm: res.team ? (mySide === "home" ? [res.team.home, res.team.away] : [res.team.away, res.team.home]) : null,
   };
@@ -678,13 +678,13 @@ function teamStatsHTML(tm) {
 }
 function myStatsHTML(s) {
   if (!s) return "";
-  return `<div class="mystats"><span>패스 <b>${s.pc}/${s.pa}</b> ${s.pa ? Math.round(s.pc / s.pa * 100) : 0}%</span><span>슈팅 <b>${s.sh}</b> (유효 ${s.sot})</span><span>xG <b>${s.xg.toFixed(2)}</b></span><span>키패스 <b>${s.kp}</b></span><span>드리블 <b>${s.dc}/${s.da}</b></span><span>태클 <b>${s.tc}/${s.ta}</b></span></div>`;
+  return `<div class="mystats"><span><b>${s.pc}/${s.pa}</b><small>패스 ${s.pa ? Math.round(s.pc / s.pa * 100) : 0}%</small></span><span><b>${s.sh} (${s.sot})</b><small>슈팅 (유효)</small></span><span><b>${s.xg.toFixed(2)}</b><small>xG</small></span><span><b>${s.kp}</b><small>키패스</small></span><span><b>${s.dc}/${s.da}</b><small>드리블</small></span><span><b>${s.tc}/${s.ta}</b><small>태클</small></span></div>`;
 }
 /* 시즌 상세 스탯 한 줄 */
 function seasonStatHTML(s) {
   if (!s || !s.ap) return "";
   const pp = s.pa ? Math.round(s.pc / s.pa * 100) : 0;
-  return `<div class="mystats"><span>패스 성공률 <b>${pp}%</b> (${s.pa})</span><span>키패스 <b>${s.kp || 0}</b></span><span>슈팅 <b>${s.sh || 0}</b> (유효 ${s.sot || 0})</span><span>xG <b>${((s.xg || 0) / 100).toFixed(1)}</b></span><span>드리블 <b>${s.dc || 0}/${s.da || 0}</b></span><span>태클 <b>${s.tc || 0}/${s.ta || 0}</b></span>${s.sv ? `<span>선방 <b>${s.sv}</b></span>` : ""}</div>`;
+  return `<div class="mystats"><span><b>${pp}%</b><small>패스 성공률 (${s.pa})</small></span><span><b>${s.kp || 0}</b><small>키패스</small></span><span><b>${s.sh || 0} (${s.sot || 0})</b><small>슈팅 (유효)</small></span><span><b>${((s.xg || 0) / 100).toFixed(1)}</b><small>xG</small></span><span><b>${s.dc || 0}/${s.da || 0}</b><small>드리블</small></span><span><b>${s.tc || 0}/${s.ta || 0}</b><small>태클</small></span>${s.sv ? `<span><b>${s.sv}</b><small>선방</small></span>` : ""}</div>`;
 }
 async function showResult(r, lines, btnLabel = "계속") {
   const box = document.createElement("div");
@@ -696,7 +696,7 @@ async function showResult(r, lines, btnLabel = "계속") {
     <div class="r-stats">${r.mins}분 · ⚽ ${r.goals} · 🅰️ ${r.assists} · 🛡️ ${r.saves} · 승부처 ${r.moments.filter((m) => m.ok).length}/${r.moments.length}</div>` : `<div class="r-stats">출전하지 못했어요</div>`}
     ${myStatsHTML(r.my)}
     ${teamStatsHTML(r.tm)}
-    <div class="r-goals">${r.goalsList.map((g) => `<span>${g.min}' ${g.sh.id === "me" ? "<b>" + esc(g.sh.n) + "</b>" : esc(g.sh.n)}</span>`).join("")}</div>
+    ${r.goalsList.length ? `<div class="r-goals">${r.goalsList.map((g) => { const us = !r.mySide || g.side === r.mySide; return `<div class="gl ${us ? "us" : "them"}"><em>${g.min}'</em><span>⚽ ${g.sh.id === "me" ? "<b>" + esc(g.sh.n) + "</b>" : esc(g.sh.n)}${g.as ? `<small>도움 ${g.as.id === "me" ? "<b>" + esc(g.as.n) + "</b>" : esc(g.as.n)}</small>` : ""}</span></div>`; }).join("")}</div>` : ""}
     <div class="r-lines">${lines.map((l) => `<div>${l}</div>`).join("")}</div>
     <button class="btn btn-primary" id="b-res">${btnLabel}</button>`;
   const body = $("mt-body");
