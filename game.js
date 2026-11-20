@@ -336,7 +336,7 @@ function renderMain() {
   let html = STATS.map((s) => `<button class="act" data-train="${s.key}" ${inj ? "disabled" : ""}><span>${s.emoji}</span><b>${s.name} 훈련</b><small>${trainPreview(s.key)}</small>${risk ? `<i class="risk">부상 ${risk}%</i>` : ""}</button>`).join("");
   html += `<button class="act rest" data-rest="1"><span>${inj ? "🏥" : "🛌"}</span><b>${inj ? "재활" : "휴식"}</b><small>컨디션 +${32 + S.gear.recovery * 8}</small></button>`;
   if (S.phase === "youth") html += `<button class="act auto" data-auto="1" ${inj ? "disabled" : ""}><span>⏩</span><b>자동 진행</b><small>대회 직전까지</small></button>`;
-  else html += `<button class="act auto" data-quick="1"><span>⚡</span><b>남은 라운드</b><small>빠르게 시즌 끝내기</small></button>`;
+  else html += `<button class="act auto" data-auto="1"><span>⏩</span><b>자동 진행</b><small>경기 전까지</small></button>`;
   $("actions").innerHTML = html;
   $("actions").querySelectorAll("[data-train]").forEach((b) => b.onclick = () => turn({ kind: "train", key: b.dataset.train }, b));
   $("actions").querySelector("[data-rest]").onclick = (e) => turn({ kind: "rest" }, e.currentTarget);
@@ -494,10 +494,18 @@ async function openAuto() {
   const keys = Object.entries(POS[S.pos].w).sort((a, b) => b[1] - a[1]).filter(([, w]) => w > 0).map(([k]) => k);
   const v = await modal({
     emoji: "⏩", title: "자동 진행",
-    html: `<p>대회 직전까지 알아서 훈련하고 쉬어요.<br/>컨디션이 낮으면 쉬고, 이벤트가 생기면 멈춰요.</p>`,
-    buttons: [{ label: "⚖️ 포지션 균형", value: "bal", cls: "btn-primary" }, ...keys.slice(0, 4).map((k) => ({ label: `${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} 집중`, value: k })), { label: "취소", value: null }],
+    html: S.phase === "pro" ? `<p>이번 라운드 훈련을 알아서 고르고 바로 경기로 가요.<br/>컨디션이 낮거나 다쳤으면 쉬어요.</p>` : `<p>대회 직전까지 알아서 훈련하고 쉬어요.<br/>컨디션이 낮으면 쉬고, 이벤트가 생기면 멈춰요.</p>`,
+    buttons: [{ label: "⚖️ 포지션 균형", value: "bal", cls: "btn-primary" }, ...keys.slice(0, 4).map((k) => ({ label: `${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} 집중`, value: k })), ...(S.phase === "pro" ? [{ label: `⚡ 남은 ${ROUNDS - S.pro.round}라운드 빠르게 (결과만)`, value: "quick" }] : []), { label: "취소", value: null }],
   });
   if (!v) return;
+  if (v === "quick") return quickSeason(true);
+  if (S.phase === "pro") {
+    let a;
+    if (S.injured > 0 || S.cond < 45) a = { kind: "rest" };
+    else { let k = v; if (v === "bal" || S.stats[v] >= statCap(v)) k = bestTrainKey(); a = { kind: "train", key: k }; }
+    const btn = $("actions").querySelector(a.kind === "rest" ? "[data-rest]" : `[data-train="${a.key}"]`);
+    return turn(a, btn, true);
+  }
   for (let guard = 0; guard < 13; guard++) {
     if (S.phase !== "youth" || !$("scr-main").classList.contains("active")) break;
     const left = S.month <= 6 ? 6 - S.month : 12 - S.month;
