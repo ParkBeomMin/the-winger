@@ -204,6 +204,7 @@ function makeRival() {
 }
 
 function newGame() {
+  applyMem(null);
   S = {
     v: 4, diff: C.diff, name: C.name, pos: C.pos, foot: C.foot, look: { ...C.look }, origin: C.origin,
     stats: { ...C.roll.stats }, talent: { ...C.roll.talent },
@@ -897,7 +898,7 @@ function rivalPickClub() {
   moveToClub("rv", best.club);
 }
 function ensureWorld() {
-  if (S.world && S.world.p && S.world.p.me && S.world.p.me.cs) { W = S.world; ensureCoaches(); return; }
+  if (S.world && S.world.p && S.world.p.me && S.world.p.me.cs) { W = S.world; if (ensureDiv2()) save(); ensureCoaches(); return; }
   // 옛 세이브(v0.3 이하): 새 세계를 깔고 이번 시즌을 처음부터
   const keepClub = S.pro && S.pro.club;
   initWorld(); initLeagues(); initCups(null);
@@ -940,7 +941,7 @@ async function youthEnd() {
   news(`✍️ 신인 ${S.name}, ${pick1.club} 입단 · 라이벌 ${S.rival.name}은 ${S.rival.club}`);
   S.pending = null; save();
   show("scr-main"); renderMain();
-  await tip("t-pro", `프로는 <b>라운드마다 훈련 1번 + 경기 1번</b>, 한 시즌 ${ROUNDS}라운드(홈·원정)예요.<br/>6개 리그 60개 클럽 960명이 매 라운드 같은 엔진으로 실제 경기를 치러요. 📰 뉴스, 🏆 리그, 👥 스쿼드에서 세계가 돌아가는 걸 볼 수 있어요.<br/>리그 상위권이면 다음 시즌 <b>대륙컵</b>, 4시즌마다 <b>월드컵</b>이 열려요.`);
+  await tip("t-pro", `프로는 <b>라운드마다 훈련 1번 + 경기 1번</b>, 한 시즌 ${ROUNDS}라운드(홈·원정)예요.<br/>6개 나라 1·2부 12개 리그 120개 클럽 1,920명이 매 라운드 같은 엔진으로 실제 경기를 치러요. 📰 뉴스, 🏆 리그, 👥 스쿼드에서 세계가 돌아가는 걸 볼 수 있어요.<br/>리그 상위권이면 다음 시즌 <b>대륙컵</b>, 4시즌마다 <b>월드컵</b>이 열려요.`);
 }
 function joinClub(o) {
   const c = clubData(o.league, o.club);
@@ -1226,7 +1227,7 @@ async function seasonEnd() {
   $("ss-body").innerHTML = `${heroAw ? `<div class="ss-hero" style="background-image:url(assets/ceremony.webp)"><b>${awards.map((a) => a.name).join(" · ")}</b></div>` : ""}
     <div class="ss-card"><h4>${lg.flag} ${lg.name} 최종 순위</h4>
       <table class="tbl"><tr><th>#</th><th>클럽</th><th>승</th><th>무</th><th>패</th><th>득실</th><th>승점</th></tr>
-      ${tbl.map(([n, t], i) => `<tr class="${myRow(n)}"><td>${i + 1}</td><td>${crestHTML(n, 14)} ${esc(n)}${n === rvp.c ? " ⚔️" : ""}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table></div>
+      ${tbl.map(([n, t], i) => `<tr class="${myRow(n)} ${zoneCls(P.league, i)}"><td>${i + 1}</td><td>${crestHTML(n, 14)} ${esc(n)}${n === rvp.c ? " ⚔️" : ""}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table></div>
     <div class="ss-card"><h4>내 시즌</h4>
       ${seasonStatHTML(W.p.me.s)}
       <div class="ss-me"><div id="ss-av"></div><div>리그 ${P.s.apps}경기 (선발 ${P.s.starts})<br/>⚽ ${P.s.g}골 · 🅰️ ${P.s.a}도움 · MOM ${P.s.mom}<br/>평균 평점 <b>${myAvg ? myAvg.toFixed(2) : "-"}</b>${P.cup.ap ? `<br/>대륙컵 ${P.cup.ap}경기 ⚽ ${P.cup.g} 🅰️ ${P.cup.a}` : ""}<br/>
@@ -1238,7 +1239,8 @@ async function seasonEnd() {
       <div>${LEAGUES[rvp.l].flag} ${esc(rvp.c)} (${rankOf(rvp.c)}위) · ${rs.ap}경기 · ⚽ ${rs.g} · 🅰️ ${rs.a} · 평균 ${rs.avg ? rs.avg.toFixed(2) : "-"}<br/>
       ${rvAwards.length ? rvAwards.map((a) => `<span class="aw rv">${a}</span>`).join(" ") : "<small>수상 없음</small>"}</div>
       <div class="ss-vs">${P.s.g + P.s.a > rs.g + rs.a ? "🔥 이번 시즌은 내가 이겼어요!" : P.s.g + P.s.a < rs.g + rs.a ? "😤 이번 시즌은 라이벌이 앞섰어요" : "🤝 막상막하"}</div></div>
-    <div class="ss-card"><h4>🌍 세계 축구</h4>${LEAGUES.filter((l) => l.id !== P.league).map(awLine).join("")}${cupLine}</div>
+    <div class="ss-card"><h4>🌍 세계 축구</h4>${TOP_LEAGUES.filter((l) => l.id !== P.league).map(awLine).join("")}${cupLine}</div>
+    <div class="ss-card"><h4>🔁 승격 · 강등</h4>${promoPreview().map((x) => `<div class="small">${LEAGUES[x.lg].flag} ⬆️ ${x.up.map((n) => `<b class="${n === P.club ? "me-t" : ""}">${esc(n)}</b>`).join(", ")} · ⬇️ ${x.down.map((n) => `<b class="${n === P.club ? "me-t" : ""}">${esc(n)}</b>`).join(", ")}</div>`).join("")}</div>
     <div class="ss-card"><h4>🏅 발롱도르 순위</h4>
       ${cands.slice(0, 5).map((c, i) => `<div class="bl ${c.id === "me" ? "me" : c.id === "rv" ? "rv" : ""}"><span>${i + 1}</span><b>${NATIONS[c.nat].flag} <a class="pl" data-pid="${c.id}">${esc(c.name)}</a>${c.id === "rv" ? " ⚔️" : ""}</b><small>${esc(shortName(c.club))} ⚽${c.g} 🅰️${c.a}</small><em>${c.sc.toFixed(1)}</em></div>`).join("")}
       ${myB > 5 ? `<div class="bl me"><span>${myB}</span><b>${esc(S.name)}</b><small></small><em>${cands[myB - 1].sc.toFixed(1)}</em></div>` : ""}
@@ -1352,6 +1354,18 @@ async function offseason() {
   }
   if (S.rival.age >= 31) for (const k of STAT_KEYS) S.rival.stats[k] = clamp(S.rival.stats[k] - ((k === "spd" || k === "sta") ? rand(1.5, 3.5) : rand(.4, 1.8)) * (1 - trOf(k, S.rival) * .25), 1, statCap(k, S.rival));
   worldOffseason();
+  promoRelegate();
+  if (W.c[P.club] && W.c[P.club].l !== P.league) {
+    const upL = LEAGUES[W.c[P.club].l].div === 1;
+    P.league = W.c[P.club].l;
+    if (upL) S.fame += 8;
+    addLog(upL ? `⬆️ ${P.club}, ${LEAGUES[P.league].name} 승격!` : `⬇️ ${P.club}, ${LEAGUES[P.league].name}로 강등`);
+    save();
+    await modal({ emoji: upL ? "⬆️" : "⬇️", title: upL ? "1부 승격!" : "2부 강등", html: upL
+      ? `<p><b>${esc(P.club)}</b>가 <b>${LEAGUES[P.league].flag} ${LEAGUES[P.league].name}</b>로 올라갔어요!<br/>더 강한 팀들과 붙어요. 명성 +8</p>`
+      : `<p><b>${esc(P.club)}</b>가 <b>${LEAGUES[P.league].flag} ${LEAGUES[P.league].name}</b>로 떨어졌어요.<br/>계약은 그대로예요. 이적 시장에서 다른 팀 제안을 받을 수 있어요.</p>`,
+      buttons: [{ label: "이적 시장으로", value: 1, cls: "btn-primary" }] });
+  } else save();
   const ct = S.contract;
   if (ct && ct.club === P.club) ct.years--;
   const free = !ct || ct.club !== P.club || ct.years <= 0;
@@ -1394,14 +1408,20 @@ async function offseason() {
 function bindPlayerLinks(root) {
   root.querySelectorAll("[data-pid]").forEach((a) => a.onclick = (e) => { e.stopPropagation(); openPlayer(a.dataset.pid); });
 }
+/* 순위표 승강권: 1부 하위 2팀 강등, 2부 상위 2팀 승격 */
+function zoneCls(lgId, i) { const l = LEAGUES[lgId], n = l.clubs.length; return l.down != null && i >= n - 2 ? "z-rel" : l.up != null && i < 2 ? "z-pro" : ""; }
+function zoneLegend(lgId) { const l = LEAGUES[lgId]; return `<p class="small zone-lg">${l.down != null ? `<i class="z-rel"></i> 강등권 (${LEAGUES[l.down].name})` : `<i class="z-pro"></i> 승격권 (${LEAGUES[l.up].name})`}</p>`; }
 function openLeague(lgId = S.pro.league, tab = "table") {
-  const lgBtns = LEAGUES.map((l) => `<button class="${l.id === lgId ? "on" : ""}" data-lg="${l.id}">${l.flag} ${l.name}</button>`).join("");
+  const cur = LEAGUES[lgId], top = cur.div === 2 ? LEAGUES[cur.up] : cur;
+  const lgBtns = TOP_LEAGUES.map((l) => { const t = cur.div === 2 ? LEAGUES[l.down] : l; return `<button class="${l.id === top.id ? "on" : ""}" data-lg="${t.id}">${t.flag} ${t.name}</button>`; }).join("");
+  const divBtns = top.down != null ? `<div class="seg lg-div"><button class="${cur.div === 1 ? "on" : ""}" data-lg="${top.id}">1부</button><button class="${cur.div === 2 ? "on" : ""}" data-lg="${top.down}">2부</button></div>` : "";
   const tabs = [["table", "순위"], ["res", "결과"], ["g", "득점"], ["a", "도움"], ["rt", "평점"], ["kp", "키패스"], ["pp", "패스%"], ["tc", "태클"], ["cup", "대륙컵"]].map(([k, n]) => `<button class="${k === tab ? "on" : ""}" data-tab="${k}">${n}</button>`).join("");
   let body;
   const pl = (p) => `<a class="pl" data-pid="${p.id}">${esc(p.n)}</a>`;
   if (tab === "table") {
     body = `<table class="tbl"><tr><th>#</th><th>클럽</th><th>경기</th><th>승</th><th>무</th><th>패</th><th>득실</th><th>승점</th></tr>${sortedTable(lgId).map(([n, t], i) =>
-      `<tr class="${n === S.pro.club ? "me" : n === W.p.rv.c ? "rv" : ""}"><td>${i + 1}</td><td><a class="pl" data-club="${esc(n)}">${crestHTML(n, 14)} ${esc(n)}</a></td><td>${t.p}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table>`;
+      `<tr class="${n === S.pro.club ? "me" : n === W.p.rv.c ? "rv" : ""} ${zoneCls(lgId, i)}"><td>${i + 1}</td><td><a class="pl" data-club="${esc(n)}">${crestHTML(n, 14)} ${esc(n)}</a></td><td>${t.p}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table>`;
+    body += zoneLegend(lgId);
   } else if (tab === "res") {
     const rs = S.lgs[lgId].res.slice(-5);
     body = rs.length ? rs.map((x) => `<div class="rep"><div>${crestHTML(x.h, 16)} <b>${esc(x.h)}</b> <em>${x.hg}:${x.ag}</em> <b>${esc(x.a)}</b> ${crestHTML(x.a, 16)}</div><small>${x.g.map((g) => `${g[0]}' ${esc(g[2])}${g[3] ? ` (${esc(g[3])})` : ""}`).join(" · ") || "득점 없음"}${x.mom ? ` · ⭐ ${esc(x.mom[0])} ${x.mom[1]}` : ""}${(x.rc || []).map((c) => ` · ${c[2] === "inj" ? "🚑" : "🟥"} ${esc(c[1])} ${c[0]}'`).join("")}${x.ts ? `<br/>점유 ${x.ts[0]}:${100 - x.ts[0]} · 슈팅 ${x.ts[1]}(${x.ts[2]}):${x.ts[4]}(${x.ts[5]}) · xG ${x.ts[3]}:${x.ts[6]} · 패스 ${x.ts[7]}%:${x.ts[8]}%` : ""}</small></div>`).join("") : "<p>아직 경기가 없어요.</p>";
@@ -1413,7 +1433,7 @@ function openLeague(lgId = S.pro.league, tab = "table") {
     body = list.length ? `<table class="tbl"><tr><th>#</th><th>선수</th><th>클럽</th><th>경기</th><th>⚽</th><th>🅰️</th>${extra ? `<th>${extra[0]}</th>` : ""}<th>평점</th></tr>${list.map((p, i) =>
       `<tr class="${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}"><td>${i + 1}</td><td>${NATIONS[p.nat].flag}${pl(p)}${p.id === "rv" ? "⚔️" : ""}</td><td>${esc(shortName(p.c))}</td><td>${p.s.ap}</td><td>${p.s.g}</td><td>${p.s.a}</td>${extra ? `<td><b>${extra[1](p)}</b></td>` : ""}<td>${pAvg(p).toFixed(2)}</td></tr>`).join("")}</table>` : "<p>아직 기록이 없어요.</p>";
   }
-  const p = modal({ title: "🏆 세계 축구", wide: true, html: `<div class="seg wrap lg-seg">${lgBtns}</div><div class="seg wrap lg-seg">${tabs}</div><div class="lg-body">${body}</div>`, buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }] });
+  const p = modal({ title: "🏆 세계 축구", wide: true, html: `${divBtns}<div class="seg wrap lg-seg">${lgBtns}</div><div class="seg wrap lg-seg">${tabs}</div><div class="lg-body">${body}</div>`, buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }] });
   setTimeout(() => {
     document.querySelectorAll("#modal [data-lg]").forEach((b) => b.onclick = () => openLeague(+b.dataset.lg, tab));
     document.querySelectorAll("#modal [data-tab]").forEach((b) => b.onclick = () => openLeague(lgId, b.dataset.tab));
@@ -1602,7 +1622,7 @@ function openHelp() {
         <li><b>🥅 페널티킥 · 승부차기</b>: 팀에서 슈팅이 가장 좋으면 내가 키커예요. 컵·결승 무승부는 승부차기로 가요.</li>
       </ul>
       <p>능력치가 높을수록 판정 구간이 넓어지고 게이지가 느려져요. 🤖 자동을 켜면 AI 선수들과 똑같은 확률로 계산돼요.</p>
-      <p><b>🌍 축구 세계</b><br/>6개 리그(K리그1, J리그, 네덜란드, 포르투갈, 스페인, 잉글랜드) 60개 클럽의 960명이 매 라운드 실제로 경기를 치러요. 모든 경기는 같은 엔진이에요: 미드필드 싸움으로 찬스가 나고, 슈터·패서·수비수·키퍼의 실제 능력치로 결과가 정해져요. 선수들은 나이 들고, 성장하고, 이적하고, 은퇴해요.</p>
+      <p><b>🌍 축구 세계</b><br/>6개 나라(한국, 일본, 네덜란드, 포르투갈, 스페인, 잉글랜드)의 1부·2부 12개 리그, 120개 클럽 1,920명이 매 라운드 실제로 경기를 치러요. 시즌이 끝나면 1부 하위 2팀과 2부 상위 2팀이 자리를 바꿔요. 모든 경기는 같은 엔진이에요: 미드필드 싸움으로 찬스가 나고, 슈터·패서·수비수·키퍼의 실제 능력치로 결과가 정해져요. 선수들은 나이 들고, 성장하고, 이적하고, 은퇴해요.</p>
       <p><b>📅 프로</b><br/>한 시즌 ${ROUNDS}라운드(홈·원정). 같은 자리 동료보다 잘해야 선발이에요. 리그 상위권이면 다음 시즌 대륙컵(챔피언스 컵·아시아 챔피언스 컵), 4시즌마다 월드컵. 31세부터 은퇴 가능, 36세 시즌이 마지막이에요.</p>
       <p><b>🎚️ 난이도</b><br/>쉬움·보통·어려움에 따라 성장 속도, 부상, 라이벌의 독함, 이적 제안, 슈팅 미니게임 난이도가 달라져요.</p></div>`,
     buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }],
@@ -1657,6 +1677,7 @@ function openHof(tab = "world") {
 async function resume() {
   S = load();
   if (!S) return initTitle();
+  applyMem(S.lgMem);
   W = S.world || null;
   if (!S.diff) S.diff = "normal";
   // 옛 세이브는 비슷한 초상화를 골라 입혀요

@@ -109,6 +109,73 @@ function mkPlayer(nat, role, target, age, used) {
   aiEnsure(p); refreshO(p); return p;
 }
 
+/* ---------- 리그 소속 (승강) ----------
+ * LEAGUES[i].clubs 는 "지금 그 리그에 있는 팀". 처음 배치는 data.js, 승강 후 배치는 세이브의 S.lgMem 에 저장해요 */
+const CLUB_T = {}, LG_ORIG = LEAGUES.map((l) => l.clubs.map((c) => { CLUB_T[c[0]] = c; return c[0]; }));
+function applyMem(mem) {
+  LEAGUES.forEach((l, i) => { const names = mem && mem[i] ? mem[i] : LG_ORIG[i]; l.clubs = names.map((n) => CLUB_T[n]).filter(Boolean); });
+}
+/* 시즌 끝: 1부 하위 2팀 ↔ 2부 상위 2팀 */
+function promoRelegate() {
+  const out = [];
+  if (S.prDone === (S.pro && S.pro.season)) return out;
+  const moveLg = (name, to) => {
+    const from = LEAGUES[W.c[name].l], i = from.clubs.findIndex((c) => c[0] === name);
+    const tup = i >= 0 ? from.clubs.splice(i, 1)[0] : CLUB_T[name];
+    LEAGUES[to].clubs.push(tup); W.c[name].l = to;
+    for (const id of W.c[name].ids) if (W.p[id]) W.p[id].l = to;
+  };
+  for (const lg of LEAGUES) {
+    if (lg.down == null) continue;
+    const lo = LEAGUES[lg.down], T1 = S.lgs[lg.id], T2 = S.lgs[lo.id];
+    if (!T1 || !T2) continue;
+    const t1 = sortedTable(lg.id).map((x) => x[0]).filter((n) => W.c[n] && W.c[n].l === lg.id);
+    const t2 = sortedTable(lo.id).map((x) => x[0]).filter((n) => W.c[n] && W.c[n].l === lo.id);
+    if (t1.length < 4 || t2.length < 4 || !(Object.values(T1.table)[0] || {}).p) continue;
+    const down = t1.slice(-2), up = t2.slice(0, 2);
+    down.forEach((n) => { moveLg(n, lo.id); W.c[n].base = Math.round((W.c[n].base - 1.5) * 10) / 10; });
+    up.forEach((n) => { moveLg(n, lg.id); W.c[n].base = Math.round((W.c[n].base + 1.5) * 10) / 10; });
+    news(`🔁 ${lg.flag} ⬆️ ${lg.name} 승격: ${up.join(", ")} · ⬇️ ${lo.name} 강등: ${down.join(", ")}`);
+    out.push({ lg: lg.id, lo: lo.id, up, down });
+  }
+  S.lgMem = LEAGUES.map((l) => l.clubs.map((c) => c[0]));
+  S.prDone = S.pro && S.pro.season;
+  if (S.rival && S.rival.club && W.c[S.rival.club]) S.rival.league = W.c[S.rival.club].l;
+  return out;
+}
+/* 승강 미리보기 (시즌 결산 화면용, 실제 이동 전) */
+function promoPreview() {
+  return TOP_LEAGUES.filter((lg) => lg.down != null && S.lgs[lg.id] && S.lgs[lg.down]).map((lg) => ({
+    lg: lg.id, lo: lg.down, down: sortedTable(lg.id).map((x) => x[0]).slice(-2), up: sortedTable(lg.down).map((x) => x[0]).slice(0, 2) }));
+}
+/* 옛 세이브(2부 없던 때): 2부 팀과 선수를 만들고, 이번 시즌 지나간 라운드도 채워요 */
+function ensureDiv2() {
+  const miss = LEAGUES.filter((l) => l.div === 2 && l.clubs.some((c) => !W.c[c[0]]));
+  if (!miss.length) return false;
+  const used = new Set(Object.values(W.p).map((p) => p.n));
+  for (const lg of miss) for (const c of lg.clubs) {
+    if (W.c[c[0]]) continue;
+    const ids = [];
+    ROLE_SQUAD.forEach((role, i) => {
+      let o = c[1] + (i < 11 ? rand(-4, 4) : rand(-11, -4));
+      if (i < 11 && role !== "gk" && Math.random() < .12) o += rand(3, 7);
+      const p = mkPlayer(pickNat(lg.mix), role, clamp(o, 40, 92), randi(18, 33), used);
+      p.c = c[0]; p.l = lg.id; W.p[p.id] = p; ids.push(p.id);
+    });
+    W.c[c[0]] = { l: lg.id, base: c[1], kit: [c[2], c[3]], ids };
+    anchorClub(c[0], 1);
+  }
+  ensureCoaches();
+  if (S.lgs) for (const lg of miss) {
+    const names = lg.clubs.map((c) => c[0]).sort(() => Math.random() - .5);
+    S.lgs[lg.id] = { rounds: makeRounds(names), table: Object.fromEntries(names.map((n) => [n, { p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 }])), res: [] };
+    const done = S.pro ? S.pro.round || 0 : 0;
+    for (let r = 0; r < done; r++) for (const [h, a] of S.lgs[lg.id].rounds[r]) credit(playAI(teamFor(h, { home: true }), teamFor(a)), "league", lg.id, h, a);
+  }
+  S.lgMem = LEAGUES.map((l) => l.clubs.map((c) => c[0]));
+  return true;
+}
+
 /* ---------- 세계 만들기 ---------- */
 function initWorld() {
   W = S.world = { p: {}, c: {}, n: 1 };
@@ -515,7 +582,7 @@ function simRoundRest(round, skip) {
       credit(playAI(teamFor(h, { home: true }), teamFor(a)), "league", lg.id, h, a);
     }
     const leader = sortedTable(lg.id)[0][0];
-    if (round >= 5 && leader !== leaderBefore) news(`📈 ${lg.flag} ${leader}, ${lg.name} 선두 등극`);
+    if (round >= 5 && leader !== leaderBefore && (lg.div === 1 || (S.pro && lg.id === S.pro.league))) news(`📈 ${lg.flag} ${leader}, ${lg.name} 선두 등극`);
   }
   for (const id in W.p) { const p = W.p[id]; if (p.inj > 0) p.inj--; if (p.ban > 0) p.ban--; }
   if (S.rival.ban > 0) S.rival.ban--;

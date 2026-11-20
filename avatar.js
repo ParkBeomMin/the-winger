@@ -174,10 +174,12 @@ function avatarCanvas(look, kit, px = 64, opt = {}) {
 /* ---------- 구단 엠블럼 ----------
  * Muse로 만든 엠블럼(assets/crests/crest_리그_번호.webp)이 있으면 그걸, 없으면 유니폼 색 방패를 그려요 */
 function crestId(club) {
-  for (const l of LEAGUES) { const i = l.clubs.findIndex((c) => c[0] === club); if (i >= 0) return `crest_${l.id}_${i}`; }
+  if (CREST_ID[club]) return CREST_ID[club];
   return null;
 }
-function crestKit(club) { for (const l of LEAGUES) { const c = l.clubs.find((x) => x[0] === club); if (c) return [c[2], c[3]]; } return null; }
+const CREST_ID = {}, CREST_KIT = {};
+LEAGUES.forEach((l) => l.clubs.forEach((c, i) => { CREST_ID[c[0]] = `crest_${l.id}_${i}`; CREST_KIT[c[0]] = [c[2], c[3]]; }));
+function crestKit(club) { return CREST_KIT[club] || null; }
 function crestHTML(club, size = 22, cls = "") {
   const id = crestId(club);
   if (!id) return "";
