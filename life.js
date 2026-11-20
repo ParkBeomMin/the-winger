@@ -207,7 +207,7 @@ function takeSig() {
   return null;
 }
 const EV_IMG = new Set(["ad", "agent", "bench", "boots", "coachpos", "fan", "interview", "knee", "mentor", "mom", "national", "night", "no10", "party", "rivalhurt", "scout", "taunt", "together", "youtube"]);
-const SIG_IMG = { benched3: "bench", awful: "bench", hattrick: "mom", superb: "interview", newclub: "together", rivalhattrick: "taunt", matchinjury: "knee", contractlast: "agent", transferblocked: "agent", winning4: "party", losing3: "night", newcoach: "coachpos", wcdropped: "night" };
+const SIG_IMG = { benched3: "bench", awful: "bench", superb: "interview", newclub: "together", rivalhattrick: "taunt", matchinjury: "knee", contractlast: "agent", transferblocked: "agent", winning4: "party", losing3: "night", newcoach: "coachpos", wcdropped: "night" };
 function evImg(id) { const k = SIG_IMG[id] || id; return EV_IMG.has(k) ? `assets/ev_${k}.webp` : null; }
 /* 명성 등급이 오르면 알려줘요 */
 function checkFameUp() {
