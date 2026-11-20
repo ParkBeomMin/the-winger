@@ -156,6 +156,34 @@ async function openHofWorld() {
   box.querySelectorAll("[data-w]").forEach((d) => { const e = rows[+d.dataset.w]; try { d.appendChild(avatarCanvas({ face: FACE_IDS.includes(e.face) ? e.face : FACE_IDS[0], skin: 0, hair: 0, hairColor: 0, number: 0 }, [/^#[0-9a-f]{3,8}$/i.test(e.kit0) ? e.kit0 : "#3b7fd6", "#ffffff"], 44)); } catch { d.textContent = "⚽"; } });
 }
 
+/* ---------- 📮 광고 문의 ----------
+ * 이메일을 화면에 드러내지 않고, 문의는 Firestore(w2contact)에만 쌓여요. 읽기는 운영 페이지(관리자)만 돼요. */
+const INQ_LAST = "w2-inq-last";
+async function openAdInquiry() {
+  const last = +(localStorage.getItem(INQ_LAST) || 0);
+  if (Date.now() - last < 3600 * 1000) { toast(T("📮 문의를 이미 보냈어요. 1시간 뒤에 다시 보낼 수 있어요.", "📮 Already sent. You can send again in an hour.")); return; }
+  const f = { name: "", contact: "", msg: "" };
+  const p = modal({ emoji: "📮", title: T("광고 · 제휴 문의", "Advertising inquiry"), html: `<p class="small">${T("더 윙어 2 하단 배너, 게임 안 이벤트·아이템 협찬 등 무엇이든 남겨 주세요. 확인 후 적어 주신 연락처로 답드려요.", "Banner ads, in-game sponsorship, anything. We will reply to the contact you leave.")}</p>
+    <div class="inq"><input id="inq-name" maxlength="40" placeholder="${T("회사 · 이름 (선택)", "Company / name (optional)")}"/>
+    <input id="inq-contact" maxlength="80" placeholder="${T("답받을 연락처 (이메일 등)", "Reply contact (email etc.)")}"/>
+    <textarea id="inq-msg" maxlength="1000" rows="5" placeholder="${T("문의 내용", "Your message")}"></textarea></div>`,
+    buttons: [{ label: T("보내기", "Send"), value: "send", cls: "btn-primary" }, { label: T("취소", "Cancel"), value: null }] });
+  setTimeout(() => { for (const k of ["name", "contact", "msg"]) { const el = document.getElementById("inq-" + k); if (el) el.oninput = () => (f[k] = el.value); } }, 0);
+  if ((await p) !== "send") return;
+  const name = f.name.trim().slice(0, 40), contact = f.contact.trim().slice(0, 80), msg = f.msg.trim().slice(0, 1000);
+  if (contact.length < 3 || msg.length < 5) { toast(T("⚠️ 연락처와 문의 내용을 적어 주세요", "⚠️ Please add a contact and a message")); return openAdInquiry(); }
+  try {
+    const a = await fbAuth();
+    const id = `q${Date.now().toString(36)}${a.uid.slice(0, 6)}`;
+    const w = fsDoc(`w2contact/${id}`, { uid: a.uid, name, contact, msg, lang: window.W2_LANG === "en" ? "en" : "ko", v: String(VERSION).slice(0, 20) }); w.currentDocument = { exists: false };
+    const r = await fbCommit([w], a.tok);
+    if (!r.ok) throw new Error(r.status);
+    localStorage.setItem(INQ_LAST, String(Date.now()));
+    track("ad_inquiry_sent");
+    toast(T("📮 문의를 보냈어요. 고마워요!", "📮 Sent. Thank you!"), 3000);
+  } catch { toast(T("⚠️ 보내지 못했어요. 잠시 뒤에 다시 해 주세요.", "⚠️ Could not send. Please try again later.")); }
+}
+
 /* ---------- 시작 ---------- */
 function onlineStart() {
   feverRefresh(); noticeRefresh();

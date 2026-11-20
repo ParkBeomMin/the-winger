@@ -27,6 +27,7 @@ async function del(path) {
   const r = await fetch(`${FB_BASE}/${path}`, { method: "DELETE", headers: { Authorization: "Bearer " + t } });
   if (!r.ok) alert("삭제 실패 " + r.status);
 }
+async function listAuth(col) { const t = await tok(); const r = await fetch(`${FB_BASE}/${col}?pageSize=100`, { headers: { Authorization: "Bearer " + t } }); return r.ok ? ((await r.json()).documents || []).map(objOf) : []; }
 async function list(col) { const r = await fetch(`${FB_BASE}/${col}?pageSize=50`); return r.ok ? ((await r.json()).documents || []).map(objOf) : []; }
 const fmt = (ms) => new Date(ms).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
 
@@ -37,6 +38,8 @@ async function loadAll() {
   $("nt-list").innerHTML = nt.map((n) => `<div class="item"><div>${n.pin ? "📌 " : ""}<b>${esc(n.title)}</b><br/><span class="small">${fmt(n.at)}</span></div><button class="del" data-del="w2notices/${n.id}">삭제</button></div>`).join("") || `<p class="small">등록된 공지가 없어요</p>`;
   const hof = (await list("w2hof")).sort((a, b) => b.score - a.score);
   $("hof-list").innerHTML = hof.map((h) => `<div class="item"><div><b>${esc(h.name)}</b> ${Number(h.score) | 0}점 · ${esc(h.grade)}<br/><span class="small">${esc(h.club)} · ⚽${Number(h.g) | 0} 🅰️${Number(h.a) | 0} · ${esc(h.v)}</span></div><button class="del" data-del="w2hof/${encodeURIComponent(h.id)}">삭제</button></div>`).join("") || "아직 없어요";
+  if (ADM) { const q = (await listAuth("w2contact")).sort((a, b) => b.t - a.t);
+    $("inq-list").innerHTML = q.length ? q.map((x) => `<div class="item"><div><b>${esc(x.name || "(이름 없음)")}</b> · ${esc(x.contact)} <span class="small">${fmt(x.t)} · ${esc(x.lang)}</span><br/><span style="white-space:pre-wrap">${esc(x.msg)}</span></div><button class="del" data-del="w2contact/${x.id}">삭제</button></div>`).join("") : "<p class='small'>아직 문의가 없어요</p>"; }
   document.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => { if (!confirm("삭제할까요?")) return; await del(b.dataset.del); loadAll(); });
 }
 

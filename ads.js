@@ -62,8 +62,26 @@ function adBanner(screenId) {
       ins.style.cssText = "display:inline-block;width:320px;height:50px";
       ins.setAttribute("data-ad-client", ADS.client); ins.setAttribute("data-ad-slot", ADS.slot);
       bar.appendChild(ins); try { window.adsbygoogle.push({}); } catch {}
-    } else bar.innerHTML = `<div class="ad-ph">하단 배너 광고 자리 (320x50)</div>`;
+      houseAdWatch(bar, ins);
+    } else { bar.innerHTML = `<div class="ad-ph">하단 배너 광고 자리 (320x50)</div>`; if (/[?&]house=1/.test(location.search)) { bar.innerHTML = ""; houseAd(bar); } }
   }
+}
+
+/* 📮 광고가 비면(애드센스 응답 "unfilled" 또는 8초 동안 응답 없음) 그 자리에 '광고 문의' 배너를 띄워요.
+ * 애드센스가 대신 채워 주는 관련 검색어(unfill-optimized)는 구글 콘텐츠라 그대로 둬요. */
+const adT = (ko, en) => (window.W2_LANG === "en" ? en : ko);
+function houseAd(bar, ins) {
+  if (bar.querySelector(".house-ad")) return;
+  if (ins) ins.style.display = "none";
+  const b = document.createElement("button"); b.className = "house-ad"; b.type = "button";
+  b.innerHTML = `<b>${adT("📢 이 자리에 광고하세요", "📢 Advertise here")}</b><small>${adT("더 윙어 2 광고 문의 ›", "The Winger 2 ad inquiry ›")}</small>`;
+  b.onclick = () => { track("ad_inquiry_open"); if (typeof openAdInquiry === "function") openAdInquiry(); };
+  bar.appendChild(b);
+}
+function houseAdWatch(bar, ins) {
+  const check = () => { const st = ins.getAttribute("data-ad-status"); if (st === "unfilled") houseAd(bar, ins); return !!st; };
+  new MutationObserver(check).observe(ins, { attributes: true, attributeFilter: ["data-ad-status"] });
+  setTimeout(() => { if (!check() && !ins.querySelector("iframe")) houseAd(bar, ins); }, 8000);
 }
 
 /* 자동 광고(앵커)와 우리 하단 배너가 겹치지 않게:
