@@ -156,19 +156,25 @@ function bestXI(players, noisy = true, form = "4-3-3") {
   const roles = (FORMS[form] || FORMS["4-3-3"]).roles;
   const used = new Set(), xi = [];
   xi.roles = [];
-  // 자리 순서: 원래 포지션 선수부터 채우고, 남는 자리는 적성이 맞는 다른 포지션 선수로
-  const order = roles.map((r, i) => i).sort((a, b) => (roles[a] === "gk" ? -1 : 0) - (roles[b] === "gk" ? -1 : 0));
-  const fill = new Array(roles.length).fill(null);
-  for (const i of order) {
-    const role = roles[i];
-    const cands = scored.filter(([p]) => !used.has(p) && (p.r === role || (role !== "gk" && p.r !== "gk" && COMPAT[p.r][role])))
-      .map(([p, v]) => [p, p.r === role ? v : v * COMPAT[p.r][role]]).sort((a, b) => b[1] - a[1]);
-    // 원래 자리 선수가 있으면 우선 (적성 선수는 확실히 더 잘할 때만)
-    const nat = cands.find(([p]) => p.r === role), alt = cands[0];
-    let c = nat && alt && alt[0] !== nat[0] && alt[1] > nat[1] + 3 ? alt : nat || alt;
-    if (!c) c = scored.filter(([p]) => !used.has(p) && p.r !== "gk").sort((a, b) => b[1] - a[1])[0];
+  // 1) 자리마다 원래 포지션 선수부터 (윙어 자리는 윙어로). 2) 벤치의 다른 포지션 선수가 확실히(+3) 나으면 교체.
+  // 3) 그래도 빈 자리만 적성 맞는 다른 포지션 선수로. 원래 자리 주전이 엉뚱한 자리로 밀려나지 않게.
+  const fill = new Array(roles.length).fill(null), fv = new Array(roles.length).fill(0);
+  const byV = (arr) => arr.sort((x, y) => y[1] - x[1]);
+  roles.forEach((role, i) => {
+    const c = byV(scored.filter(([p]) => !used.has(p) && p.r === role))[0];
+    if (c) { used.add(c[0]); fill[i] = c[0]; fv[i] = c[1]; }
+  });
+  roles.forEach((role, i) => {
+    if (!fill[i] || role === "gk") return;
+    const alt = byV(scored.filter(([p]) => !used.has(p) && p.r !== "gk" && p.r !== role && COMPAT[p.r][role]).map(([p, v]) => [p, v * COMPAT[p.r][role]]))[0];
+    if (alt && alt[1] > fv[i] + 3) { used.delete(fill[i]); used.add(alt[0]); fill[i] = alt[0]; fv[i] = alt[1]; }
+  });
+  roles.forEach((role, i) => {
+    if (fill[i]) return;
+    let c = role === "gk" ? null : byV(scored.filter(([p]) => !used.has(p) && p.r !== "gk" && COMPAT[p.r][role]).map(([p, v]) => [p, v * COMPAT[p.r][role]]))[0];
+    if (!c) c = byV(scored.filter(([p]) => !used.has(p) && (role === "gk" ? true : p.r !== "gk")))[0];
     if (c) { used.add(c[0]); fill[i] = c[0]; }
-  }
+  });
   fill.forEach((p, i) => { if (p) { xi.push(p); xi.roles.push(roles[i]); } });
   return xi;
 }
