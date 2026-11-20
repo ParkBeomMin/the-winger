@@ -78,7 +78,7 @@ function feverTick() {
   const e = feverLive();
   let bar = document.getElementById("fever-bar");
   if (!e) { if (bar) bar.remove(); document.body.classList.remove("fever-on"); return; }
-  if (!bar) { bar = document.createElement("div"); bar.id = "fever-bar"; document.body.appendChild(bar); bar.onclick = () => feverAnnounce(e, true); }
+  if (!bar) { bar = document.createElement("div"); bar.id = "fever-bar"; document.body.prepend(bar); bar.onclick = () => feverAnnounce(e, true); }
   document.body.classList.add("fever-on");
   bar.innerHTML = `<span>${esc(e.emoji)}</span><b>${esc(e.title)}${e.more ? ` 외 ${e.more}개` : ""}</b><em>${feverEffText(e)}</em><small>${leftText(e.to)}</small>`;
   feverAnnounce(e);
