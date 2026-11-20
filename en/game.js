@@ -336,7 +336,7 @@ function renderMain() {
   let html = STATS.map((s) => `<button class="act" data-train="${s.key}" ${inj ? "disabled" : ""}><span>${s.emoji}</span><b>${s.name} Training</b><small>${trainPreview(s.key)}</small>${risk ? `<i class="risk">Injury ${risk}%</i>` : ""}</button>`).join("");
   html += `<button class="act rest" data-rest="1"><span>${inj ? "🏥" : "🛌"}</span><b>${inj ? "Rehab" : "Rest"}</b><small>Condition +${32 + S.gear.recovery * 8}</small></button>`;
   if (S.phase === "youth") html += `<button class="act auto" data-auto="1" ${inj ? "disabled" : ""}><span>⏩</span><b>Auto-play</b><small>Until next tournament</small></button>`;
-  else html += `<button class="act auto" data-quick="1"><span>⚡</span><b>Rest of Rounds</b><small>Finish the season fast</small></button>`;
+  else html += `<button class="act auto" data-auto="1"><span>⏩</span><b>Auto-play</b><small>Until the match</small></button>`;
   $("actions").innerHTML = html;
   $("actions").querySelectorAll("[data-train]").forEach((b) => b.onclick = () => turn({ kind: "train", key: b.dataset.train }, b));
   $("actions").querySelector("[data-rest]").onclick = (e) => turn({ kind: "rest" }, e.currentTarget);
@@ -494,10 +494,18 @@ async function openAuto() {
   const keys = Object.entries(POS[S.pos].w).sort((a, b) => b[1] - a[1]).filter(([, w]) => w > 0).map(([k]) => k);
   const v = await modal({
     emoji: "⏩", title: "Auto-play",
-    html: `<p>Trains and rests on its own until right before the next tournament.<br/>Rests when Condition is low, and stops when an event occurs.</p>`,
-    buttons: [{ label: "⚖️ Position Balance", value: "bal", cls: "btn-primary" }, ...keys.slice(0, 4).map((k) => ({ label: `${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} Focus`, value: k })), { label: "Cancel", value: null }],
+    html: S.phase === "pro" ? `<p>Picks this round's training for you and goes straight to the match.<br/>Rests instead if your condition is low or you are injured.</p>` : `<p>Trains and rests on its own until right before the next tournament.<br/>Rests when Condition is low, and stops when an event occurs.</p>`,
+    buttons: [{ label: "⚖️ Position Balance", value: "bal", cls: "btn-primary" }, ...keys.slice(0, 4).map((k) => ({ label: `${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} Focus`, value: k })), ...(S.phase === "pro" ? [{ label: `⚡ Fast-forward ${ROUNDS - S.pro.round} rounds (results only)`, value: "quick" }] : []), { label: "Cancel", value: null }],
   });
   if (!v) return;
+  if (v === "quick") return quickSeason(true);
+  if (S.phase === "pro") {
+    let a;
+    if (S.injured > 0 || S.cond < 45) a = { kind: "rest" };
+    else { let k = v; if (v === "bal" || S.stats[v] >= statCap(v)) k = bestTrainKey(); a = { kind: "train", key: k }; }
+    const btn = $("actions").querySelector(a.kind === "rest" ? "[data-rest]" : `[data-train="${a.key}"]`);
+    return turn(a, btn, true);
+  }
   for (let guard = 0; guard < 13; guard++) {
     if (S.phase !== "youth" || !$("scr-main").classList.contains("active")) break;
     const left = S.month <= 6 ? 6 - S.month : 12 - S.month;
