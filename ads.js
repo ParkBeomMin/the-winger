@@ -35,14 +35,16 @@ if (ADS.on && ADS.prod) {
 function adNext(name) {
   if (!ADS.on || !ADS.prod) return Promise.resolve();
   return new Promise((res) => {
-    let done = false; const fin = (info) => { if (done) return; done = true; if (typeof Bgm !== "undefined" && ADS.prevBgm !== undefined) { Bgm.set(ADS.prevBgm); ADS.prevBgm = undefined; } if (info && info.breakStatus === "viewed") track("ad_break", { name }); res(); };
+    let done = false, shown = false; const fin = (info) => { if (done) return; done = true; if (typeof Bgm !== "undefined" && ADS.prevBgm !== undefined) { Bgm.set(ADS.prevBgm); ADS.prevBgm = undefined; } if (info && info.breakStatus === "viewed") track("ad_break", { name }); res(); };
     try {
       adBreak({ type: "next", name,
-        beforeAd: () => { if (typeof Bgm !== "undefined") { ADS.prevBgm = Bgm.mode; Bgm.set(null); } },
+        beforeAd: () => { shown = true; if (typeof Bgm !== "undefined") { ADS.prevBgm = Bgm.mode; Bgm.set(null); } },
         afterAd: () => {},
         adBreakDone: fin });
     } catch { fin(); }
-    setTimeout(() => fin(), 5000);
+    // 광고가 2초 안에 안 뜨면 기다리지 않고 넘어가요 (뜬 광고는 끝날 때까지, 최대 60초)
+    setTimeout(() => { if (!shown) fin(); }, 2000);
+    setTimeout(() => fin(), 60000);
   });
 }
 const HIDE_AD_ON = [];   // 모든 화면에 하단 배너 (미니게임 창이 뜨면 그 위를 덮어요)

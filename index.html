@@ -214,7 +214,21 @@ button:disabled{opacity:.4;cursor:default}
 .hof-row b{color:var(--acc)}.hof-row b small{color:var(--dim)}.hof-row em{font-family:Jua;color:var(--acc2);font-style:normal}
 
 /* 모달 / 토스트 */
-#modal .mbox.still{animation:none}.lg-div{display:flex;justify-content:center;gap:6px;margin-bottom:6px}.lg-div button{min-width:64px}
+#modal .mbox.still{animation:none}#loading{position:fixed;inset:0;z-index:120;background:rgba(3,10,6,.86);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center}#loading[hidden]{display:none}
+.ld-box{display:flex;flex-direction:column;align-items:center;gap:14px;width:292px;padding:20px 16px 18px;background:#0f2418;border:1.5px solid rgba(124,240,172,.35);border-radius:18px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.ld-crests{width:260px;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 22%,#000 78%,transparent);mask-image:linear-gradient(90deg,transparent,#000 22%,#000 78%,transparent)}
+.ld-strip{display:flex;width:max-content;will-change:transform;animation:ldscroll 3.2s linear infinite}.ld-strip span{width:52px;display:flex;justify-content:center}.ld-strip img,.ld-strip svg{width:40px;height:40px}
+@keyframes ldscroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.ld-run{width:260px;height:54px;position:relative;border-bottom:2px dashed rgba(124,240,172,.35)}
+.ld-runner{position:absolute;left:0;bottom:2px;display:flex;align-items:flex-end;gap:2px;will-change:transform;animation:ldrun 2.4s linear infinite}
+.ld-av{display:block;will-change:transform;animation:ldhop .32s ease-in-out infinite alternate}.ld-av canvas{display:block;width:40px;height:40px}
+.ld-ball{font-size:16px;line-height:1;display:block;will-change:transform;animation:ldspin .5s linear infinite}
+@keyframes ldrun{from{transform:translateX(-50px)}to{transform:translateX(270px)}}
+@keyframes ldhop{from{transform:translateY(0)}to{transform:translateY(-7px)}}
+@keyframes ldspin{to{transform:rotate(360deg)}}
+.ld-txt{font-family:Jua;color:var(--acc);font-size:1.05rem;margin:0}.ld-txt em{font-style:normal;animation:lddot 1.2s infinite;opacity:.2}.ld-txt em:nth-child(2){animation-delay:.2s}.ld-txt em:nth-child(3){animation-delay:.4s}
+@keyframes lddot{0%,100%{opacity:.2}40%{opacity:1}}
+.lg-div{display:flex;justify-content:center;gap:6px;margin-bottom:6px}.lg-div button{min-width:64px}
 tr.z-rel td:first-child{box-shadow:inset 3px 0 0 #e05252}tr.z-pro td:first-child{box-shadow:inset 3px 0 0 #3fcf7a}.zone-lg{display:flex;align-items:center;gap:6px;justify-content:center;margin-top:6px}.zone-lg i{display:inline-block;width:10px;height:10px;border-radius:2px}.zone-lg i.z-rel{background:#e05252}.zone-lg i.z-pro{background:#3fcf7a}b.me-t{color:var(--acc)}
 #modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
 #modal[hidden]{display:none}
@@ -460,19 +474,19 @@ body.ad-on #toast{bottom:84px}.ad-ph{width:320px;height:50px;border:1px dashed #
 </main>
 <div id="modal" hidden></div>
 <div id="toast" hidden></div>
-<script src="ads.js?v=1.8.0"></script>
-<script src="data.js?v=1.8.0"></script>
-<script src="avatar.js?v=1.8.0"></script>
-<script src="match.js?v=1.8.0"></script>
-<script src="sound.js?v=1.8.0"></script>
-<script src="minigames.js?v=1.8.0"></script>
-<script src="events.js?v=1.8.0"></script>
-<script src="life.js?v=1.8.0"></script>
-<script src="world.js?v=1.8.0"></script>
-<script src="game.js?v=1.8.0"></script>
-<script src="cloud.js?v=1.8.0"></script>
-<script src="online.js?v=1.8.0"></script>
-<script src="nav.js?v=1.8.0"></script>
-<script src="share.js?v=1.8.0"></script>
+<script src="ads.js?v=1.8.1"></script>
+<script src="data.js?v=1.8.1"></script>
+<script src="avatar.js?v=1.8.1"></script>
+<script src="match.js?v=1.8.1"></script>
+<script src="sound.js?v=1.8.1"></script>
+<script src="minigames.js?v=1.8.1"></script>
+<script src="events.js?v=1.8.1"></script>
+<script src="life.js?v=1.8.1"></script>
+<script src="world.js?v=1.8.1"></script>
+<script src="game.js?v=1.8.1"></script>
+<script src="cloud.js?v=1.8.1"></script>
+<script src="online.js?v=1.8.1"></script>
+<script src="nav.js?v=1.8.1"></script>
+<script src="share.js?v=1.8.1"></script>
 </body>
 </html>
