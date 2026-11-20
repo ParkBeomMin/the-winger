@@ -426,6 +426,7 @@ function finishMatch(m) {
     if (p.r === "df" || p.r === "gk") r += ga === 0 ? .5 : -Math.max(0, ga - 1) * .18;
     r += (pOvr(p) - 70) / 60 + rand(-.35, .35) - (x.yc ? .2 : 0) - (x.rc ? 1.2 : 0);
     if (x.mins < 60) r = 6.2 + (r - 6.2) * Math.max(.3, x.mins / 60);
+    if (p.id === "me" && typeof F === "function") r += F("rate");
     ratings.set(p, Math.round(clamp(r, 3.5, 10) * 10) / 10);
   }
   let mom = null; for (const [p, r] of ratings) if (!mom || r > ratings.get(mom)) mom = p;

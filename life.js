@@ -78,6 +78,7 @@ function shopBuy(it, key) {
   if (fameAdd) { S.fame += fameAdd; if (it.id === "foundation" || it.id === "stadium") S.career.awardScore = (S.career.awardScore || 0) + (it.id === "stadium" ? 40 : 20); news(`💝 ${S.name}, ${it.name}${it.id === "clinic" ? "" : "!"}`); }
   if (it.repeat) S.flags["give_" + it.id] = S.pro ? S.pro.season : S.year;
   addLog(`🛍️ ${it.name}${it.cat === "gear" || it.cat === "staff" ? ` Lv.${S.gear[it.id]}` : ""} (${fmtMoney(price)})`);
+  if (typeof track === "function") track("shop_buy", { item: it.id });
   Sfx.good(); save();
 }
 async function openShop(cat = "gear") {
@@ -229,6 +230,7 @@ function talentStr(k, tal = S.talent[k], tr = trOf(k)) {
   return `${"★".repeat(tal)}${"☆".repeat(5 - tal)}${tr ? `<i class="trs">${"✦".repeat(tr)}</i>` : ""}`;
 }
 function addMast(k, n, E = S) {
+  if (E === S && typeof F === "function" && F("mast")) { const x = n * (1 + F("mast")); n = Math.floor(x) + (Math.random() < x % 1 ? 1 : 0); }
   if (!E.mast) E.mast = {};
   if (!E.trans) E.trans = {};
   const out = [];
@@ -297,7 +299,7 @@ async function showAwake() {
   if (!S.awake || !S.awake.length) return;
   const list = S.awake.splice(0);
   const tr = list.some((x) => x.kind === "trans");
-  Sfx.good();
+  (Sfx.levelup || Sfx.good)();
   await modal({ emoji: tr ? "🌌" : "🧬", title: tr ? "한계를 넘어섰어요!" : "재능이 깨어났어요!",
     html: `${list.map((x) => `<p class="awake ${x.kind}">${x.msg}</p>`).join("")}<p class="small">${tr ? "초월한 능력치는 99를 넘어 자랄 수 있고, 나이 들어도 덜 떨어져요." : "별이 많을수록 훈련으로 더 빨리 자라요. ★5 다음은 초월이에요."}</p>`,
     buttons: [{ label: "좋아!", value: 1, cls: "btn-primary" }] });

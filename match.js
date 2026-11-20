@@ -475,7 +475,7 @@ function playMatch(root, cfg) {
         const fromMe = ev.sh.id === "me";
         const path = ev.pen ? [{ x: side === "home" ? .89 : .11, y: .5 }, { x: side === "home" ? 1.005 : -.005, y: rand(.44, .56) }] : chancePath(side, runner, true);
         await runSeq(side, runner, path, 1, ev.pen ? 1.2 : fromMe ? 1.6 : 1.9, 1);
-        mine ? gf++ : ga++; updScore(); mine ? Sfx.goal() : Sfx.miss();
+        mine ? gf++ : ga++; updScore(); mine ? Sfx.goal() : Sfx.miss(); if (typeof Bgm !== "undefined") Bgm.roar(mine);
         feed(`⚽ ${nm(ev.sh)}의 ${ev.pen ? "페널티킥 " : ""}골!${ev.as ? ` (도움 ${nm(ev.as)})` : ""}`, (fromMe || (ev.as && ev.as.id === "me")) ? "me goal" : ev.rv ? "rival" : mine ? "goal" : "bad");
         await flashText(mine ? "GOAL!!" : "실점…", mine ? "goal" : "bad", mine ? 1100 : 800);
         if (fromMe) await replay(path.slice(1));
@@ -494,6 +494,7 @@ function playMatch(root, cfg) {
       const t = i.kind === "yc" ? `🟨 ${nm(i.p)} 경고` : i.kind === "yc2" ? `🟨🟥 ${nm(i.p)} 경고 누적 퇴장!` : i.kind === "rc" ? `🟥 ${nm(i.p)} 레드카드, 퇴장!`
         : `🚑 ${nm(i.p)} 부상${i.sub ? ` → ${nm(i.sub)} 교체 투입` : " (교체 카드가 없어 10명으로)"}`;
       feed(t + (mine ? "" : ` <small>(${esc(cfg.away.name)})</small>`), isMe ? "me" : i.kind === "yc" ? "" : "bad");
+      if (Sfx.card) Sfx.card();
       if (i.kind !== "yc") { if (!mine) Sfx.good(); else Sfx.bad(); }
       const sd = vis(i.side), idx = roster[sd].indexOf(i.p);
       if (i.kind !== "yc" && idx >= 0) { if (i.kind === "inj" && i.sub) roster[sd][idx] = i.sub; else teams[sd][idx].gone = true; }
@@ -524,7 +525,7 @@ function playMatch(root, cfg) {
         paused = false;
       }
       await waitMin(90);
-      paused = true; Sfx.whistle(true);
+      paused = true; if (Sfx.fulltime) Sfx.fulltime(); else Sfx.whistle(true);
       feed("🔔 경기 종료!");
       alive = false;
       resolve(cfg.m);
