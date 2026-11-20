@@ -1051,7 +1051,17 @@ async function proRound(quick = false) {
   const rvp = W.p.rv;
   if (!rvOpp && rvp.c) {
     const last = S.lgs[rvp.l].res.slice().reverse().find((x) => x.h === rvp.c || x.a === rvp.c);
-    if (last) lines.push(`⚔️ Rival news: ${esc(last.h)} ${last.hg}:${last.ag} ${esc(last.a)} · ${esc(rvp.n)} season ⚽${rvp.s.g} 🅰️${rvp.s.a}`);
+    if (last) {
+      // 라이벌 소식 카드: 라이벌 팀 기준 승패, 스코어, 이번 경기 골·도움, 시즌 기록
+      const home = last.h === rvp.c, gf = home ? last.hg : last.ag, ga = home ? last.ag : last.hg;
+      const res = gf > ga ? ["W", "W"] : gf < ga ? ["L", "L"] : ["D", "D"];
+      const gl = (last.g || []).filter((x) => x[2] === rvp.n).length, as = (last.g || []).filter((x) => x[3] === rvp.n).length;
+      const mom = last.mom && last.mom[0] === rvp.n;
+      const today = [gl ? `⚽ ${gl} goal${gl > 1 ? "s" : ""}` : "", as ? `🅰️ ${as} assist${as > 1 ? "s" : ""}` : "", mom ? "⭐ MOM" : ""].filter(Boolean).join(" · ") || "no goals or assists";
+      lines.push(`<div class="rvn"><div class="rvn-h">⚔️ Rival news <b>${esc(rvp.n)}</b></div>
+        <div class="rvn-m"><i class="rvn-${res[0]}">${res[1]}</i><span class="${home ? "me" : ""}">${esc(last.h)}</span><b>${last.hg} : ${last.ag}</b><span class="${home ? "" : "me"}">${esc(last.a)}</span></div>
+        <div class="rvn-s">This match: ${today}<br/>Season ⚽${rvp.s.g} 🅰️${rvp.s.a}${rvp.s.ap ? ` · Rating ${pAvg(rvp).toFixed(2)}` : ""}</div></div>`);
+    }
   }
   const gRank = P.s.g ? topBy(P.league, "g", 60).findIndex((p) => p.id === "me") + 1 : 0;
   lines.push(`📊 League #${myRank()} · Season ⚽${P.s.g} 🅰️${P.s.a}${gRank ? ` · Scoring #${gRank}` : ""}`);
