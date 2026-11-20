@@ -255,8 +255,9 @@ function playMatch(root, cfg) {
 
 
     /* --- 그리기 --- */
-    function px(x) { return 12 + x * (W - 24); }
-    function py(y) { return 10 + y * (H - 20); }
+    let flip = false;   // 후반: 진영 교체 (그릴 때만 180도 돌려요)
+    function px(x) { return 12 + (flip ? 1 - x : x) * (W - 24); }
+    function py(y) { return 10 + (flip ? 1 - y : y) * (H - 20); }
     function drawPitch() {
       for (let i = 0; i < 10; i++) { ctx.fillStyle = i % 2 ? "#2f8a4a" : "#2a7f44"; ctx.fillRect((W / 10) * i, 0, W / 10 + 1, H); }
       ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 1.5;
@@ -340,7 +341,7 @@ function playMatch(root, cfg) {
       const dt = Math.min(.05, (now - last) / 1000); last = now;
       if (!paused && !seq) {
         minute = Math.min(90, minute + dt * 4.5 * speed);
-        root.querySelector("#m-min").textContent = Math.floor(minute) + "'";
+        root.querySelector("#m-min").textContent = (minute < 45 ? "전반 " : "후반 ") + Math.floor(minute) + "'";
         if (!onPitch && minute >= subMin && teams.home[mySlot]) { onPitch = true; const s = myT0.subs.find((x) => x.in.id === "me"); if (s) roster.home[mySlot] = s.in; const mp = teams.home[mySlot]; mp.x = .5; mp.y = .02; feed(`🔁 ${me.name} 교체 투입!`, "me"); }
         const sdt = dt * Math.min(speed, 4);
         stepBall(sdt); stepPlayers(sdt);
@@ -513,12 +514,20 @@ function playMatch(root, cfg) {
       const myT = mySide === "home" ? cfg.m.H : cfg.m.A;
       const items = [...cfg.m.evs.map((e) => ({ min: e.min, ev: e })), ...(cfg.m.inc || []).map((i) => ({ min: i.min, inc: i })),
         ...myT.subs.filter((s) => !s.inj && s.in.id !== "me").map((s) => ({ min: s.min, sub: s, side: "home" })),
-        ...opT0.subs.filter((s) => !s.inj).map((s) => ({ min: s.min, sub: s, side: "away", quiet: true }))].sort((a, b) => a.min - b.min);
+        ...opT0.subs.filter((s) => !s.inj).map((s) => ({ min: s.min, sub: s, side: "away", quiet: true })), { min: 45.5, ht: true }].sort((a, b) => a.min - b.min);
       for (const it of items) {
         director = it.ev ? { side: vis(it.ev.side), min: it.min } : null;
         await waitMin(it.min);
         paused = true;
-        if (it.ev) await showEv(it.ev);
+        if (it.ht) {
+          // ⏸️ 하프타임: 휘슬 → 스코어 → 진영 바꿔 후반 킥오프 (후반은 원정팀이 차요)
+          Sfx.whistle(); feed(`⏸️ 전반 종료 ${gf} : ${ga}`);
+          root.querySelector("#m-min").textContent = "HT";
+          if (!skipping) await flashText("HALF TIME", "", 1000);
+          flip = true; kickoff("away"); unzoom(); trail = [];
+          if (!skipping) await sleepMs(500);
+          Sfx.whistle(); feed("▶️ 후반 시작! 진영을 바꿨어요");
+        } else if (it.ev) await showEv(it.ev);
         else if (it.sub) { swapIn(it.side, it.sub.out, it.sub.in); if (!it.quiet) feed(`🔁 교체: ${nm(it.sub.in)} IN · ${nm(it.sub.out)} OUT`); }
         else await showInc(it.inc);
         if (!skipping) await sleepMs(it.ev ? 180 : 80);

@@ -696,7 +696,7 @@ async function showResult(r, lines, btnLabel = "계속") {
     <div class="r-stats">${r.mins}분 · ⚽ ${r.goals} · 🅰️ ${r.assists} · 🛡️ ${r.saves} · 승부처 ${r.moments.filter((m) => m.ok).length}/${r.moments.length}</div>` : `<div class="r-stats">출전하지 못했어요</div>`}
     ${myStatsHTML(r.my)}
     ${teamStatsHTML(r.tm)}
-    ${r.goalsList.length ? `<div class="r-goals">${r.goalsList.map((g) => { const us = !r.mySide || g.side === r.mySide; return `<div class="gl ${us ? "us" : "them"}"><em>${g.min}'</em><span>⚽ ${g.sh.id === "me" ? "<b>" + esc(g.sh.n) + "</b>" : esc(g.sh.n)}${g.as ? `<small>도움 ${g.as.id === "me" ? "<b>" + esc(g.as.n) + "</b>" : esc(g.as.n)}</small>` : ""}</span></div>`; }).join("")}</div>` : ""}
+    ${r.goalsList.length ? `<div class="r-goals">${r.goalsList.map((g) => { const us = !r.mySide || g.side === r.mySide; return `<div class="gl ${us ? "us" : "them"}"><em>${g.min}'</em><span><i>⚽ ${g.sh.id === "me" ? "<b>" + esc(g.sh.n) + "</b>" : esc(g.sh.n)}</i>${g.as ? `<small>도움 ${g.as.id === "me" ? "<b>" + esc(g.as.n) + "</b>" : esc(g.as.n)}</small>` : ""}</span></div>`; }).join("")}</div>` : ""}
     <div class="r-lines">${lines.map((l) => `<div>${l}</div>`).join("")}</div>
     <button class="btn btn-primary" id="b-res">${btnLabel}</button>`;
   const body = $("mt-body");
