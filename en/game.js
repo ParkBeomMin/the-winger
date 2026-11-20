@@ -329,7 +329,8 @@ function renderMain() {
     const v = S.stats[s.key], w = POS[S.pos].w[s.key];
     const need = mastNeed(s.key), mp = need ? Math.round(((S.mast && S.mast[s.key]) || 0) / need * 100) : 100;
     return `<div class="st ${w >= .2 ? "key" : ""}" title="Mastery ${need ? `${(S.mast && S.mast[s.key]) || 0}/${need} (Next: ${S.talent[s.key] < 5 ? "★" + (S.talent[s.key] + 1) : TRANS_NAME[trOf(s.key) + 1]})` : "Transcend III complete"} · Max ${statCap(s.key)}"><span>${s.emoji} ${s.name}</span><div class="bar"><i style="width:${Math.min(100, v)}%"></i><u style="width:${mp}%"></u></div><b class="${v > 99 ? "over" : ""}">${Math.round(v)}</b><em class="${S.talent[s.key] === 5 ? "t5" : ""}">${talentStr(s.key)}</em></div>`;
-  }).join("");
+  }).join("") + `<p class="st-legend"><i></i>The purple line is mastery. When it fills up, talent goes up by one ★ · Tap a row for details</p>`;
+  $("stats").querySelectorAll(".st").forEach((el, i) => el.onclick = () => openMast(STATS[i].key));
 
   // 행동
   const risk = injuryRisk(), inj = S.injured > 0;
@@ -1532,6 +1533,17 @@ function openCareer() {
       ${S.phase === "pro" ? `<p class="small">Current career score ${careerScore()} · ${gradeOf(careerScore())}</p>` : ""}`,
     buttons: [{ label: "Close", value: 1, cls: "btn-primary" }],
   });
+}
+/* 능력치 줄을 누르면: 숙련도와 재능 설명 */
+function openMast(k) {
+  const s = STATS.find((x) => x.key === k), have = (S.mast && S.mast[k]) || 0, need = mastNeed(k), star = S.talent[k], tr = trOf(k);
+  const next = !need ? "All complete" : star < 5 ? `Talent ★${star + 1}` : TRANS_NAME[tr + 1];
+  modal({ emoji: s.emoji, title: `${s.name} mastery`,
+    html: `<ul class="tip-list"><li>Talent <b>${talentStr(k)}</b>, rating <b>${Math.round(S.stats[k])}</b> / max <b>${statCap(k)}</b></li>
+      <li>Mastery <b>${need ? `${have} / ${need}` : "Complete"}</b>${need ? ` · when full: <b>${next}</b>` : ""}</li>
+      <li>Training this stat builds mastery. MOM awards, overseas training and the talent program also add to it.</li>
+      <li>Higher talent ★ means bigger training gains. After ★5 comes Transcendence (I to III), each raising the max by 2, up to 105.</li></ul>`,
+    buttons: [{ label: "Close", value: 1, cls: "btn-primary" }] });
 }
 function shortName(n) { return n.length > 12 ? n.slice(0, 12) + "…" : n; }
 function migrateLife() {
