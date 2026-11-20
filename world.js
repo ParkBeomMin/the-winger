@@ -75,7 +75,10 @@ function sOf(p) { return p.id === "me" ? S.stats : p.id === "rv" ? S.rival.stats
 function pOvr(p) { return p.id === "me" ? OVR() : p.id === "rv" ? ROVR() : p.o; }
 function ageOf(p) { return p.id === "me" ? S.age : p.id === "rv" ? S.rival.age : p.a; }
 const pAvg = (p) => p.s && p.s.ap ? p.s.rs / p.s.ap : 0;
-function blankS() { return { ap: 0, st: 0, g: 0, a: 0, rs: 0, mom: 0, pa: 0, pc: 0, sh: 0, sot: 0, xg: 0, kp: 0, da: 0, dc: 0, ta: 0, tc: 0, sv: 0 }; }
+function blankS() { return { ap: 0, st: 0, g: 0, a: 0, rs: 0, mom: 0 }; }
+/* 시즌 기록은 저장 용량을 줄이려고 배열로 보관해요: [y, c, l, ap, g, a, r, o, pp, kp, tc, dc] (옛 세이브의 객체도 읽어요) */
+const H_KEYS = ["y", "c", "l", "ap", "g", "a", "r", "o", "pp", "kp", "tc", "dc"];
+function hObj(e) { if (!Array.isArray(e)) return e; const o = {}; H_KEYS.forEach((k, i) => { o[k] = e[i]; }); return o; }
 const PASS_W = { gk: .45, df: 1.15, mf: 1.45, wg: .85, fw: .6 };
 const PASS_ACC = { gk: -.1, df: .07, mf: .05, wg: -.03, fw: -.07 };
 const DRIB_W = { fw: 2.2, wg: 3.2, mf: 1.3, df: .4, gk: 0 };
@@ -565,7 +568,7 @@ function topBy(lgId, key, n = 10) {
   const minAp = Math.max(3, Math.floor((S.pro.round || ROUNDS) * .55));
   if (key === "rt") return ps.filter((p) => p.s.ap >= minAp).sort((a, b) => pAvg(b) - pAvg(a)).slice(0, n);
   if (key === "pp") return ps.filter((p) => p.s.ap >= minAp && (p.s.pa || 0) >= p.s.ap * 20).sort((a, b) => passPct(b.s) - passPct(a.s) || b.s.pa - a.s.pa).slice(0, n);
-  return ps.sort((a, b) => b.s[key] - a.s[key] || (key === "g" ? b.s.a - a.s.a : b.s.g - a.s.g) || pAvg(b) - pAvg(a)).slice(0, n);
+  return ps.sort((a, b) => (b.s[key] || 0) - (a.s[key] || 0) || (key === "g" ? b.s.a - a.s.a : b.s.g - a.s.g) || pAvg(b) - pAvg(a)).slice(0, n);
 }
 function marketValue(p) {
   const o = pOvr(p), a = ageOf(p);
@@ -586,7 +589,7 @@ function news(m) {
 function archiveSeason(season) {
   for (const p of Object.values(W.p)) {
     if (!p.c || (!p.s.ap && !p.cs.ap)) continue;
-    p.h.push({ y: season, c: p.c, l: p.l, ap: p.s.ap + p.cs.ap, g: p.s.g + p.cs.g, a: p.s.a + p.cs.a, r: Math.round(pAvg(p) * 100) / 100, o: Math.round(pOvr(p)), pp: passPct(p.s), kp: p.s.kp || 0, tc: p.s.tc || 0, dc: p.s.dc || 0 });
+    p.h.push([season, p.c, p.l, p.s.ap + p.cs.ap, p.s.g + p.cs.g, p.s.a + p.cs.a, Math.round(pAvg(p) * 100) / 100, Math.round(pOvr(p)), passPct(p.s), p.s.kp || 0, p.s.tc || 0, p.s.dc || 0]);
     if (p.h.length > 16) p.h.shift();
   }
 }
@@ -613,10 +616,10 @@ function worldOffseason() {
     p.a++; p.fm = 0; p.inj = 0;
     const hit = aiSeasonMast(p);
     growAI(p);
-    if (hit.length && p.o >= 80 && awNews < 6) { awNews++; news(`${hit.some((h) => h.includes("초월")) ? "🌌" : "🧬"} ${p.n}(${shortName(p.c)}) 재능 각성: ${hit.join(", ")}`); }
+    if (hit.length && p.o >= 80 && awNews < 6) { awNews++; news(`${hit.some((h) => !h.includes("★5")) ? "🌌" : "🧬"} ${p.n}(${shortName(p.c)}) 재능 각성: ${hit.join(", ")}`); }
     if (p.a >= 37 || (p.a >= 34 && Math.random() < .35) || (p.a >= 32 && p.o < W.c[p.c].base - 12)) {
       const club = W.c[p.c];
-      if (p.o >= 80) news(`👋 ${p.n}(${p.a}세), 은퇴 발표. 통산 ${p.h.reduce((s, x) => s + x.g, 0)}골`);
+      if (p.o >= 80) news(`👋 ${p.n}(${p.a}세), 은퇴 발표. 통산 ${p.h.reduce((s, x) => s + hObj(x).g, 0)}골`);
       const nat = pickNat(LEAGUES[club.l].mix);
       const np = mkPlayer(nat, p.r, club.base - rand(3, 10), randi(17, 19), used);
       if (Math.random() < .08) np.pot = randi(7, 11);   // 원더키드

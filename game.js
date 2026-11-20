@@ -46,7 +46,12 @@ function rivalKit() {
 function clubData(lg, name) { return LEAGUES[lg].clubs.find((c) => c[0] === name); }
 
 /* ---------- 저장 ---------- */
-function save() { if (!S) return; S._ts = Date.now(); try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch {} if (typeof cloudAuto === "function") cloudAuto(); }
+/* 저장은 같은 순간에 여러 번 불려도 한 번만 써요(1MB 가까운 세이브라 폰에서 무거워요). 화면을 떠날 때는 바로 써요 */
+let saveTimer = 0;
+function save() { if (!S) return; S._ts = Date.now(); if (!saveTimer) saveTimer = setTimeout(flushSave, 0); }
+function flushSave() { clearTimeout(saveTimer); saveTimer = 0; if (!S) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch {} if (typeof cloudAuto === "function") cloudAuto(); }
+addEventListener("pagehide", () => { if (saveTimer) flushSave(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden && saveTimer) flushSave(); });
 function load() { try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { return null; } }
 
 /* ---------- 화면 / 모달 / 토스트 ---------- */
@@ -85,6 +90,7 @@ function addLog(msg) {
 
 /* ---------- 타이틀 ---------- */
 function initTitle() {
+  if (saveTimer) flushSave();
   const sv = load();
   $("btn-continue").hidden = !sv || sv.phase === "retired";
   if (sv && sv.phase !== "retired") {
@@ -339,7 +345,7 @@ function renderMain() {
 function hudBtn(h) {
   if (h === "league") openLeague();
   else if (h === "news") openNews();
-  else if (h === "menu") modal({ title: "⚙️ 메뉴", html: `<p class="small">난이도: ${DF().name} · ${VERSION}</p>`, buttons: [{ label: "❓ 도움말", value: "help" }, { label: Sfx.muted ? "🔇 소리 켜기" : "🔊 소리 끄기", value: "snd" }, { label: typeof Bgm !== "undefined" && Bgm.on ? "🎵 배경음악 끄기" : "🎵 배경음악 켜기", value: "bgm" }, { label: "📢 공지사항", value: "notice" }, { label: "☁️ 저장 · 기기 이전", value: "cloud" }, { label: "🏠 타이틀로", value: "home" }, { label: "닫기", value: null, cls: "btn-primary" }] }).then((v) => v && hudBtn(v));
+  else if (h === "menu") modal({ title: "⚙️ 메뉴", html: `<p class="small">난이도: ${DF().name} · ${VERSION}</p>`, buttons: [{ label: "❓ 도움말", value: "help" }, { label: Sfx.muted ? "🔇 소리 켜기" : "🔊 소리 끄기", value: "snd" }, { label: typeof Bgm !== "undefined" && Bgm.on ? "🎵 배경음악 끄기" : "🎵 배경음악 켜기", value: "bgm" }, { label: "📢 공지사항", value: "notice" }, { label: T("🔗 친구에게 공유", "🔗 Share with friends"), value: "share" }, { label: T("🔒 개인정보처리방침", "🔒 Privacy Policy"), value: "privacy" }, { label: "☁️ 저장 · 기기 이전", value: "cloud" }, { label: "🏠 타이틀로", value: "home" }, { label: "닫기", value: null, cls: "btn-primary" }] }).then((v) => v && hudBtn(v));
   else if (h === "cloud") openCloud();
   else if (h === "squad") openSquad();
   else if (h === "career") openCareer();
@@ -349,6 +355,8 @@ function hudBtn(h) {
   else if (h === "snd") { Sfx.toggle(); if (typeof Bgm !== "undefined") Bgm.refresh(); renderMain(); }
   else if (h === "bgm") { Bgm.toggle(); toast(Bgm.on ? "🎵 배경음악 켬" : "🎵 배경음악 끔"); }
   else if (h === "notice") openNotices();
+  else if (h === "share") shareGame();
+  else if (h === "privacy") window.open(window.W2_LANG === "en" ? "../privacy.html#en" : "privacy.html", "_blank");
   else if (h === "home") { save(); initTitle(); }
 }
 function floatFx(btn, text, bad) {
@@ -578,7 +586,7 @@ async function matchFlow(o) {
     if (i.kind === "inj") { const n = randi(1, 3); S.injured = Math.max(S.injured, n); r.cards.push(`🚑 경기 중 부상, ${n}경기 결장`); addLog(`🚑 경기 중 부상으로 ${n}경기 결장`); }
     else if (S.phase === "pro") {
       if (i.kind === "yc") { S.ycount = (S.ycount || 0) + 1; r.cards.push(`🟨 경고 (시즌 누적 ${S.ycount}장)`); if (S.ycount % 5 === 0) { S.ban = Math.max(S.ban || 0, 1); r.cards.push("⛔ 경고 5장 누적, 다음 경기 출전 정지"); } }
-      else { S.ban = i.kind === "rc" ? 2 : 1; r.cards.push(`🟥 퇴장! 다음 ${S.ban}경기 출전 정지`); addLog(`🟥 퇴장, ${S.ban}경기 출전 정지`); }
+      else { S.ban = i.kind === "rc" ? 2 : 1; r.sentOff = true; r.cards.push(`🟥 퇴장! 다음 ${S.ban}경기 출전 정지`); addLog(`🟥 퇴장, ${S.ban}경기 출전 정지`); }
     } else r.cards.push(i.kind === "yc" ? "🟨 경고" : "🟥 퇴장");
   }
   return { res, m, r };
@@ -1000,7 +1008,7 @@ async function proRound(quick = false) {
   if (r.played && r.goals >= 3) pushSig("hattrick", { opp });
   else if (r.played && r.rating >= 8.6) pushSig("superb", { r: r.rating });
   else if (r.played && r.rating <= 5.3) pushSig("awful", { r: r.rating });
-  if (r.cards.some((c) => c.includes("퇴장!"))) pushSig("redcard");
+  if (r.sentOff) pushSig("redcard");
   if (r.cards.some((c) => c.startsWith("🚑"))) pushSig("matchinjury");
   P.benchRun = !starter && !wasBanned && S.injured === 0 ? (P.benchRun || 0) + 1 : 0;
   if (P.benchRun === 3) pushSig("benched3");
@@ -1022,14 +1030,14 @@ async function proRound(quick = false) {
   // 경기 결과를 바로 저장해요 — 결과 화면에서 나가도 이 경기는 다시 치르지 않아요
   P.round++;
   S.cond = clamp(S.cond + 6, 0, 100);
-  S.pending = "cups"; save();
+  S.pending = "cups"; if (!quick) save();
   if (!quick) await showResult(r, lines, round + 1 >= ROUNDS ? "시즌 결산 →" : "계속");
   return roundTail(quick);
 }
 async function roundTail(quick = false) {
   const P = S.pro;
   await runCups(P.round, quick);
-  if (quick) { S.pending = null; save(); return; }
+  if (quick) { S.pending = null; if (P.round % 3 === 0 || P.round >= ROUNDS) save(); return; }
   if (P.round >= ROUNDS) { S.pending = "season"; save(); return seasonEnd(); }
   S.pending = null; save();
   show("scr-main"); renderMain();
@@ -1200,6 +1208,7 @@ async function seasonEnd() {
   const wcNext = P.season % 4 === 0;
   $("ss-acts").innerHTML = mustRetire ? `<button class="btn btn-primary" id="ss-retire">🎓 은퇴식으로</button>`
     : `<button class="btn btn-primary" id="ss-next">${wcNext ? "🌍 월드컵으로 →" : "💼 이적 시장 →"}</button>${canRetire ? `<button class="btn btn-ghost" id="ss-retire">🎓 여기서 은퇴하기</button>` : ""}`;
+  if (typeof shareSeason === "function") { const sb = document.createElement("button"); sb.className = "btn btn-ghost"; sb.textContent = T("📣 이번 시즌 자랑하기", "📣 Share this season"); sb.onclick = shareSeason; $("ss-acts").appendChild(sb); }
   const choice = await new Promise((res) => {
     const n = $("ss-next"); if (n) n.onclick = () => res("next");
     const r = $("ss-retire"); if (r) r.onclick = () => res("retire");
@@ -1385,7 +1394,7 @@ function openSquad(club = S.pro.club) {
 function openPlayer(id) {
   const p = W.p[id]; if (!p) return;
   const st = sOf(p);
-  const hist = [...(p.h || []), ...(p.s.ap || p.cs.ap ? [{ y: S.pro.season, c: p.c, ap: p.s.ap + p.cs.ap, g: p.s.g + p.cs.g, a: p.s.a + p.cs.a, r: Math.round(pAvg(p) * 100) / 100, now: true }] : [])];
+  const hist = [...(p.h || []).map(hObj), ...(p.s.ap || p.cs.ap ? [{ y: S.pro.season, c: p.c, ap: p.s.ap + p.cs.ap, g: p.s.g + p.cs.g, a: p.s.a + p.cs.a, r: Math.round(pAvg(p) * 100) / 100, now: true }] : [])];
   if (id === "me") return openCareer();
   $("modal").hidden = true;
   modal({

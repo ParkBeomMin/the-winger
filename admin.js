@@ -59,11 +59,11 @@ $("fv-save").onclick = async () => {
   for (const k in eff) if (!eff[k]) delete eff[k];
   if (!Object.keys(eff).length) return alert("효과를 하나 이상 넣어 주세요");
   const id = "fv" + from.toString(36);
-  if (await put(`w2fever/${id}`, { emoji: $("fv-emoji").value.slice(0, 4) || "🎉", title: $("fv-title").value.slice(0, 40), note: $("fv-note").value.slice(0, 120), from, to, eff, rep, t0, t1, days })) loadAll();
+  if (await put(`w2fever/${id}`, { emoji: $("fv-emoji").value.slice(0, 4) || "🎉", title: $("fv-title").value.slice(0, 40), note: $("fv-note").value.slice(0, 120), title_en: $("fv-title-en").value.slice(0, 40), note_en: $("fv-note-en").value.slice(0, 120), from, to, eff, rep, t0, t1, days })) loadAll();
 };
 $("nt-save").onclick = async () => {
   const title = $("nt-title").value.trim(); if (!title) return alert("제목을 넣어 주세요");
   const at = Date.now();
-  if (await put(`w2notices/n${at.toString(36)}`, { title: title.slice(0, 60), body: $("nt-body").value.slice(0, 2000), pin: $("nt-pin").checked, at })) { $("nt-title").value = ""; $("nt-body").value = ""; loadAll(); }
+  if (await put(`w2notices/n${at.toString(36)}`, { title: title.slice(0, 60), body: $("nt-body").value.slice(0, 2000), title_en: $("nt-title-en").value.slice(0, 60), body_en: $("nt-body-en").value.slice(0, 2000), pin: $("nt-pin").checked, at })) { $("nt-title").value = ""; $("nt-body").value = ""; loadAll(); }
 };
 loadAll();

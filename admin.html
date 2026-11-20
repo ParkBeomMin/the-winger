@@ -25,6 +25,7 @@ button.ghost{background:#2c4a39;color:#e8f3ec}button.del{background:#c43b3b;colo
 <div class="card">
   <div class="row"><div><label>이모지</label><input id="fv-emoji" value="🎉"/></div><div style="flex:3"><label>제목</label><input id="fv-title" value="주말 피버 타임"/></div></div>
   <label>설명 (선택)</label><input id="fv-note" placeholder="이번 주말 훈련 효율 2배!"/>
+  <div class="row"><div><label>영어 제목 (영어판용, 선택)</label><input id="fv-title-en" placeholder="Weekend Fever Time"/></div><div><label>영어 설명 (선택)</label><input id="fv-note-en" placeholder="Double training this weekend!"/></div></div>
   <div class="row"><div><label>시작 (반복이면 반복 기간의 시작)</label><input type="datetime-local" id="fv-from"/></div><div><label>끝 (반복이면 반복 기간의 끝)</label><input type="datetime-local" id="fv-to"/></div></div>
   <div class="row">
     <div><label>반복</label><select id="fv-rep"><option value="none">반복 없음 (시작~끝 계속)</option><option value="daily">매일</option><option value="weekly">매주 (요일 선택)</option></select></div>
@@ -49,6 +50,8 @@ button.ghost{background:#2c4a39;color:#e8f3ec}button.del{background:#c43b3b;colo
 <div class="card">
   <label>제목</label><input id="nt-title"/>
   <label>내용</label><textarea id="nt-body"></textarea>
+  <label>영어 제목 (영어판용, 선택)</label><input id="nt-title-en"/>
+  <label>영어 내용 (선택)</label><textarea id="nt-body-en"></textarea>
   <label><input type="checkbox" id="nt-pin" style="width:auto"/> 📌 상단 고정</label>
   <button id="nt-save">공지 등록</button>
   <div id="nt-list"></div>

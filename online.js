@@ -29,7 +29,7 @@ function feverNorm(o) {
   const rep = o.rep === "daily" || o.rep === "weekly" ? o.rep : "none";
   const t0 = clamp(+o.t0 || 0, 0, 1440), t1 = clamp(+o.t1 || 0, 0, 1440);
   const days = String(o.days || "0123456").replace(/[^0-6]/g, "");
-  return { id: String(o.id || "fever"), emoji: String(o.emoji || "🎉").slice(0, 4), title: String(o.title || "피버 타임").slice(0, 40), note: String(o.note || "").slice(0, 120), from, to, eff, rep, t0, t1, days };
+  return { id: String(o.id || "fever"), emoji: String(o.emoji || "🎉").slice(0, 4), title: String((window.W2_LANG === "en" && o.title_en) || o.title || "피버 타임").slice(0, 40), note: String((window.W2_LANG === "en" && o.note_en) || o.note || "").slice(0, 120), from, to, eff, rep, t0, t1, days };
 }
 /* 반복 피버: 기간(from~to) 안에서 매일 또는 고른 요일의 t0~t1분(한국 시각)만 켜져요. 자정을 넘기는 구간(22:00~02:00)도 돼요.
  * 돌려주는 값은 '이번 회차'의 시작·끝(알림을 회차마다 한 번 띄우려고) */
@@ -70,7 +70,7 @@ function leftText(to) {
 async function feverRefresh() {
   try {
     const rows = await fsList("w2fever", 20), now = Date.now();
-    wrj(FEVER_KEY, { at: now, rows: rows.filter((r) => +r.to > now).map((r) => ({ id: r.id, emoji: r.emoji, title: r.title, note: r.note, from: r.from, to: r.to, eff: r.eff, rep: r.rep, t0: r.t0, t1: r.t1, days: r.days })) });
+    wrj(FEVER_KEY, { at: now, rows: rows.filter((r) => +r.to > now).map((r) => ({ id: r.id, emoji: r.emoji, title: r.title, note: r.note, title_en: r.title_en, note_en: r.note_en, from: r.from, to: r.to, eff: r.eff, rep: r.rep, t0: r.t0, t1: r.t1, days: r.days })) });
   } catch {}
   feverTick();
 }
@@ -96,7 +96,7 @@ const NOTICE_KEY = "w2-notices", NOTICE_SEEN = "w2-notice-seen";
 async function noticeRefresh() {
   try {
     const rows = (await fsList("w2notices", 30)).filter((r) => !r.hide).sort((a, b) => (b.pin ? 1 : 0) - (a.pin ? 1 : 0) || (+b.at || 0) - (+a.at || 0));
-    wrj(NOTICE_KEY, rows.slice(0, 20).map((r) => ({ id: r.id, title: r.title, body: r.body, at: +r.at || 0, pin: !!r.pin })));
+    wrj(NOTICE_KEY, rows.slice(0, 20).map((r) => ({ id: r.id, title: r.title, body: r.body, title_en: r.title_en || "", body_en: r.body_en || "", at: +r.at || 0, pin: !!r.pin })));
   } catch {}
   noticeBadge();
 }
@@ -109,7 +109,7 @@ function noticeBadge() {
   if (h) h.classList.toggle("has-dot", noticeUnread() > 0);
 }
 function openNotices() {
-  const list = notices();
+  const list = notices().map((n) => window.W2_LANG === "en" && n.title_en ? { ...n, title: n.title_en, body: n.body_en || n.body } : n);
   wrj(NOTICE_SEEN, Math.max(0, ...list.map((n) => n.at)));
   noticeBadge();
   modal({ title: "📢 공지사항", wide: true,

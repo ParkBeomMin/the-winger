@@ -62,6 +62,7 @@ function saveSummary(o) {
 let cloudBusy = false, cloudLast = 0, cloudTimer = 0;
 function cloudOn() { return SET.cloud !== false; }
 async function cloudPut(force) {
+  if (typeof flushSave === "function" && saveTimer) flushSave();
   const snap = load();   // 늘 마지막 저장본(경기 중간 상태가 아닌)을 올려요
   if (!snap || !snap.name || cloudBusy || (!force && !cloudOn())) return false;
   const ts = snap._ts || Date.now();
@@ -97,6 +98,7 @@ const TR_AB = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const trNorm = (c) => (c || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const trFmt = (c) => c.slice(0, 4) + "-" + c.slice(4);
 async function makeTransfer() {
+  if (typeof flushSave === "function" && saveTimer) flushSave();
   const a = await fbAuth(), data = await packSave(load());
   for (let k = 0; k < 3; k++) {
     const code = [...crypto.getRandomValues(new Uint8Array(8))].map((x) => TR_AB[x % 32]).join("");
