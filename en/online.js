@@ -128,9 +128,11 @@ async function hofSubmit(e) {
       ballon: e.ballon | 0, trophies: e.trophies | 0, club: String((S.career.clubs || []).slice(-1)[0] || "").slice(0, 20),
       rival: String(e.rival).slice(0, 12), face: String(S.look.face || ""), kit0: String((e.kit || [])[0] || "#3b7fd6").slice(0, 9), v: VERSION,
     };
+    try { if (e.d) { const ds = JSON.stringify(e.d); if (ds.length <= 6000) doc.d = ds; } } catch { /* 상세 없이 */ }
     const id = `${a.uid.slice(0, 10)}_${Date.now().toString(36)}`;
     const w = fsDoc(`w2hof/${id}`, doc); w.currentDocument = { exists: false };
-    const r = await fbCommit([w], a.tok);
+    let r = await fbCommit([w], a.tok);
+    if (!r.ok && doc.d) { delete doc.d; const w2 = fsDoc(`w2hof/${id}`, doc); w2.currentDocument = { exists: false }; r = await fbCommit([w2], a.tok); }
     if (r.ok) { const s = rdj(HOF_SENT) || []; s.push(id); wrj(HOF_SENT, s); }
     return r.ok;
   } catch { return false; }
@@ -150,6 +152,7 @@ async function openHofWorld() {
   const N = (x) => Number.isFinite(+x) ? Math.round(+x) : 0;
   box.innerHTML = rows.length ? rows.map((e, i) => `<div class="hof-row ${mine.has(e.id) ? "me" : ""}"><span>${i + 1}</span><div class="hav" data-w="${i}"></div><div><b>${esc(e.name)} <small>${POS[e.pos] ? POS[e.pos].short : ""} · ${ORIGINS[e.origin] ? ORIGINS[e.origin].flag : ""} · Peak ${N(e.peak)}${DIFF[e.diff] && e.diff !== "normal" ? ` · ${DIFF[e.diff].name}` : ""}</small></b><span>${esc(e.grade)}</span><small>⚽${N(e.g)} 🅰️${N(e.a)} 🏆${N(e.trophies)} 🏅${N(e.ballon)} · ${esc(e.club)}</small></div><em>${N(e.score)}</em></div>`).join("")
     : `<p class="hint">No players registered yet. Be the first legend!</p>`;
+  box.querySelectorAll("[data-w]").forEach((d) => { const row = d.closest(".hof-row"); if (row) row.onclick = () => openHofDetail(rows[+d.dataset.w], +d.dataset.w + 1); });
   box.querySelectorAll("[data-w]").forEach((d) => { const e = rows[+d.dataset.w]; try { d.appendChild(avatarCanvas({ face: FACE_IDS.includes(e.face) ? e.face : FACE_IDS[0], skin: 0, hair: 0, hairColor: 0, number: 0 }, [/^#[0-9a-f]{3,8}$/i.test(e.kit0) ? e.kit0 : "#3b7fd6", "#ffffff"], 44)); } catch { d.textContent = "⚽"; } });
 }
 
