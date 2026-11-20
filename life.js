@@ -221,28 +221,75 @@ function checkFameUp() {
  * ★5 다음은 초월 I~III: 최대치 +2씩(99 → 105), 나이 들어 떨어지는 폭 -25%씩. */
 const MAST_NEED = [0, 12, 18, 26, 36, 30, 40, 50];   // [현재 단계] → 다음 단계까지. 단계 = 별(1~5) + 초월(0~3)
 const TRANS_NAME = ["", "초월 I", "초월 II", "초월 III"];
-const trOf = (k) => (S.trans && S.trans[k]) || 0;
-const talentLv = (k) => S.talent[k] + trOf(k);
-function mastNeed(k) { const lv = talentLv(k); return lv >= 8 ? 0 : MAST_NEED[lv]; }
-function statCap(k) { return 99 + trOf(k) * 2; }
+const trOf = (k, E = S) => (E.trans && E.trans[k]) || 0;
+const talentLv = (k, E = S) => E.talent[k] + trOf(k, E);
+function mastNeed(k, E = S) { const lv = talentLv(k, E); return lv >= 8 ? 0 : MAST_NEED[lv]; }
+function statCap(k, E = S) { return 99 + trOf(k, E) * 2; }
 function talentStr(k, tal = S.talent[k], tr = trOf(k)) {
   return `${"★".repeat(tal)}${"☆".repeat(5 - tal)}${tr ? `<i class="trs">${"✦".repeat(tr)}</i>` : ""}`;
 }
-function addMast(k, n) {
-  if (!S.mast) S.mast = {};
-  if (!S.trans) S.trans = {};
+function addMast(k, n, E = S) {
+  if (!E.mast) E.mast = {};
+  if (!E.trans) E.trans = {};
   const out = [];
-  S.mast[k] = (S.mast[k] || 0) + n;
-  while (mastNeed(k) && S.mast[k] >= mastNeed(k)) {
-    S.mast[k] -= mastNeed(k);
+  E.mast[k] = (E.mast[k] || 0) + n;
+  while (mastNeed(k, E) && E.mast[k] >= mastNeed(k, E)) {
+    E.mast[k] -= mastNeed(k, E);
     const nm = STAT_NAME[k];
-    if (S.talent[k] < 5) { S.talent[k]++; out.push({ k, kind: "awake", msg: `🧬 재능 각성! ${nm} ★${S.talent[k] - 1} → ★${S.talent[k]}` }); }
-    else { S.trans[k] = trOf(k) + 1; out.push({ k, kind: "trans", msg: `🌌 초월! ${nm} ${TRANS_NAME[S.trans[k]]} · 최대치 ${statCap(k)}` }); }
+    if (E.talent[k] < 5) { E.talent[k]++; out.push({ k, kind: "awake", msg: `🧬 재능 각성! ${nm} ★${E.talent[k] - 1} → ★${E.talent[k]}` }); }
+    else { E.trans[k] = trOf(k, E) + 1; out.push({ k, kind: "trans", msg: `🌌 초월! ${nm} ${TRANS_NAME[E.trans[k]]} · 최대치 ${statCap(k, E)}` }); }
   }
-  if (!mastNeed(k)) S.mast[k] = 0;
+  if (!mastNeed(k, E)) E.mast[k] = 0;
+  if (E !== S) {   // 라이벌: 뉴스와 내 로그로만
+    for (const o of out) if (o.kind === "trans" || E.talent[k] === 5) { news(`${o.kind === "trans" ? "🌌" : "🧬"} 라이벌 ${E.name}, ${STAT_NAME[k]} ${o.kind === "trans" ? TRANS_NAME[E.trans[k]] + " 도달" : "재능 ★5 각성"}`); addLog(`⚔️ 라이벌 ${E.name}: ${o.msg.replace(/^\S+\s/, "")}`); }
+    return out;
+  }
   for (const o of out) { addLog(o.msg); if (o.kind === "trans" || S.talent[k] === 5) news(`${o.kind === "trans" ? "🌌" : "🧬"} ${S.name}, ${STAT_NAME[k]} ${o.kind === "trans" ? TRANS_NAME[S.trans[k]] + " 도달" : "재능 ★5 각성"}`); }
   if (out.length) (S.awake = S.awake || []).push(...out);
   return out;
+}
+
+/* ---------- 세계의 AI 선수도 같은 규칙 ----------
+ * p.tl = 재능 별 6자리("342513"), p.tr = 초월 6자리, p.ms = 숙련 6칸. STAT_KEYS 순서. */
+function aiEnsure(p) {
+  if (p.tl) return;
+  const w = roleW(p.r);
+  p.tl = STAT_KEYS.map((k) => Math.min(5, rollTalent() + ((p.pot || 0) >= 7 && (w[k] || 0) >= .15 ? 1 : 0))).join("");
+  p.tr = "000000"; p.ms = [0, 0, 0, 0, 0, 0];
+}
+const aiTal = (p, i) => +p.tl[i], aiTr = (p, i) => +(p.tr || "000000")[i];
+const aiCap = (p, i) => 99 + aiTr(p, i) * 2;
+function aiTalentStr(p, k) { aiEnsure(p); const i = STAT_KEYS.indexOf(k); return talentStr(k, aiTal(p, i), aiTr(p, i)); }
+function aiAddMast(p, i, n) {
+  aiEnsure(p);
+  p.ms[i] += n;
+  const out = [];
+  for (;;) {
+    const lv = aiTal(p, i) + aiTr(p, i);
+    if (lv >= 8 || p.ms[i] < MAST_NEED[lv]) break;
+    p.ms[i] -= MAST_NEED[lv];
+    const set = (s, v) => s.slice(0, i) + v + s.slice(i + 1);
+    if (aiTal(p, i) < 5) { p.tl = set(p.tl, aiTal(p, i) + 1); out.push(aiTal(p, i) === 5 ? "★5" : null); }
+    else { p.tr = set(p.tr, aiTr(p, i) + 1); out.push(TRANS_NAME[aiTr(p, i)]); }
+  }
+  if (aiTal(p, i) + aiTr(p, i) >= 8) p.ms[i] = 0;
+  return out.filter(Boolean);
+}
+/* 한 시즌 동안 쌓인 숙련 — 나와 같은 규칙: 프로 한 시즌 훈련 18번(포지션 가중치대로 고르고 10%는 아무 능력치) + MOM 1회당 주력 +2 */
+function aiSeasonMast(p) {
+  aiEnsure(p);
+  const w = roleW(p.r), gain = [0, 0, 0, 0, 0, 0], hit = [];
+  const ent = STAT_KEYS.map((k, i) => [i, w[k] || 0]).filter(([, x]) => x > 0), tot = ent.reduce((s, [, x]) => s + x, 0);
+  for (let t = 0; t < ROUNDS; t++) {
+    let i;
+    if (Math.random() < .1) i = randi(0, 5);
+    else { let r = Math.random() * tot; i = ent[ent.length - 1][0]; for (const [j, x] of ent) { if ((r -= x) <= 0) { i = j; break; } } }
+    gain[i]++;
+  }
+  const main = ent.reduce((b, e) => e[1] > b[1] ? e : b, ent[0])[0];
+  gain[main] += ((p.s && p.s.mom) || 0) * 2;
+  gain.forEach((n, i) => { if (n) for (const t of aiAddMast(p, i, n)) hit.push(`${STAT_NAME[STAT_KEYS[i]]} ${t}`); });
+  return hit;
 }
 const mastLine = (k, n) => { const o = addMast(k, n); return `${STAT_NAME[k]} 숙련 +${n}${o.length ? " · " + o.map((x) => x.msg).join(" · ") : ""}`; };
 /* 각성·초월이 생기면 크게 알려줘요 */

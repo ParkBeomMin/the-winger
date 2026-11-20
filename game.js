@@ -388,7 +388,8 @@ function rivalGrow(scale = 1) {
   for (let i = 0; i < 2; i++) {
     const k = Math.random() < .7 ? pickWeighted(rv.pos) : pick(keys);
     const v = rv.stats[k], dim = v >= 92 ? .3 : v >= 85 ? .5 : v >= 75 ? .7 : 1;
-    rv.stats[k] = clamp(v + rand(1.6, 3) * talentMul(rv.talent[k]) * rubber * age * dim * scale * .8, 1, 99);
+    rv.stats[k] = clamp(v + rand(1.6, 3) * talentMul(rv.talent[k]) * rubber * age * dim * scale * .8, 1, statCap(k, rv));
+    if (Math.random() < .5 * scale) addMast(k, 1, rv);   // 라이벌도 훈련한 만큼 숙련이 쌓여요
   }
 }
 function pickWeighted(pos) {
@@ -820,6 +821,7 @@ async function youthEnd() {
   S.phase = "pro"; S.age = 19; S.rival.age = 19;
   S.pro = S.pro || {};
   joinClub(pick1);
+  S.pro.season = 1; S.pro.round = 0;
   await negotiate(pick1, `✍️ ${esc(pick1.club)} 첫 프로 계약`);
   S.pro.season = 1; initSeason(true);
   addLog(`✍️ ${LEAGUES[pick1.league].flag} ${pick1.club} 입단! 프로 데뷔 시즌이 시작돼요.`);
@@ -1224,7 +1226,7 @@ async function offseason() {
     for (const k of STAT_KEYS) { const d = (k === "spd" || k === "sta") ? rand(1.5, 3.5) : rand(.4, 1.8); S.stats[k] = clamp(S.stats[k] - d * (1 - trOf(k) * .25), 1, statCap(k)); }
     decl.push("나이가 들며 스피드와 체력이 떨어졌어요");
   }
-  if (S.rival.age >= 31) for (const k of STAT_KEYS) S.rival.stats[k] = clamp(S.rival.stats[k] - ((k === "spd" || k === "sta") ? rand(1.5, 3.5) : rand(.4, 1.8)), 1, 99);
+  if (S.rival.age >= 31) for (const k of STAT_KEYS) S.rival.stats[k] = clamp(S.rival.stats[k] - ((k === "spd" || k === "sta") ? rand(1.5, 3.5) : rand(.4, 1.8)) * (1 - trOf(k, S.rival) * .25), 1, statCap(k, S.rival));
   worldOffseason();
   const ct = S.contract;
   if (ct && ct.club === P.club) ct.years--;
@@ -1319,7 +1321,7 @@ function openPlayer(id) {
   modal({
     title: `${NATIONS[p.nat].flag} ${esc(p.n)}${id === "rv" ? " ⚔️" : ""}`, wide: true,
     html: `<p class="small">${ROLE_KO[p.r]} · ${ageOf(p)}세 · ${NATIONS[p.nat].name} · ${p.c ? `<a class="pl" data-club="${esc(p.c)}">${crestHTML(p.c, 14)} ${esc(p.c)}</a>` : "무소속"} · 종합 <b>${Math.round(pOvr(p))}</b> · 시장가치 <b>${fmtMV(marketValue(p))}</b>${p.inj > 0 ? ` · 🚑 부상 ${p.inj}경기` : ""}</p>
-      <div class="roll">${STATS.map((s) => `<div><span>${s.emoji} ${s.name}</span><b>${Math.round(st[s.key])}</b></div>`).join("")}</div>
+      <div class="roll">${STATS.map((s) => { const t5 = id === "rv" ? S.rival.talent[s.key] === 5 : (aiEnsure(p), aiTal(p, STAT_KEYS.indexOf(s.key)) === 5); return `<div><span>${s.emoji} ${s.name}</span><b class="${st[s.key] > 99 ? "over" : ""}">${Math.round(st[s.key])}</b><i class="${t5 ? "t5" : ""}">${id === "rv" ? talentStr(s.key, S.rival.talent[s.key], trOf(s.key, S.rival)) : aiTalentStr(p, s.key)}</i></div>`; }).join("")}</div>
       ${p.s.ap ? `<p class="label">이번 시즌 상세</p>${seasonStatHTML(p.s)}` : ""}
       <table class="tbl"><tr><th>시즌</th><th>클럽</th><th>경기</th><th>⚽</th><th>🅰️</th><th>패스%</th><th>키패스</th><th>평점</th></tr>${hist.slice().reverse().map((h) => `<tr><td>${h.y}${h.now ? "*" : ""}</td><td>${esc(shortName(h.c))}</td><td>${h.ap}</td><td>${h.g}</td><td>${h.a}</td><td>${h.now ? passPct(p.s) : h.pp ?? "-"}</td><td>${h.now ? p.s.kp || 0 : h.kp ?? "-"}</td><td>${h.r ? h.r.toFixed(2) : "-"}</td></tr>`).join("")}</table>
       <p class="small">통산 ⚽ ${hist.reduce((s, h) => s + h.g, 0)} · 🅰️ ${hist.reduce((s, h) => s + h.a, 0)} (기록 보관 이후)</p>`,
@@ -1438,6 +1440,7 @@ function migrateLife() {
   if (S.flags.agent && !S.gear.agent) S.gear.agent = 1;
   if (S.trust == null) S.trust = 50;
   S.mast = S.mast || {}; S.trans = S.trans || {};
+  S.rival.mast = S.rival.mast || {}; S.rival.trans = S.rival.trans || {};
 }
 function openHelp() {
   modal({
@@ -1448,7 +1451,7 @@ function openHelp() {
       <p><b>📡 방금 일어난 일</b><br/>해트트릭, 연패, 감독 교체, 결승 진출, 라이벌 부상, A매치 발탁처럼 실제 경기·세계에서 생긴 일이 다음 턴 이벤트로 이어져요.</p>
       <p><b>🛍️ 상점 · ⭐ 명성 등급</b><br/>장비는 영구, 전담팀은 시즌마다 유지비, 소모품은 바로 써요. 기부는 명성을 올려요. 명성은 무명 → 유망주 → … → 축구 아이콘 등급으로 보여요.</p>
       <p><b>☁️ 저장</b><br/>매 경기 결과가 바로 저장되고, 자동 클라우드 백업이 돼요. ⚙️ → ☁️에서 8자리 이전 코드로 다른 기기에서 이어하거나 구글 계정에 연동할 수 있어요.</p>
-      <p><b>⭐ 재능 · 🧬 각성 · 🌌 초월</b><br/>별 하나에 훈련 성장 +15%(★1 0.85배 ~ ★5 1.45배). 능력치 바 아래 보라 줄이 숙련도예요. 훈련(🔥버프 훈련은 2배), MOM, 해외 연수, 재능 개발 프로그램으로 차고, 다 차면 별 +1. ★5 다음은 초월 I~III: 최대치가 2씩 올라 105까지, 나이 들어 떨어지는 폭도 줄어요.</p>
+      <p><b>⭐ 재능 · 🧬 각성 · 🌌 초월</b><br/>별 하나에 훈련 성장 +15%(★1 0.85배 ~ ★5 1.45배). 능력치 바 아래 보라 줄이 숙련도예요. 훈련(🔥버프 훈련은 2배), MOM, 해외 연수, 재능 개발 프로그램으로 차고, 다 차면 별 +1. ★5 다음은 초월 I~III: 최대치가 2씩 올라 105까지, 나이 들어 떨어지는 폭도 줄어요. 라이벌과 세계의 모든 선수도 같은 규칙으로 별이 오르고 초월해요(선수 프로필에서 확인).</p>
       <p><b>⚔️ 라이벌</b><br/>라이벌도 매달 자라요. 대회 결승, 리그 맞대결, 득점왕, 발롱도르에서 계속 부딪혀요. 이벤트 선택으로 관계가 바뀌고 결말이 달라져요.</p>
       <p><b>🔥 승부처 미니게임</b><br/>경기 중 내 선수가 끼는 찬스가 오면 직접 해결해요. 포지션마다 자주 나오는 게 달라요.</p>
       <ul>

@@ -103,7 +103,7 @@ function genStats(role, target) {
 function refreshO(p) { p.o = Math.round(ovrRole(p.st, p.r) * 10) / 10; }
 function mkPlayer(nat, role, target, age, used) {
   const p = { id: "p" + W.n++, n: natName(nat, used), nat, r: role, st: genStats(role, target), a: age, pot: Math.round(rand(-3, 7)), s: blankS(), cs: blankS(), h: [], inj: 0, fm: 0 };
-  refreshO(p); return p;
+  aiEnsure(p); refreshO(p); return p;
 }
 
 /* ---------- 세계 만들기 ---------- */
@@ -132,7 +132,7 @@ function anchorClub(name, k) {
   c.ids.forEach((id) => {
     if (id === "me" || id === "rv") return;
     const p = W.p[id];
-    for (const s of STAT_KEYS) p.st[s] = Math.round(clamp(p.st[s] + diff, 12, 99));
+    STAT_KEYS.forEach((s, i) => { p.st[s] = Math.round(clamp(p.st[s] + diff, 12, p.tr ? aiCap(p, i) : 99)); });
     refreshO(p);
   });
 }
@@ -591,21 +591,28 @@ function archiveSeason(season) {
 }
 function growAI(p) {
   const a = p.a;
+  aiEnsure(p);
   const d = a <= 21 ? rand(1.5, 4) + p.pot * .35 : a <= 24 ? rand(.3, 2.5) + p.pot * .2 : a <= 28 ? rand(-.6, 1) : a <= 31 ? -rand(0, 1.8) : -rand(1, 3.2);
   const w = roleW(p.r);
-  for (const k of STAT_KEYS) {
+  STAT_KEYS.forEach((k, i) => {
     const kk = (w[k] || 0) >= .15 ? 1.15 : (k === "spd" || k === "sta") ? (a >= 30 ? 1.5 : .8) : .7;
-    p.st[k] = Math.round(clamp(p.st[k] + d * kk + rand(-.6, .6), 12, 99));
-  }
+    let delta = d * kk + rand(-.6, .6);
+    // 재능 별: 성장은 별 배율(평균 1.1에 맞춰), 초월: 떨어지는 폭 -25%씩
+    delta = delta > 0 ? delta * talentMul(aiTal(p, i)) / 1.1 : delta * (1 - aiTr(p, i) * .25);
+    p.st[k] = Math.round(clamp(p.st[k] + delta, 12, aiCap(p, i)));
+  });
   refreshO(p);
 }
 function worldOffseason() {
   const used = new Set(Object.values(W.p).map((p) => p.n));
+  let awNews = 0;
   for (const id of Object.keys(W.p)) {
     const p = W.p[id];
     if (id === "me" || id === "rv" || !p.c) continue;
     p.a++; p.fm = 0; p.inj = 0;
+    const hit = aiSeasonMast(p);
     growAI(p);
+    if (hit.length && p.o >= 80 && awNews < 6) { awNews++; news(`${hit.some((h) => h.includes("초월")) ? "🌌" : "🧬"} ${p.n}(${shortName(p.c)}) 재능 각성: ${hit.join(", ")}`); }
     if (p.a >= 37 || (p.a >= 34 && Math.random() < .35) || (p.a >= 32 && p.o < W.c[p.c].base - 12)) {
       const club = W.c[p.c];
       if (p.o >= 80) news(`👋 ${p.n}(${p.a}세), 은퇴 발표. 통산 ${p.h.reduce((s, x) => s + x.g, 0)}골`);
