@@ -1441,7 +1441,7 @@ async function retire() {
   if (typeof track === "function") track("retire", { score: sc, seasons: S.career.seasons.length, age: S.age, ballon: S.career.ballon });
   S.phase = "retired"; S.pending = null;
   const entry = { name: S.name, pos: S.pos, look: S.look, kit: S.pro.kit, grade, score: sc, peak: S.career.peakOvr, apps: S.career.apps, g: S.career.g, a: S.career.a,
-    ballon: S.career.ballon, trophies: S.career.trophies.length, rival: S.rival.name, h2h: { ...S.h2h }, date: new Date().toISOString().slice(0, 10) };
+    ballon: S.career.ballon, trophies: S.career.trophies.length, rival: S.rival.name, h2h: { ...S.h2h }, date: new Date().toISOString().slice(0, 10), d: hofDetailData() };
   const hof = JSON.parse(localStorage.getItem(HOF_KEY) || "[]"); hof.push(entry); hof.sort((a, b) => b.score - a.score); localStorage.setItem(HOF_KEY, JSON.stringify(hof.slice(0, 30)));
   if (typeof hofSubmit === "function") hofSubmit(entry).then((ok) => ok && toast("🌍 세계 명예의 전당에 등록됐어요!", 3000));
   if (Sfx.fanfare) Sfx.fanfare();
@@ -1570,13 +1570,49 @@ function openHelp() {
     buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }],
   });
 }
+/* 명예의 전당 상세 — 은퇴할 때 커리어를 짧게 묶어 둬요 (세계 랭킹에도 같이 올라가요, 6000자 안) */
+function hofDetailData() {
+  const c = S.career, cut = (x, n) => String(x == null ? "" : x).slice(0, n);
+  const d = {
+    ag: S.age, org: S.origin, mom: c.mom | 0, caps: c.caps | 0, ig: ((c.ig || 0) + (c.wcG || 0)) | 0, fame: cut(fameGrade(S.fame).name, 16),
+    y: S.youth ? [S.youth.apps | 0, S.youth.g | 0, S.youth.a | 0, S.youth.trophies | 0] : null,
+    s: c.seasons.slice(-25).map((s) => [s.season | 0, cut(s.club, 16), s.league | 0, s.rank | 0, s.apps | 0, s.g | 0, s.a | 0, Math.round((s.avg || 0) * 100), s.ballon | 0]),
+    tr: c.trophies.slice(-20).map((t) => cut(t, 28)), aw: c.awards.slice(-20).map((t) => cut(t, 28)), wc: (c.wc || []).slice(0, 6).map((t) => cut(t, 20)),
+    rv: [S.h2h.w | 0, S.h2h.d | 0, S.h2h.l | 0], rvs: S.rival.career ? [S.rival.career.g | 0, S.rival.career.a | 0, S.rival.career.ballon | 0] : null,
+  };
+  while (JSON.stringify(d).length > 5800 && (d.aw.length || d.s.length > 5)) { if (d.aw.length > 5) d.aw.shift(); else if (d.s.length > 5) d.s.shift(); else d.aw.shift(); }
+  return d;
+}
+function openHofDetail(e, rank) {
+  let d = e.d;
+  if (typeof d === "string") { try { d = JSON.parse(d); } catch { d = null; } }
+  if (!d || typeof d !== "object") d = null;
+  const N = (x) => Number.isFinite(+x) ? Math.round(+x) : 0, A = (x) => Array.isArray(x) ? x : [];
+  const h2h = e.h2h ? [e.h2h.w, e.h2h.d, e.h2h.l] : d && A(d.rv).length === 3 ? d.rv : null;
+  const org = (d && d.org) || e.origin;
+  const head = `<div class="hd-head"><div class="hav" id="hd-av"></div><div><b>${esc(e.name)}</b><small>${POS[e.pos] ? POS[e.pos].name : ""}${ORIGINS[org] ? " · " + ORIGINS[org].flag + " " + ORIGINS[org].name : ""}${d && d.ag ? ` · ${N(d.ag)}세 은퇴` : ""}</small><span>${esc(e.grade || "")}</span></div><em>${rank ? rank + "위<br/>" : ""}${N(e.score)}점</em></div>`;
+  const chips = [["경기", N(e.apps)], ["⚽ 골", N(e.g)], ["🅰️ 도움", N(e.a)], ["최고 능력치", N(e.peak)], ["🏆 우승", N(e.trophies)], ["🏅 발롱도르", N(e.ballon)]];
+  if (d) chips.push(["⭐ MOM", N(d.mom)], [`A매치 · ${N(d.ig)}골`, N(d.caps)]);
+  let html = head + `<div class="hd-chips">${chips.map(([k, v]) => `<div><b>${v}</b><small>${k}</small></div>`).join("")}</div>`;
+  if (d && A(d.s).length) {
+    html += `<p class="label">시즌 기록</p><div class="hd-scroll"><table class="tbl"><tr><th>시즌</th><th>클럽</th><th>순위</th><th>경기</th><th>⚽</th><th>🅰️</th><th>평점</th><th>발롱</th></tr>${A(d.s).map((s) => { s = A(s); const lg = LEAGUES[N(s[2])]; return `<tr><td>${N(s[0])}</td><td>${lg ? lg.flag + " " : ""}${esc(shortName(String(s[1] || "")))}</td><td>${N(s[3]) || "-"}</td><td>${N(s[4])}</td><td>${N(s[5])}</td><td>${N(s[6])}</td><td>${s[7] ? (N(s[7]) / 100).toFixed(2) : "-"}</td><td>${N(s[8]) ? N(s[8]) + "위" : "-"}</td></tr>`; }).join("")}</table></div>`;
+  } else if (e.club) html += `<p class="small">마지막 클럽: ${esc(e.club)}</p>`;
+  const tr = d ? A(d.tr) : [], aw = d ? A(d.aw) : [], wc = d ? A(d.wc) : [];
+  if (tr.length || aw.length || wc.length) html += `<p class="label">우승과 수상</p><div class="aw-list">${[...tr.map((t) => "🏆 " + esc(t)), ...wc.map((t) => "🌍 월드컵 " + esc(t)), ...aw.map((t) => esc(t))].map((a) => `<span>${a}</span>`).join("")}</div>`;
+  if (e.rival) html += `<p class="label">⚔️ 라이벌 ${esc(e.rival)}</p><p class="small">${h2h ? `맞대결 ${N(h2h[0])}승 ${N(h2h[1])}무 ${N(h2h[2])}패` : ""}${d && A(d.rvs).length === 3 ? ` · 라이벌 통산 ⚽${N(d.rvs[0])} 🅰️${N(d.rvs[1])} 🏅${N(d.rvs[2])}` : ""}</p>`;
+  if (d && A(d.y).length === 4 && d.y[0]) html += `<p class="small">유스 ${N(d.y[0])}경기 ⚽${N(d.y[1])} 🅰️${N(d.y[2])} · 우승 ${N(d.y[3])}회${d.fame ? " · " + esc(d.fame) : ""}</p>`;
+  if (!d) html += `<p class="small">상세 기록은 이번 업데이트 이후 은퇴한 선수부터 보여요.</p>`;
+  if (e.date) html += `<p class="small">${esc(e.date)} 은퇴</p>`;
+  modal({ title: "🏛️ 명예의 전당", wide: true, html, buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }] });
+  setTimeout(() => { const av = document.getElementById("hd-av"); if (av) { try { av.appendChild(e.look ? avatarCanvas(e.look, e.kit, 56) : avatarCanvas({ face: FACE_IDS.includes(e.face) ? e.face : FACE_IDS[0], skin: 0, hair: 0, hairColor: 0, number: 0 }, [/^#[0-9a-f]{3,8}$/i.test(e.kit0) ? e.kit0 : "#3b7fd6", "#ffffff"], 56)); } catch { av.textContent = "⚽"; } } }, 0);
+}
 function openHof(tab = "world") {
   $("hof-tabs").innerHTML = `<button class="${tab === "world" ? "on" : ""}" data-ht="world">🌍 세계 랭킹</button><button class="${tab === "mine" ? "on" : ""}" data-ht="mine">📱 내 기록</button>`;
   document.querySelectorAll("[data-ht]").forEach((b) => b.onclick = () => openHof(b.dataset.ht));
   if (tab === "world" && typeof openHofWorld === "function") { show("scr-hof"); return openHofWorld(); }
   const hof = JSON.parse(localStorage.getItem(HOF_KEY) || "[]");
   $("hof-list").innerHTML = hof.length ? hof.map((e, i) => `<div class="hof-row"><span>${i + 1}</span><div class="hav" data-i="${i}"></div><div><b>${esc(e.name)} <small>${POS[e.pos].short} · 최고 ${Math.round(e.peak)}</small></b><span>${e.grade}</span><small>⚽${e.g} 🅰️${e.a} 🏆${e.trophies} 🏅${e.ballon} · vs ${esc(e.rival)} ${e.h2h.w}-${e.h2h.d}-${e.h2h.l}</small></div><em>${e.score}</em></div>`).join("") : `<p class="hint">아직 은퇴한 선수가 없어요.</p>`;
-  document.querySelectorAll("#hof-list .hav").forEach((d) => { const e = hof[+d.dataset.i]; d.appendChild(avatarCanvas(e.look, e.kit, 44)); });
+  document.querySelectorAll("#hof-list .hav").forEach((d) => { const e = hof[+d.dataset.i]; d.appendChild(avatarCanvas(e.look, e.kit, 44)); const row = d.closest(".hof-row"); if (row) row.onclick = () => openHofDetail(e, +d.dataset.i + 1); });
   show("scr-hof");
 }
 
