@@ -63,8 +63,35 @@ const LEAGUES = [
     clubs: [["Kingsbridge United", 86, "#c8102e", "#fff"], ["Northport City", 85, "#7fc4ee", "#123"], ["Milburn Rovers", 82, "#1b3f94", "#fff"],
             ["Harbour City FC", 80, "#1c1c1c", "#ffd23f"], ["Stonegate", 78, "#6a0d34", "#9ed0f0"], ["Redmill FC", 77, "#e03030", "#111"],
             ["Ashfield", 75, "#f5f5f5", "#122"], ["Brightwater", 74, "#2d7ad6", "#fff"], ["Westholm", 73, "#7a2b4a", "#9fd3ff"], ["Crown Park", 71, "#0b5b3a", "#fff"]] },
+  // ---------- 2부 리그 (나라마다 10팀, 시즌 끝나면 1부 하위 2팀 ↔ 2부 상위 2팀 승강) ----------
+  { id: 6, name: "K League 2", flag: "🇰🇷", nat: "kr", tier: .5, pay: 14, prestige: .6, up: 0, mix: [["kr", 92], ["br", 5], ["jp", 3]],
+    clubs: [["Suwon Bluehawk", 57, "#1c3f94", "#fff"], ["Anyang Red Fox", 56, "#d6202a", "#fff"], ["Seongnam Silver", 55, "#9aa3ad", "#111"],
+            ["Cheongju Fire", 54, "#e4572e", "#111"], ["Cheonan Stars", 53, "#2c9fd6", "#ffd23f"], ["Gimpo River FC", 52, "#0e6e8c", "#fff"],
+            ["Asan Sunrise", 51, "#f2c21b", "#c62f3a"], ["Pohang Iron", 56, "#222", "#e03030"], ["Changwon Marine", 50, "#14325c", "#fff"], ["Yeosu Dragonhill", 49, "#1f8a4c", "#ffd23f"]] },
+  { id: 7, name: "J2 League", flag: "🇯🇵", nat: "jp", tier: .5, pay: 16, prestige: .6, up: 1, mix: [["jp", 90], ["br", 6], ["kr", 4]],
+    clubs: [["Shimizu Orange Pulse", 58, "#ff8c3a", "#fff"], ["Kobe Harbor", 57, "#8a1c2b", "#fff"], ["Niigata White Swan", 56, "#ffffff", "#ff8c3a"],
+            ["Hiroshima Purple Wing", 55, "#5a2a82", "#fff"], ["Okayama Red Bridge", 54, "#c8102e", "#fff"], ["Tokushima Blue Soul", 53, "#1a4ea0", "#fff"],
+            ["Yamagata Monte", 52, "#14325c", "#c0c0c0"], ["Nagasaki Sailor", 54, "#2c9fd6", "#ff8c3a"], ["Kanazawa Gold", 51, "#d4af37", "#111"], ["Oita Trinity", 50, "#1c3f94", "#f2c21b"]] },
+  { id: 8, name: "Dutch 2nd Division", flag: "🇳🇱", nat: "nl", tier: 1.5, pay: 36, prestige: 1.2, up: 2, mix: [["nl", 70], ["br", 5], ["de", 6], ["en", 5], ["fr", 5], ["jp", 4], ["kr", 5]],
+    clubs: [["Groning FC", 62, "#1f8a4c", "#fff"], ["Alkmaar CS", 61, "#c8102e", "#fff"], ["Heeren SC", 60, "#1c3f94", "#fff"],
+            ["Nijmegen City", 59, "#c8102e", "#111"], ["Katwijk Star", 57, "#f6d23a", "#1c3f94"], ["Enschede Red", 58, "#e03030", "#fff"],
+            ["Den Bosch Dragons", 56, "#ffffff", "#c8102e"], ["Roosendaal FC", 55, "#5a2a82", "#fff"], ["Deventer Blue", 57, "#2457b7", "#fff"], ["Volendam Orange", 54, "#ff8c3a", "#111"]] },
+  { id: 9, name: "Portugal 2nd Division", flag: "🇵🇹", nat: "pt", tier: 1.5, pay: 38, prestige: 1.2, up: 3, mix: [["pt", 62], ["br", 20], ["ar", 6], ["es", 5], ["fr", 4], ["kr", 3]],
+    clubs: [["Portimao Wave", 61, "#111", "#fff"], ["Vizela Redwing", 60, "#c8102e", "#fff"], ["Chaves Spring", 59, "#2c9fd6", "#c8102e"],
+            ["Torres FC", 58, "#1f8a4c", "#fff"], ["Penafiel Green", 57, "#16733a", "#ffd23f"], ["Mafra Marine", 56, "#14325c", "#ffd23f"],
+            ["Leiria Castle", 57, "#ffffff", "#111"], ["Oliveira United", 55, "#1c3f94", "#e03030"], ["Viseu Academy", 54, "#111", "#ffd23f"], ["Ourem FC", 53, "#e4572e", "#fff"]] },
+  { id: 10, name: "Spain Segunda", flag: "🇪🇸", nat: "es", tier: 2.5, pay: 90, prestige: 1.8, up: 4, mix: [["es", 62], ["ar", 9], ["br", 7], ["fr", 6], ["pt", 5], ["kr", 4], ["jp", 3], ["nl", 4]],
+    clubs: [["Zaragoza Leo", 69, "#1c3f94", "#fff"], ["Gijon Marinero", 68, "#c8102e", "#fff"], ["Oviedo Blue", 67, "#1a4ea0", "#fff"],
+            ["Malaga Costa", 68, "#2c9fd6", "#fff"], ["Coruna Atlantico", 66, "#1c3f94", "#ffffff"], ["Santander Cantabria", 65, "#1f8a4c", "#fff"],
+            ["Elche Palm", 65, "#16733a", "#fff"], ["Almeria Sol", 64, "#e03030", "#fff"], ["Burgos Castilla", 63, "#111", "#fff"], ["Cadiz Amarillo", 62, "#f6d23a", "#1c3f94"]] },
+  { id: 11, name: "Championship Division", flag: "🇬🇧", nat: "en", tier: 2.5, pay: 100, prestige: 1.8, up: 5, mix: [["en", 52], ["fr", 7], ["br", 6], ["es", 6], ["pt", 5], ["ar", 5], ["nl", 6], ["de", 6], ["kr", 4], ["jp", 3]],
+    clubs: [["Riverton FC", 70, "#c8102e", "#fff"], ["Oakfield United", 69, "#1c3f94", "#fff"], ["Abbeygate", 68, "#5a2a82", "#ffd23f"],
+            ["Silverdale", 67, "#9aa3ad", "#111"], ["Brookside City", 66, "#2c9fd6", "#fff"], ["Highland Rangers", 65, "#16733a", "#fff"],
+            ["Portwick Town", 64, "#e4572e", "#111"], ["Northgate", 65, "#111", "#ffd23f"], ["Blackstone Vale", 63, "#222", "#c0c0c0"], ["Eastmall FC", 62, "#c8102e", "#1c3f94"]] },
 ];
 const TIER_OF = (lgId) => LEAGUES[lgId].tier;
+LEAGUES.forEach((l) => { l.div = l.up != null ? 2 : 1; if (l.up != null) LEAGUES[l.up].down = l.id; });
+const TOP_LEAGUES = LEAGUES.filter((l) => l.div === 1);
 
 /* 대륙컵 — 지난 시즌 순위 상위 팀이 나가요. at: 그 리그 라운드가 끝난 뒤 열리는 단계 */
 const CUPS = {

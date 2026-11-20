@@ -204,6 +204,7 @@ function makeRival() {
 }
 
 function newGame() {
+  applyMem(null);
   S = {
     v: 4, diff: C.diff, name: C.name, pos: C.pos, foot: C.foot, look: { ...C.look }, origin: C.origin,
     stats: { ...C.roll.stats }, talent: { ...C.roll.talent },
@@ -897,7 +898,7 @@ function rivalPickClub() {
   moveToClub("rv", best.club);
 }
 function ensureWorld() {
-  if (S.world && S.world.p && S.world.p.me && S.world.p.me.cs) { W = S.world; ensureCoaches(); return; }
+  if (S.world && S.world.p && S.world.p.me && S.world.p.me.cs) { W = S.world; if (ensureDiv2()) save(); ensureCoaches(); return; }
   // 옛 세이브(v0.3 이하): 새 세계를 깔고 이번 시즌을 처음부터
   const keepClub = S.pro && S.pro.club;
   initWorld(); initLeagues(); initCups(null);
@@ -940,7 +941,7 @@ async function youthEnd() {
   news(`✍️ Rookie ${S.name} joins ${pick1.club} · Rival ${S.rival.name} heads to ${S.rival.club}`);
   S.pending = null; save();
   show("scr-main"); renderMain();
-  await tip("t-pro", `As a pro, each round is <b>1 training + 1 match</b>, with ${ROUNDS} rounds a season (home & away).<br/>960 players at 60 clubs in 6 leagues play real matches on the same engine every round. Follow the world in 📰 News, 🏆 League and 👥 Squad.<br/>Finish near the top and you play the <b>continental cup</b> next season. The <b>World Cup</b> comes every 4 seasons.`);
+  await tip("t-pro", `As a pro, each round is <b>1 training + 1 match</b>, with ${ROUNDS} rounds a season (home & away).<br/>1,920 players at 120 clubs in 12 leagues (top and second tiers of 6 countries) play real matches on the same engine every round. Follow the world in 📰 News, 🏆 League and 👥 Squad.<br/>Finish near the top and you play the <b>continental cup</b> next season. The <b>World Cup</b> comes every 4 seasons.`);
 }
 function joinClub(o) {
   const c = clubData(o.league, o.club);
@@ -1226,7 +1227,7 @@ async function seasonEnd() {
   $("ss-body").innerHTML = `${heroAw ? `<div class="ss-hero" style="background-image:url(assets/ceremony.webp)"><b>${awards.map((a) => a.name).join(" · ")}</b></div>` : ""}
     <div class="ss-card"><h4>${lg.flag} ${lg.name} final table</h4>
       <table class="tbl"><tr><th>#</th><th>Club</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th></tr>
-      ${tbl.map(([n, t], i) => `<tr class="${myRow(n)}"><td>${i + 1}</td><td>${crestHTML(n, 14)} ${esc(n)}${n === rvp.c ? " ⚔️" : ""}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table></div>
+      ${tbl.map(([n, t], i) => `<tr class="${myRow(n)} ${zoneCls(P.league, i)}"><td>${i + 1}</td><td>${crestHTML(n, 14)} ${esc(n)}${n === rvp.c ? " ⚔️" : ""}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table></div>
     <div class="ss-card"><h4>My season</h4>
       ${seasonStatHTML(W.p.me.s)}
       <div class="ss-me"><div id="ss-av"></div><div>League ${P.s.apps} apps (${P.s.starts} starts)<br/>⚽ ${P.s.g} goals · 🅰️ ${P.s.a} assists · MOTM ${P.s.mom}<br/>Avg rating <b>${myAvg ? myAvg.toFixed(2) : "-"}</b>${P.cup.ap ? `<br/>Continental cup ${P.cup.ap} apps ⚽ ${P.cup.g} 🅰️ ${P.cup.a}` : ""}<br/>
@@ -1238,7 +1239,8 @@ async function seasonEnd() {
       <div>${LEAGUES[rvp.l].flag} ${esc(rvp.c)} (#${rankOf(rvp.c)}) · ${rs.ap} apps · ⚽ ${rs.g} · 🅰️ ${rs.a} · Avg ${rs.avg ? rs.avg.toFixed(2) : "-"}<br/>
       ${rvAwards.length ? rvAwards.map((a) => `<span class="aw rv">${a}</span>`).join(" ") : "<small>No awards</small>"}</div>
       <div class="ss-vs">${P.s.g + P.s.a > rs.g + rs.a ? "🔥 You won this season!" : P.s.g + P.s.a < rs.g + rs.a ? "😤 Your rival edged it this season" : "🤝 Neck and neck"}</div></div>
-    <div class="ss-card"><h4>🌍 World football</h4>${LEAGUES.filter((l) => l.id !== P.league).map(awLine).join("")}${cupLine}</div>
+    <div class="ss-card"><h4>🌍 World football</h4>${TOP_LEAGUES.filter((l) => l.id !== P.league).map(awLine).join("")}${cupLine}</div>
+    <div class="ss-card"><h4>🔁 Promotion · Relegation</h4>${promoPreview().map((x) => `<div class="small">${LEAGUES[x.lg].flag} ⬆️ ${x.up.map((n) => `<b class="${n === P.club ? "me-t" : ""}">${esc(n)}</b>`).join(", ")} · ⬇️ ${x.down.map((n) => `<b class="${n === P.club ? "me-t" : ""}">${esc(n)}</b>`).join(", ")}</div>`).join("")}</div>
     <div class="ss-card"><h4>🏅 Ballon d'Or ranking</h4>
       ${cands.slice(0, 5).map((c, i) => `<div class="bl ${c.id === "me" ? "me" : c.id === "rv" ? "rv" : ""}"><span>${i + 1}</span><b>${NATIONS[c.nat].flag} <a class="pl" data-pid="${c.id}">${esc(c.name)}</a>${c.id === "rv" ? " ⚔️" : ""}</b><small>${esc(shortName(c.club))} ⚽${c.g} 🅰️${c.a}</small><em>${c.sc.toFixed(1)}</em></div>`).join("")}
       ${myB > 5 ? `<div class="bl me"><span>${myB}</span><b>${esc(S.name)}</b><small></small><em>${cands[myB - 1].sc.toFixed(1)}</em></div>` : ""}
@@ -1352,6 +1354,18 @@ async function offseason() {
   }
   if (S.rival.age >= 31) for (const k of STAT_KEYS) S.rival.stats[k] = clamp(S.rival.stats[k] - ((k === "spd" || k === "sta") ? rand(1.5, 3.5) : rand(.4, 1.8)) * (1 - trOf(k, S.rival) * .25), 1, statCap(k, S.rival));
   worldOffseason();
+  promoRelegate();
+  if (W.c[P.club] && W.c[P.club].l !== P.league) {
+    const upL = LEAGUES[W.c[P.club].l].div === 1;
+    P.league = W.c[P.club].l;
+    if (upL) S.fame += 8;
+    addLog(upL ? `⬆️ ${P.club} promoted to ${LEAGUES[P.league].name}!` : `⬇️ ${P.club} relegated to ${LEAGUES[P.league].name}`);
+    save();
+    await modal({ emoji: upL ? "⬆️" : "⬇️", title: upL ? "Promoted!" : "Relegated", html: upL
+      ? `<p><b>${esc(P.club)}</b> moved up to <b>${LEAGUES[P.league].flag} ${LEAGUES[P.league].name}</b>!<br/>Tougher opponents ahead. Fame +8</p>`
+      : `<p><b>${esc(P.club)}</b> dropped to <b>${LEAGUES[P.league].flag} ${LEAGUES[P.league].name}</b>.<br/>Your contract stays the same. You can take offers from other clubs in the transfer window.</p>`,
+      buttons: [{ label: "To the transfer window", value: 1, cls: "btn-primary" }] });
+  } else save();
   const ct = S.contract;
   if (ct && ct.club === P.club) ct.years--;
   const free = !ct || ct.club !== P.club || ct.years <= 0;
@@ -1394,14 +1408,20 @@ async function offseason() {
 function bindPlayerLinks(root) {
   root.querySelectorAll("[data-pid]").forEach((a) => a.onclick = (e) => { e.stopPropagation(); openPlayer(a.dataset.pid); });
 }
+/* 순위표 승강권: 1부 하위 2팀 강등, 2부 상위 2팀 승격 */
+function zoneCls(lgId, i) { const l = LEAGUES[lgId], n = l.clubs.length; return l.down != null && i >= n - 2 ? "z-rel" : l.up != null && i < 2 ? "z-pro" : ""; }
+function zoneLegend(lgId) { const l = LEAGUES[lgId]; return `<p class="small zone-lg">${l.down != null ? `<i class="z-rel"></i> Relegation zone (${LEAGUES[l.down].name})` : `<i class="z-pro"></i> Promotion zone (${LEAGUES[l.up].name})`}</p>`; }
 function openLeague(lgId = S.pro.league, tab = "table") {
-  const lgBtns = LEAGUES.map((l) => `<button class="${l.id === lgId ? "on" : ""}" data-lg="${l.id}">${l.flag} ${l.name}</button>`).join("");
+  const cur = LEAGUES[lgId], top = cur.div === 2 ? LEAGUES[cur.up] : cur;
+  const lgBtns = TOP_LEAGUES.map((l) => { const t = cur.div === 2 ? LEAGUES[l.down] : l; return `<button class="${l.id === top.id ? "on" : ""}" data-lg="${t.id}">${t.flag} ${t.name}</button>`; }).join("");
+  const divBtns = top.down != null ? `<div class="seg lg-div"><button class="${cur.div === 1 ? "on" : ""}" data-lg="${top.id}">Tier 1</button><button class="${cur.div === 2 ? "on" : ""}" data-lg="${top.down}">Tier 2</button></div>` : "";
   const tabs = [["table", "Rank"], ["res", "Result"], ["g", "Goals"], ["a", "Assists"], ["rt", "Rating"], ["kp", "Key passes"], ["pp", "Pass%"], ["tc", "Tackles"], ["cup", "Continental Cup"]].map(([k, n]) => `<button class="${k === tab ? "on" : ""}" data-tab="${k}">${n}</button>`).join("");
   let body;
   const pl = (p) => `<a class="pl" data-pid="${p.id}">${esc(p.n)}</a>`;
   if (tab === "table") {
     body = `<table class="tbl"><tr><th>#</th><th>Club</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th></tr>${sortedTable(lgId).map(([n, t], i) =>
-      `<tr class="${n === S.pro.club ? "me" : n === W.p.rv.c ? "rv" : ""}"><td>${i + 1}</td><td><a class="pl" data-club="${esc(n)}">${crestHTML(n, 14)} ${esc(n)}</a></td><td>${t.p}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table>`;
+      `<tr class="${n === S.pro.club ? "me" : n === W.p.rv.c ? "rv" : ""} ${zoneCls(lgId, i)}"><td>${i + 1}</td><td><a class="pl" data-club="${esc(n)}">${crestHTML(n, 14)} ${esc(n)}</a></td><td>${t.p}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table>`;
+    body += zoneLegend(lgId);
   } else if (tab === "res") {
     const rs = S.lgs[lgId].res.slice(-5);
     body = rs.length ? rs.map((x) => `<div class="rep"><div>${crestHTML(x.h, 16)} <b>${esc(x.h)}</b> <em>${x.hg}:${x.ag}</em> <b>${esc(x.a)}</b> ${crestHTML(x.a, 16)}</div><small>${x.g.map((g) => `${g[0]}' ${esc(g[2])}${g[3] ? ` (${esc(g[3])})` : ""}`).join(" · ") || "No goals"}${x.mom ? ` · ⭐ ${esc(x.mom[0])} ${x.mom[1]}` : ""}${(x.rc || []).map((c) => ` · ${c[2] === "inj" ? "🚑" : "🟥"} ${esc(c[1])} ${c[0]}'`).join("")}${x.ts ? `<br/>Poss ${x.ts[0]}:${100 - x.ts[0]} · Shots ${x.ts[1]}(${x.ts[2]}):${x.ts[4]}(${x.ts[5]}) · xG ${x.ts[3]}:${x.ts[6]} · Pass ${x.ts[7]}%:${x.ts[8]}%` : ""}</small></div>`).join("") : "<p>No matches yet.</p>";
@@ -1413,7 +1433,7 @@ function openLeague(lgId = S.pro.league, tab = "table") {
     body = list.length ? `<table class="tbl"><tr><th>#</th><th>Player</th><th>Club</th><th>Apps</th><th>⚽</th><th>🅰️</th>${extra ? `<th>${extra[0]}</th>` : ""}<th>Rating</th></tr>${list.map((p, i) =>
       `<tr class="${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}"><td>${i + 1}</td><td>${NATIONS[p.nat].flag}${pl(p)}${p.id === "rv" ? "⚔️" : ""}</td><td>${esc(shortName(p.c))}</td><td>${p.s.ap}</td><td>${p.s.g}</td><td>${p.s.a}</td>${extra ? `<td><b>${extra[1](p)}</b></td>` : ""}<td>${pAvg(p).toFixed(2)}</td></tr>`).join("")}</table>` : "<p>No records yet.</p>";
   }
-  const p = modal({ title: "🏆 World Football", wide: true, html: `<div class="seg wrap lg-seg">${lgBtns}</div><div class="seg wrap lg-seg">${tabs}</div><div class="lg-body">${body}</div>`, buttons: [{ label: "Close", value: 1, cls: "btn-primary" }] });
+  const p = modal({ title: "🏆 World Football", wide: true, html: `${divBtns}<div class="seg wrap lg-seg">${lgBtns}</div><div class="seg wrap lg-seg">${tabs}</div><div class="lg-body">${body}</div>`, buttons: [{ label: "Close", value: 1, cls: "btn-primary" }] });
   setTimeout(() => {
     document.querySelectorAll("#modal [data-lg]").forEach((b) => b.onclick = () => openLeague(+b.dataset.lg, tab));
     document.querySelectorAll("#modal [data-tab]").forEach((b) => b.onclick = () => openLeague(lgId, b.dataset.tab));
@@ -1602,7 +1622,7 @@ function openHelp() {
         <li><b>🥅 Penalty · Penalty shoot-out</b>: If you're the team's best shooter, you take it. Drawn cup games and Finals go to a Penalty shoot-out.</li>
       </ul>
       <p>Higher stats mean wider success zones and slower gauges. Turn on 🤖 Auto and it's calculated with the same odds as AI players.</p>
-      <p><b>🌍 Football world</b><br/>960 players at 60 clubs in 6 leagues (K League 1, J.League, Netherlands, Portugal, Spain, England) really play every round. Every match uses the same engine: midfield battles create chances, and the real stats of shooters, passers, defenders and keepers decide the outcome. Players age, grow, transfer and retire.</p>
+      <p><b>🌍 Football world</b><br/>1,920 players at 120 clubs in 12 leagues (top and second tiers of Korea, Japan, Netherlands, Portugal, Spain and England) really play every round. At season end the bottom 2 of each top tier swap places with the top 2 of the second tier. Every match uses the same engine: midfield battles create chances, and the real stats of shooters, passers, defenders and keepers decide the outcome. Players age, grow, transfer and retire.</p>
       <p><b>📅 Pro</b><br/>${ROUNDS} rounds a season (home & away). You start only if you beat teammates in your position. Finish high in the league to play next season's continental cup (Champions Cup · Asian Champions Cup), and there's a World Cup every 4 seasons. You can retire from age 31, and the season you turn 36 is your last.</p>
       <p><b>🎚️ Difficulty</b><br/>Easy, Normal and Hard change growth speed, injuries, how tough your Rival is, transfer offers and shooting minigame difficulty.</p></div>`,
     buttons: [{ label: "Close", value: 1, cls: "btn-primary" }],
@@ -1657,6 +1677,7 @@ function openHof(tab = "world") {
 async function resume() {
   S = load();
   if (!S) return initTitle();
+  applyMem(S.lgMem);
   W = S.world || null;
   if (!S.diff) S.diff = "normal";
   // 옛 세이브는 비슷한 초상화를 골라 입혀요
