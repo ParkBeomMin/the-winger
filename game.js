@@ -329,7 +329,7 @@ function renderMain() {
     const v = S.stats[s.key], w = POS[S.pos].w[s.key];
     const need = mastNeed(s.key), mp = need ? Math.round(((S.mast && S.mast[s.key]) || 0) / need * 100) : 100;
     return `<div class="st ${w >= .2 ? "key" : ""}" title="숙련 ${need ? `${(S.mast && S.mast[s.key]) || 0}/${need} (다음: ${S.talent[s.key] < 5 ? "★" + (S.talent[s.key] + 1) : TRANS_NAME[trOf(s.key) + 1]})` : "초월 III 완성"} · 최대치 ${statCap(s.key)}"><span>${s.emoji} ${s.name}</span><div class="bar"><i style="width:${Math.min(100, v)}%"></i><u style="width:${mp}%"></u></div><b class="${v > 99 ? "over" : ""}">${Math.round(v)}</b><em class="${S.talent[s.key] === 5 ? "t5" : ""}">${talentStr(s.key)}</em></div>`;
-  }).join("") + `<p class="st-legend"><i></i>보라 선은 숙련도예요. 가득 차면 재능 ★이 하나 올라요 · 줄을 누르면 자세히</p>`;
+  }).join("");
   $("stats").querySelectorAll(".st").forEach((el, i) => el.onclick = () => openMast(STATS[i].key));
 
   // 행동
