@@ -806,6 +806,7 @@ async function runTournament() {
       <p>💰 +${prize}만 · ⭐ 명성 +${fame}</p>`,
   });
   S.pending = null;
+  if (typeof adNext === "function" && S.month === 12) await adNext("youth_cup");
   if (S.year === 3 && S.month === 12) { save(); return youthEnd(); }
   nextMonth(); save();
   show("scr-main"); renderMain();
@@ -1203,6 +1204,7 @@ async function seasonEnd() {
     const n = $("ss-next"); if (n) n.onclick = () => res("next");
     const r = $("ss-retire"); if (r) r.onclick = () => res("retire");
   });
+  if (typeof adNext === "function") await adNext("season_end");
   if (choice === "retire") return retire();
   if (wcNext) await worldCup();
   await offseason();

@@ -36,17 +36,26 @@ async function packSave(obj) {
   return "z" + btoa(s);
 }
 async function unpackSave(str) {
-  if (str[0] === "j") return JSON.parse(decodeURIComponent(escape(atob(str.slice(1)))));
+  if (str[0] === "j") return cleanSave(JSON.parse(decodeURIComponent(escape(atob(str.slice(1))))));
   const bin = atob(str.slice(1)), u = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
   const txt = await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
-  const o = JSON.parse(txt);
+  const o = cleanSave(JSON.parse(txt));
   if (!o || !o.name || !o.stats) throw new Error("bad");
   return o;
 }
+/* 남이 만든 이전 코드로 이상한 세이브가 들어와도 화면에 HTML이 끼어들지 못하게: 모든 문자열에서 < > 를 지워요 */
+function cleanSave(v, d = 0) {
+  if (d > 40) return null;
+  if (typeof v === "string") return v.replace(/[<>]/g, "");
+  if (Array.isArray(v)) return v.map((x) => cleanSave(x, d + 1));
+  if (v && typeof v === "object") { const o = {}; for (const k of Object.keys(v)) { if (k === "__proto__" || k === "constructor" || k === "prototype") continue; o[k.replace(/[<>]/g, "")] = cleanSave(v[k], d + 1); } return o; }
+  return v;
+}
 function saveSummary(o) {
   if (!o) return "-";
-  return `${esc(o.name)} · ${o.phase === "pro" && o.pro ? `${o.pro.season}시즌 ${esc(o.pro.club)}` : o.phase === "retired" ? "은퇴" : `유스 ${o.year}년차`} · ${o.age}세 · ${fameGrade(o.fame || 0).name}`;
+  const n = (x) => Number.isFinite(+x) ? Math.round(+x) : 0;
+  return `${esc(o.name)} · ${o.phase === "pro" && o.pro ? `${n(o.pro.season)}시즌 ${esc(o.pro.club)}` : o.phase === "retired" ? "은퇴" : `유스 ${n(o.year)}년차`} · ${n(o.age)}세 · ${fameGrade(n(o.fame)).name}`;
 }
 
 /* ---------- 자동 백업 ---------- */

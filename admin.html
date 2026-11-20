@@ -25,7 +25,13 @@ button.ghost{background:#2c4a39;color:#e8f3ec}button.del{background:#c43b3b;colo
 <div class="card">
   <div class="row"><div><label>이모지</label><input id="fv-emoji" value="🎉"/></div><div style="flex:3"><label>제목</label><input id="fv-title" value="주말 피버 타임"/></div></div>
   <label>설명 (선택)</label><input id="fv-note" placeholder="이번 주말 훈련 효율 2배!"/>
-  <div class="row"><div><label>시작</label><input type="datetime-local" id="fv-from"/></div><div><label>끝</label><input type="datetime-local" id="fv-to"/></div></div>
+  <div class="row"><div><label>시작 (반복이면 반복 기간의 시작)</label><input type="datetime-local" id="fv-from"/></div><div><label>끝 (반복이면 반복 기간의 끝)</label><input type="datetime-local" id="fv-to"/></div></div>
+  <div class="row">
+    <div><label>반복</label><select id="fv-rep"><option value="none">반복 없음 (시작~끝 계속)</option><option value="daily">매일</option><option value="weekly">매주 (요일 선택)</option></select></div>
+    <div><label>하루 중 시작 (한국 시각)</label><input type="time" id="fv-t0" value="20:00"/></div>
+    <div><label>하루 중 끝</label><input type="time" id="fv-t1" value="22:00"/></div>
+  </div>
+  <div id="fv-days" class="small" style="margin-top:6px"></div>
   <div class="row">
     <div><label>훈련 상승폭 % (최대 100)</label><input type="number" id="fv-train" value="50"/></div>
     <div><label>숙련도 % (최대 100)</label><input type="number" id="fv-mast" value="0"/></div>

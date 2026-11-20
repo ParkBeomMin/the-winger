@@ -74,6 +74,7 @@ const Bgm = (() => {
   document.addEventListener("visibilitychange", apply);
   return {
     get on() { return on; },
+    get mode() { return mode; },
     set(m) { if (m === mode) return; mode = m; apply(); },
     toggle() { on = !on; localStorage.setItem("w2-bgm", on ? "1" : "0"); apply(); return on; },
     refresh: apply, roar,

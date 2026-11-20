@@ -26,12 +26,38 @@ function feverNorm(o) {
   if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return null;
   const eff = {};
   for (const k in FEVER_CAP) { const v = Number(o.eff && o.eff[k]); if (Number.isFinite(v) && v > 0) eff[k] = Math.min(v, FEVER_CAP[k]); }
-  return { id: String(o.id || "fever"), emoji: String(o.emoji || "🎉").slice(0, 4), title: String(o.title || "피버 타임").slice(0, 40), note: String(o.note || "").slice(0, 120), from, to, eff };
+  const rep = o.rep === "daily" || o.rep === "weekly" ? o.rep : "none";
+  const t0 = clamp(+o.t0 || 0, 0, 1440), t1 = clamp(+o.t1 || 0, 0, 1440);
+  const days = String(o.days || "0123456").replace(/[^0-6]/g, "");
+  return { id: String(o.id || "fever"), emoji: String(o.emoji || "🎉").slice(0, 4), title: String(o.title || "피버 타임").slice(0, 40), note: String(o.note || "").slice(0, 120), from, to, eff, rep, t0, t1, days };
+}
+/* 반복 피버: 기간(from~to) 안에서 매일 또는 고른 요일의 t0~t1분(한국 시각)만 켜져요. 자정을 넘기는 구간(22:00~02:00)도 돼요.
+ * 돌려주는 값은 '이번 회차'의 시작·끝(알림을 회차마다 한 번 띄우려고) */
+const KST = 9 * 3600000;
+function occurrence(e, now) {
+  if (now < e.from || now >= e.to) return null;
+  if (e.rep === "none") return { from: e.from, to: e.to };
+  const k = new Date(now + KST), mins = k.getUTCHours() * 60 + k.getUTCMinutes();
+  const dayStart = Date.UTC(k.getUTCFullYear(), k.getUTCMonth(), k.getUTCDate()) - KST;   // 오늘 0시(KST)의 실제 시각
+  const wrap = e.t1 <= e.t0;
+  const tryDay = (d0, wd) => {
+    if (e.rep === "weekly" && !e.days.includes(String(wd))) return null;
+    const s = d0 + e.t0 * 60000, en = d0 + (wrap ? e.t1 + 1440 : e.t1) * 60000;
+    return now >= s && now < en ? { from: Math.max(s, e.from), to: Math.min(en, e.to) } : null;
+  };
+  return tryDay(dayStart, k.getUTCDay()) || (wrap && mins < e.t1 ? tryDay(dayStart - 86400000, (k.getUTCDay() + 6) % 7) : null);
+}
+/* 지금 켜진 피버 전부 (여러 개면 효과를 더하고, 상한은 그대로) */
+function feverAll() {
+  const box = rdj(FEVER_KEY), now = Date.now();
+  return ((box && box.rows) || []).map(feverNorm).filter(Boolean).map((e) => { const oc = occurrence(e, now); return oc ? { ...e, ocFrom: oc.from, ocTo: oc.to } : null; }).filter(Boolean);
 }
 function feverLive() {
-  const box = rdj(FEVER_KEY), now = Date.now();
-  const list = ((box && box.rows) || []).map(feverNorm).filter(Boolean);
-  return list.find((e) => now >= e.from && now < e.to) || null;
+  const all = feverAll();
+  if (!all.length) return null;
+  const eff = {};
+  for (const e of all) for (const k in e.eff) eff[k] = Math.min(FEVER_CAP[k], (eff[k] || 0) + e.eff[k]);
+  return { ...all[0], eff, more: all.length - 1, to: Math.min(...all.map((e) => e.ocTo)), from: all[0].ocFrom };
 }
 /* 게임 로직이 부르는 값: 효과가 없으면 0 */
 function F(k) { const e = feverLive(); return e && e.eff[k] ? e.eff[k] : 0; }
@@ -44,7 +70,7 @@ function leftText(to) {
 async function feverRefresh() {
   try {
     const rows = await fsList("w2fever", 20), now = Date.now();
-    wrj(FEVER_KEY, { at: now, rows: rows.filter((r) => +r.to > now).map((r) => ({ id: r.id, emoji: r.emoji, title: r.title, note: r.note, from: r.from, to: r.to, eff: r.eff })) });
+    wrj(FEVER_KEY, { at: now, rows: rows.filter((r) => +r.to > now).map((r) => ({ id: r.id, emoji: r.emoji, title: r.title, note: r.note, from: r.from, to: r.to, eff: r.eff, rep: r.rep, t0: r.t0, t1: r.t1, days: r.days })) });
   } catch {}
   feverTick();
 }
@@ -54,7 +80,7 @@ function feverTick() {
   if (!e) { if (bar) bar.remove(); document.body.classList.remove("fever-on"); return; }
   if (!bar) { bar = document.createElement("div"); bar.id = "fever-bar"; document.body.appendChild(bar); bar.onclick = () => feverAnnounce(e, true); }
   document.body.classList.add("fever-on");
-  bar.innerHTML = `<span>${e.emoji}</span><b>${esc(e.title)}</b><em>${feverEffText(e)}</em><small>${leftText(e.to)}</small>`;
+  bar.innerHTML = `<span>${esc(e.emoji)}</span><b>${esc(e.title)}${e.more ? ` 외 ${e.more}개` : ""}</b><em>${feverEffText(e)}</em><small>${leftText(e.to)}</small>`;
   feverAnnounce(e);
 }
 function feverAnnounce(e, force) {
@@ -62,7 +88,7 @@ function feverAnnounce(e, force) {
   if (!force && rdj(FEVER_SEEN) === stamp) return;
   if (!force && !$("modal").hidden) return;   // 다른 창이 열려 있으면 다음 화면 전환 때
   wrj(FEVER_SEEN, stamp);
-  modal({ emoji: e.emoji, title: e.title, html: `${e.note ? `<p>${esc(e.note)}</p>` : ""}<p class="fv-big">${feverEffText(e)}</p><p class="small">${leftText(e.to)} · ${new Date(e.to).toLocaleString("ko-KR")}까지</p>`, buttons: [{ label: "좋아요!", value: 1, cls: "btn-primary" }] });
+  modal({ emoji: esc(e.emoji), title: esc(e.title), html: `${e.note ? `<p>${esc(e.note)}</p>` : ""}<p class="fv-big">${feverEffText(e)}</p><p class="small">${leftText(e.to)} · ${new Date(e.to).toLocaleString("ko-KR")}까지</p>`, buttons: [{ label: "좋아요!", value: 1, cls: "btn-primary" }] });
 }
 
 /* ---------- 📢 공지사항 ---------- */
@@ -121,7 +147,8 @@ async function openHofWorld() {
   let rows;
   try { rows = await hofTop(50); } catch { box.innerHTML = `<p class="hint">연결에 실패했어요. 잠시 뒤에 다시 해 주세요.</p>`; return; }
   const mine = new Set(rdj(HOF_SENT) || []);
-  box.innerHTML = rows.length ? rows.map((e, i) => `<div class="hof-row ${mine.has(e.id) ? "me" : ""}"><span>${i + 1}</span><div class="hav" data-w="${i}"></div><div><b>${esc(e.name)} <small>${POS[e.pos] ? POS[e.pos].short : ""} · ${ORIGINS[e.origin] ? ORIGINS[e.origin].flag : ""} · 최고 ${e.peak}${e.diff && e.diff !== "normal" ? ` · ${DIFF[e.diff] ? DIFF[e.diff].name : ""}` : ""}</small></b><span>${esc(e.grade)}</span><small>⚽${e.g} 🅰️${e.a} 🏆${e.trophies} 🏅${e.ballon} · ${esc(e.club)}</small></div><em>${e.score}</em></div>`).join("")
+  const N = (x) => Number.isFinite(+x) ? Math.round(+x) : 0;
+  box.innerHTML = rows.length ? rows.map((e, i) => `<div class="hof-row ${mine.has(e.id) ? "me" : ""}"><span>${i + 1}</span><div class="hav" data-w="${i}"></div><div><b>${esc(e.name)} <small>${POS[e.pos] ? POS[e.pos].short : ""} · ${ORIGINS[e.origin] ? ORIGINS[e.origin].flag : ""} · 최고 ${N(e.peak)}${DIFF[e.diff] && e.diff !== "normal" ? ` · ${DIFF[e.diff].name}` : ""}</small></b><span>${esc(e.grade)}</span><small>⚽${N(e.g)} 🅰️${N(e.a)} 🏆${N(e.trophies)} 🏅${N(e.ballon)} · ${esc(e.club)}</small></div><em>${N(e.score)}</em></div>`).join("")
     : `<p class="hint">아직 등록된 선수가 없어요. 첫 레전드가 되어 보세요!</p>`;
   box.querySelectorAll("[data-w]").forEach((d) => { const e = rows[+d.dataset.w]; try { d.appendChild(avatarCanvas({ face: FACE_IDS.includes(e.face) ? e.face : FACE_IDS[0], skin: 0, hair: 0, hairColor: 0, number: 0 }, [/^#[0-9a-f]{3,8}$/i.test(e.kit0) ? e.kit0 : "#3b7fd6", "#ffffff"], 44)); } catch { d.textContent = "⚽"; } });
 }

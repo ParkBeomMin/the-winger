@@ -32,14 +32,15 @@ const fmt = (ms) => new Date(ms).toLocaleString("ko-KR", { dateStyle: "short", t
 
 async function loadAll() {
   const fv = (await list("w2fever")).sort((a, b) => b.from - a.from);
-  $("fv-list").innerHTML = fv.map((e) => `<div class="item"><div>${esc(e.emoji)} <b>${esc(e.title)}</b><br/><span class="small">${fmt(e.from)} ~ ${fmt(e.to)} · ${Object.entries(e.eff || {}).map(([k, v]) => `${k} ${v}`).join(", ")}${Date.now() > e.to ? " · 종료" : Date.now() >= e.from ? " · 🔴 진행 중" : " · 예정"}</span></div><button class="del" data-del="w2fever/${e.id}">삭제</button></div>`).join("") || `<p class="small">등록된 피버가 없어요</p>`;
+  $("fv-list").innerHTML = fv.map((e) => `<div class="item"><div>${esc(e.emoji)} <b>${esc(e.title)}</b><br/><span class="small">${fmt(e.from)} ~ ${fmt(e.to)}${e.rep && e.rep !== "none" ? ` · 🔁 ${e.rep === "daily" ? "매일" : "매주 " + [...(e.days || "")].map((d) => "일월화수목금토"[+d]).join("")} ${String(Math.floor(e.t0 / 60)).padStart(2, "0")}:${String(e.t0 % 60).padStart(2, "0")}~${String(Math.floor(e.t1 / 60)).padStart(2, "0")}:${String(e.t1 % 60).padStart(2, "0")}` : ""} · ${Object.entries(e.eff || {}).map(([k, v]) => `${k} ${v}`).join(", ")}${Date.now() > e.to ? " · 종료" : Date.now() >= e.from ? " · 🔴 진행 중" : " · 예정"}</span></div><button class="del" data-del="w2fever/${e.id}">삭제</button></div>`).join("") || `<p class="small">등록된 피버가 없어요</p>`;
   const nt = (await list("w2notices")).sort((a, b) => b.at - a.at);
   $("nt-list").innerHTML = nt.map((n) => `<div class="item"><div>${n.pin ? "📌 " : ""}<b>${esc(n.title)}</b><br/><span class="small">${fmt(n.at)}</span></div><button class="del" data-del="w2notices/${n.id}">삭제</button></div>`).join("") || `<p class="small">등록된 공지가 없어요</p>`;
   const hof = (await list("w2hof")).sort((a, b) => b.score - a.score);
-  $("hof-list").innerHTML = hof.map((h) => `<div class="item"><div><b>${esc(h.name)}</b> ${h.score}점 · ${esc(h.grade)}<br/><span class="small">${esc(h.club)} · ⚽${h.g} 🅰️${h.a} · ${esc(h.v)}</span></div><button class="del" data-del="w2hof/${h.id}">삭제</button></div>`).join("") || "아직 없어요";
+  $("hof-list").innerHTML = hof.map((h) => `<div class="item"><div><b>${esc(h.name)}</b> ${Number(h.score) | 0}점 · ${esc(h.grade)}<br/><span class="small">${esc(h.club)} · ⚽${Number(h.g) | 0} 🅰️${Number(h.a) | 0} · ${esc(h.v)}</span></div><button class="del" data-del="w2hof/${encodeURIComponent(h.id)}">삭제</button></div>`).join("") || "아직 없어요";
   document.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => { if (!confirm("삭제할까요?")) return; await del(b.dataset.del); loadAll(); });
 }
 
+$("fv-days").innerHTML = "요일: " + ["일", "월", "화", "수", "목", "금", "토"].map((d, i) => `<label style="display:inline;margin-right:8px"><input type="checkbox" value="${i}" ${i === 0 || i === 6 ? "checked" : ""} style="width:auto"/> ${d}</label>`).join("");
 $("login").onclick = () => login().catch((e) => alert("로그인 실패: " + e.message));
 const now = new Date(); now.setMinutes(0, 0, 0);
 const local = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -47,12 +48,18 @@ $("fv-from").value = local(now); $("fv-to").value = local(new Date(now.getTime()
 $("fv-save").onclick = async () => {
   const from = Date.parse($("fv-from").value), to = Date.parse($("fv-to").value);
   if (!(to > from)) return alert("끝 시각이 시작보다 늦어야 해요");
+  const rep = $("fv-rep").value;
+  const hm = (v) => { const [h, m] = (v || "0:0").split(":").map(Number); return h * 60 + m; };
+  const t0 = hm($("fv-t0").value), t1 = hm($("fv-t1").value);
+  const days = [...document.querySelectorAll("#fv-days input:checked")].map((x) => x.value).join("");
+  if (rep !== "none" && t0 === t1) return alert("하루 중 시작과 끝 시각이 같아요");
+  if (rep === "weekly" && !days) return alert("요일을 하나 이상 골라 주세요");
   const pct = (id, cap) => Math.min(cap, Math.max(0, (+$(id).value || 0) / 100));
   const eff = { train: pct("fv-train", 1), mast: pct("fv-mast", 1), fame: pct("fv-fame", .5), money: pct("fv-money", .5), rate: Math.min(.4, Math.max(0, +$("fv-rate").value || 0)) };
   for (const k in eff) if (!eff[k]) delete eff[k];
   if (!Object.keys(eff).length) return alert("효과를 하나 이상 넣어 주세요");
   const id = "fv" + from.toString(36);
-  if (await put(`w2fever/${id}`, { emoji: $("fv-emoji").value.slice(0, 4) || "🎉", title: $("fv-title").value.slice(0, 40), note: $("fv-note").value.slice(0, 120), from, to, eff })) loadAll();
+  if (await put(`w2fever/${id}`, { emoji: $("fv-emoji").value.slice(0, 4) || "🎉", title: $("fv-title").value.slice(0, 40), note: $("fv-note").value.slice(0, 120), from, to, eff, rep, t0, t1, days })) loadAll();
 };
 $("nt-save").onclick = async () => {
   const title = $("nt-title").value.trim(); if (!title) return alert("제목을 넣어 주세요");

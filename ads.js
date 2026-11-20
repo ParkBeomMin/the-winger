@@ -18,13 +18,34 @@ if (GA.on) {
   gtag("js", new Date()); gtag("config", GA.id, { allow_google_signals: false, allow_ad_personalization_signals: false });
 }
 function track(name, params = {}) { if (GA.on) try { gtag("event", name, params); } catch {} }
+window.adsbygoogle = window.adsbygoogle || [];
+function adBreak(o) { window.adsbygoogle.push(o); }
+function adConfig(o) { window.adsbygoogle.push(o); }
 if (ADS.on && ADS.prod) {
   const s = document.createElement("script"); s.async = true; s.crossOrigin = "anonymous";
   s.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADS.client}`;
+  s.setAttribute("data-ad-client", ADS.client);
+  if (/[?&]adtest=1/.test(location.search)) s.setAttribute("data-adbreak-test", "on");
+  s.setAttribute("data-ad-frequency-hint", "120s");   // 전면 광고는 최소 2분 간격
   document.head.appendChild(s);
+  adConfig({ preloadAdBreaks: "on", sound: "on" });
 }
-window.adsbygoogle = window.adsbygoogle || [];
-const HIDE_AD_ON = ["scr-match", "scr-create"];
+/* 📺 전면 광고 (H5 Games Ads) — 시즌 결산, 유스 대회 끝, 은퇴식처럼 쉬어 가는 지점에서만.
+ * 애드센스 H5 게임 광고 승인 전에는 아무것도 안 뜨고 바로 넘어가요(adBreakDone이 곧장 불려요). 5초 안에 응답이 없어도 넘어가요. */
+function adNext(name) {
+  if (!ADS.on || !ADS.prod) return Promise.resolve();
+  return new Promise((res) => {
+    let done = false; const fin = (info) => { if (done) return; done = true; if (typeof Bgm !== "undefined" && ADS.prevBgm !== undefined) { Bgm.set(ADS.prevBgm); ADS.prevBgm = undefined; } if (info && info.breakStatus === "viewed") track("ad_break", { name }); res(); };
+    try {
+      adBreak({ type: "next", name,
+        beforeAd: () => { if (typeof Bgm !== "undefined") { ADS.prevBgm = Bgm.mode; Bgm.set(null); } },
+        afterAd: () => {},
+        adBreakDone: fin });
+    } catch { fin(); }
+    setTimeout(() => fin(), 5000);
+  });
+}
+const HIDE_AD_ON = [];   // 모든 화면에 하단 배너 (미니게임 창이 뜨면 그 위를 덮어요)
 function adBanner(screenId) {
   if (!ADS.on) return;
   let bar = document.getElementById("adbar");
