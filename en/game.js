@@ -1601,7 +1601,6 @@ function openHofDetail(e, rank) {
   if (tr.length || aw.length || wc.length) html += `<p class="label">Trophies & awards</p><div class="aw-list">${[...tr.map((t) => "🏆 " + esc(t)), ...wc.map((t) => "🌍 World Cup " + esc(t)), ...aw.map((t) => esc(t))].map((a) => `<span>${a}</span>`).join("")}</div>`;
   if (e.rival) html += `<p class="label">⚔️ Rival ${esc(e.rival)}</p><p class="small">${h2h ? `Head-to-head ${N(h2h[0])}W ${N(h2h[1])}D ${N(h2h[2])}L` : ""}${d && A(d.rvs).length === 3 ? ` · Rival career ⚽${N(d.rvs[0])} 🅰️${N(d.rvs[1])} 🏅${N(d.rvs[2])}` : ""}</p>`;
   if (d && A(d.y).length === 4 && d.y[0]) html += `<p class="small">Youth ${N(d.y[0])} apps ⚽${N(d.y[1])} 🅰️${N(d.y[2])} · ${N(d.y[3])} titles${d.fame ? " · " + esc(d.fame) : ""}</p>`;
-  if (!d) html += `<p class="small">Detailed records are shown for players who retired after this update.</p>`;
   if (e.date) html += `<p class="small">Retired ${esc(e.date)}</p>`;
   modal({ title: "🏛️ Hall of Fame", wide: true, html, buttons: [{ label: "Close", value: 1, cls: "btn-primary" }] });
   setTimeout(() => { const av = document.getElementById("hd-av"); if (av) { try { av.appendChild(e.look ? avatarCanvas(e.look, e.kit, 56) : avatarCanvas({ face: FACE_IDS.includes(e.face) ? e.face : FACE_IDS[0], skin: 0, hair: 0, hairColor: 0, number: 0 }, [/^#[0-9a-f]{3,8}$/i.test(e.kit0) ? e.kit0 : "#3b7fd6", "#ffffff"], 56)); } catch { av.textContent = "⚽"; } } }, 0);
