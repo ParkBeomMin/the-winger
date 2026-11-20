@@ -63,3 +63,19 @@ function adBanner(screenId) {
     } else bar.innerHTML = `<div class="ad-ph">하단 배너 광고 자리 (320x50)</div>`;
   }
 }
+
+/* 자동 광고(앵커)와 우리 하단 배너가 겹치지 않게:
+ *  · 앵커가 아래에 뜨면 우리 배너를 잠시 숨기고(앵커가 그 자리를 대신), 앵커를 닫으면 다시 보여요
+ *  · 앵커가 위에 뜨면 화면 위쪽을 그만큼 비워서 HUD가 가려지지 않게 해요 */
+function adAnchorWatch() {
+  if (!ADS.on || !ADS.prod) return;
+  setInterval(() => {
+    const a = [...document.querySelectorAll("ins.adsbygoogle[data-anchor-status]")].find((x) => x.getAttribute("data-anchor-status") === "displayed" && x.offsetHeight > 20);
+    const bar = document.getElementById("adbar");
+    let top = 0, bottom = false;
+    if (a) { const r = a.getBoundingClientRect(); if (r.top < innerHeight / 2) top = Math.round(r.height); else bottom = true; }
+    document.documentElement.style.setProperty("--anchor-top", top + "px");
+    if (bar && document.body.classList.contains("ad-on")) bar.style.visibility = bottom ? "hidden" : "visible";
+  }, 1500);
+}
+adAnchorWatch();
