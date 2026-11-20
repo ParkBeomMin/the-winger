@@ -6,7 +6,7 @@ const GAME_URL = "https://parkbeommin.github.io/the-winger/" + (window.W2_LANG =
 
 /* 서비스워커: 실서비스·로컬에서만 */
 if ("serviceWorker" in navigator && (location.hostname === "parkbeommin.github.io" || location.hostname === "localhost")) {
-  addEventListener("load", () => navigator.serviceWorker.register(window.W2_LANG === "en" ? "../sw.js" : "sw.js", { scope: window.W2_LANG === "en" ? "../" : "./" }).catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js", { scope: "./" }).catch(() => {}));
 }
 
 /* 홈 화면에 추가: 안드로이드 크롬은 설치 창, 아이폰 사파리는 방법 안내 */
@@ -51,9 +51,9 @@ function titleExtras() {
   const ver = document.getElementById("ver");
   if (ver && !document.getElementById("title-extras")) {
     const box = document.createElement("div"); box.id = "title-extras"; ver.parentNode.insertBefore(box, ver);
-    const a = document.createElement("a"); a.className = "privacy-link"; a.href = window.W2_LANG === "en" ? "../privacy.html#en" : "privacy.html";
+    const a = document.createElement("a"); a.className = "privacy-link"; a.href = window.W2_LANG === "en" ? "privacy.html#en" : "privacy.html";
     a.textContent = T("개인정보처리방침", "Privacy Policy"); ver.parentNode.insertBefore(a, ver.nextSibling);
-    const lang = document.createElement("a"); lang.className = "privacy-link"; lang.href = window.W2_LANG === "en" ? "../" : "en/";
+    const lang = document.createElement("a"); lang.className = "privacy-link"; lang.href = window.W2_LANG === "en" ? "./" : "en/";
     lang.textContent = window.W2_LANG === "en" ? "한국어" : "English"; ver.parentNode.insertBefore(lang, a.nextSibling);
   }
   titleExtras();

@@ -356,7 +356,7 @@ function hudBtn(h) {
   else if (h === "bgm") { Bgm.toggle(); toast(Bgm.on ? "🎵 배경음악 켬" : "🎵 배경음악 끔"); }
   else if (h === "notice") openNotices();
   else if (h === "share") shareGame();
-  else if (h === "privacy") window.open(window.W2_LANG === "en" ? "../privacy.html#en" : "privacy.html", "_blank");
+  else if (h === "privacy") window.open(window.W2_LANG === "en" ? "privacy.html#en" : "privacy.html", "_blank");
   else if (h === "home") { save(); initTitle(); }
 }
 function floatFx(btn, text, bad) {
