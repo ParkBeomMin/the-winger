@@ -55,6 +55,21 @@ document.addEventListener("visibilitychange", () => { if (document.hidden && sav
 function load() { try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { return null; } }
 
 /* ---------- 화면 / 모달 / 토스트 ---------- */
+/* 로딩: 화면을 어둡게 하고 가운데에 엠블럼이 흘러가고 내 선수가 공을 몰고 달려요.
+ * 무거운 계산 중에도 멈추지 않게 transform 애니메이션(CSS)만 써요. 다음 창(modal)이나 이적 화면이 뜨면 자동으로 꺼져요 */
+function loadingOn(text) {
+  let el = document.getElementById("loading");
+  if (!el) { el = document.createElement("div"); el.id = "loading"; document.body.appendChild(el); }
+  const pool = Object.keys(CREST_ID).filter((n) => CREST_READY.has(CREST_ID[n])).sort(() => Math.random() - .5).slice(0, 9);
+  const strip = pool.map((n) => `<span>${crestHTML(n, 40)}</span>`).join("");
+  el.innerHTML = `<div class="ld-box"><div class="ld-crests"><div class="ld-strip">${strip}${strip}</div></div>
+    <div class="ld-run"><div class="ld-runner"><i class="ld-av"></i><b class="ld-ball">⚽</b></div></div>
+    <p class="ld-txt">${text}<em>.</em><em>.</em><em>.</em></p></div>`;
+  try { if (S && S.look) el.querySelector(".ld-av").appendChild(avatarCanvas(S.look, myKit(), 40)); } catch { el.querySelector(".ld-av").textContent = "🏃"; }
+  el.hidden = false;
+  return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 30))));
+}
+function loadingOff() { const el = document.getElementById("loading"); if (el) el.hidden = true; }
 function show(id) {
   document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("active", s.id === id));
   window.scrollTo(0, 0);
@@ -65,6 +80,7 @@ function show(id) {
 function modal({ emoji = "", title = "", html = "", buttons = [{ label: "OK", value: true, cls: "btn-primary" }], wide = false, img = "", grid = false }) {
   return new Promise((resolve) => {
     const m = $("modal");
+    loadingOff();
     // 이미 떠 있는 창을 다시 그리면(탭 전환 등) 깜빡이지 않게: 애니메이션 없이, 스크롤 위치 유지
     const keep = !m.hidden && m.querySelector(".mbox");
     const prevTop = keep ? m.querySelector(".mbox").scrollTop : 0, prevLeft = keep ? [...m.querySelectorAll(".seg")].map((s) => s.scrollLeft) : [];
@@ -850,9 +866,10 @@ async function runTournament() {
       <p>💰 +${fmtMoney(prize)} · ⭐ Fame +${fame}</p>`,
   });
   S.pending = null;
-  if (typeof adNext === "function" && S.month === 12) await adNext("youth_cup");
+  if (typeof adNext === "function" && S.month === 12) { await loadingOn(S.year === 3 ? "Waiting for pro offers" : "Preparing next season"); await adNext("youth_cup"); }
   if (S.year === 3 && S.month === 12) { save(); return youthEnd(); }
   nextMonth(); save();
+  loadingOff();
   show("scr-main"); renderMain();
 }
 
@@ -956,6 +973,7 @@ function joinClub(o) {
 function offerScreen({ title, hint, offers, stay }) {
   return new Promise((resolve) => {
     show("scr-offers");
+    setTimeout(loadingOff, 0);
     $("of-title").textContent = title;
     $("of-hint").innerHTML = hint;
     const list = $("of-list");
@@ -1260,10 +1278,13 @@ async function seasonEnd() {
     const n = $("ss-next"); if (n) n.onclick = () => res("next");
     const r = $("ss-retire"); if (r) r.onclick = () => res("retire");
   });
+  if (choice !== "retire") await loadingOn(wcNext ? "Opening the World Cup" : "Opening the transfer window");
   if (typeof adNext === "function") await adNext("season_end");
   if (choice === "retire") return retire();
-  if (wcNext) await worldCup();
+  if (wcNext) { await loadingOn("Opening the World Cup"); await worldCup(); }
+  await loadingOn("Opening the transfer window");
   await offseason();
+  loadingOff();
 }
 
 /* ---------- 🌍 월드컵 ---------- */
@@ -1365,6 +1386,7 @@ async function offseason() {
       ? `<p><b>${esc(P.club)}</b> moved up to <b>${LEAGUES[P.league].flag} ${LEAGUES[P.league].name}</b>!<br/>Tougher opponents ahead. Fame +8</p>`
       : `<p><b>${esc(P.club)}</b> dropped to <b>${LEAGUES[P.league].flag} ${LEAGUES[P.league].name}</b>.<br/>Your contract stays the same. You can take offers from other clubs in the transfer window.</p>`,
       buttons: [{ label: "To the transfer window", value: 1, cls: "btn-primary" }] });
+    await loadingOn("Opening the transfer window");
   } else save();
   const ct = S.contract;
   if (ct && ct.club === P.club) ct.years--;
