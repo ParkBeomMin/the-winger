@@ -104,7 +104,7 @@ const notices = () => rdj(NOTICE_KEY) || [];
 function noticeUnread() { const seen = rdj(NOTICE_SEEN) || 0; return notices().filter((n) => n.at > seen).length; }
 function noticeBadge() {
   const b = document.getElementById("btn-notice");
-  if (b) b.innerHTML = `📢 공지${noticeUnread() ? ` <i class="dot">${noticeUnread()}</i>` : ""}`;
+  if (b) { b.classList.toggle("has-dot", noticeUnread() > 0); b.dataset.n = noticeUnread() || ""; }
   const h = document.querySelector('[data-h="notice"]');
   if (h) h.classList.toggle("has-dot", noticeUnread() > 0);
 }

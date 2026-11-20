@@ -62,11 +62,11 @@ function show(id) {
   if (typeof feverTick === "function") feverTick();
   if (typeof adBanner === "function") adBanner(id);
 }
-function modal({ emoji = "", title = "", html = "", buttons = [{ label: "확인", value: true, cls: "btn-primary" }], wide = false, img = "" }) {
+function modal({ emoji = "", title = "", html = "", buttons = [{ label: "확인", value: true, cls: "btn-primary" }], wide = false, img = "", grid = false }) {
   return new Promise((resolve) => {
     const m = $("modal");
     m.innerHTML = `<div class="mbox ${wide ? "wide" : ""}">${img ? `<img class="m-img" src="${img}" alt="" />` : emoji ? `<div class="m-emoji">${emoji}</div>` : ""}${title ? `<h3>${title}</h3>` : ""}<div class="m-html">${html}</div>
-      <div class="m-btns">${buttons.map((b, i) => `<button class="btn ${b.cls || "btn-ghost"}" data-i="${i}">${b.label}${b.hint ? `<small>${b.hint}</small>` : ""}</button>`).join("")}</div></div>`;
+      <div class="m-btns${grid ? " grid" : ""}">${buttons.map((b, i) => `<button class="btn ${b.cls || "btn-ghost"}" data-i="${i}">${b.label}${b.hint ? `<small>${b.hint}</small>` : ""}</button>`).join("")}</div></div>`;
     m.hidden = false;
     m.querySelectorAll("[data-i]").forEach((b) => b.onclick = () => { Sfx.tap(); m.hidden = true; m.innerHTML = ""; resolve(buttons[+b.dataset.i].value); });
   });
@@ -96,6 +96,11 @@ function initTitle() {
   if (sv && sv.phase !== "retired") {
     $("btn-continue").innerHTML = `이어하기 <small>${esc(sv.name)} · ${sv.phase === "youth" ? `유스 ${sv.year}년차` : `${sv.pro.club} ${sv.pro.season}시즌`}</small>`;
   }
+  // 이어할 진행이 있으면 이어하기가 주 버튼, 새로 만들기는 아래로
+  const hasSave = !$("btn-continue").hidden, bn = $("btn-new"), bc = $("btn-continue");
+  bc.className = `btn ${hasSave ? "btn-primary" : "btn-ghost"}`; bn.className = `btn ${hasSave ? "btn-ghost" : "btn-primary"}`;
+  if (hasSave && bn.nextElementSibling === bc) bn.parentNode.insertBefore(bc, bn);
+  if (!hasSave && bc.nextElementSibling === bn) bc.parentNode.insertBefore(bn, bc);
   $("ver").textContent = VERSION;
   show("scr-title");
 }
@@ -336,7 +341,9 @@ function renderMain() {
   const qk = $("actions").querySelector("[data-quick]"); if (qk) qk.onclick = quickSeason;
   $("actions-title").textContent = pro ? `이번 라운드 준비 (경기 전 1번)` : `이번 달 뭘 할까요?`;
 
-  $("hud-btns").innerHTML = `${pro ? `<button data-h="league">🏆 세계</button><button data-h="squad">👥 스쿼드</button><button data-h="news">📰 뉴스</button>` : ""}<button data-h="career">📊 커리어</button><button data-h="rival">🆚 라이벌</button>${S.shopOpen ? `<button data-h="shop">🛍️</button>` : ""}<button data-h="notice" class="${typeof noticeUnread === "function" && noticeUnread() ? "has-dot" : ""}">📢</button><button data-h="menu">⚙️</button>`;
+  const hb = [...(pro ? [["league", "🏆", "세계"], ["squad", "👥", "스쿼드"], ["news", "📰", "뉴스"]] : []), ["career", "📊", "커리어"], ["rival", "🆚", "라이벌"], ...(S.shopOpen ? [["shop", "🛍️", "상점"]] : []), ["notice", "📢", "공지"], ["menu", "⚙️", "메뉴"]];
+  $("hud-btns").style.setProperty("--n", hb.length);
+  $("hud-btns").innerHTML = hb.map(([k, ic, nm]) => `<button data-h="${k}" class="${k === "notice" && typeof noticeUnread === "function" && noticeUnread() ? "has-dot" : ""}"><i>${ic}</i><span>${nm}</span></button>`).join("");
   const nb = $("newsbox");
   if (nb) { nb.hidden = !pro || !(S.news && S.news.length); nb.innerHTML = pro && S.news ? `<b>📰 축구 소식</b>${S.news.slice(0, 3).map((n) => `<div>${esc(n.m)}</div>`).join("")}` : ""; nb.onclick = openNews; }
   $("hud-btns").querySelectorAll("[data-h]").forEach((b) => b.onclick = () => hudBtn(b.dataset.h));
@@ -345,7 +352,7 @@ function renderMain() {
 function hudBtn(h) {
   if (h === "league") openLeague();
   else if (h === "news") openNews();
-  else if (h === "menu") modal({ title: "⚙️ 메뉴", html: `<p class="small">난이도: ${DF().name} · ${VERSION}</p>`, buttons: [{ label: "❓ 도움말", value: "help" }, { label: Sfx.muted ? "🔇 소리 켜기" : "🔊 소리 끄기", value: "snd" }, { label: typeof Bgm !== "undefined" && Bgm.on ? "🎵 배경음악 끄기" : "🎵 배경음악 켜기", value: "bgm" }, { label: "📢 공지사항", value: "notice" }, { label: T("🔗 친구에게 공유", "🔗 Share with friends"), value: "share" }, { label: T("🔒 개인정보처리방침", "🔒 Privacy Policy"), value: "privacy" }, { label: "☁️ 저장 · 기기 이전", value: "cloud" }, { label: "🏠 타이틀로", value: "home" }, { label: "닫기", value: null, cls: "btn-primary" }] }).then((v) => v && hudBtn(v));
+  else if (h === "menu") modal({ title: "⚙️ 메뉴", html: `<p class="small">난이도: ${DF().name} · ${VERSION}</p>`, grid: true, buttons: [{ label: "❓ 도움말", value: "help" }, { label: Sfx.muted ? "🔇 소리 켜기" : "🔊 소리 끄기", value: "snd" }, { label: typeof Bgm !== "undefined" && Bgm.on ? "🎵 배경음악 끄기" : "🎵 배경음악 켜기", value: "bgm" }, { label: "📢 공지사항", value: "notice" }, { label: T("🔗 친구에게 공유", "🔗 Share with friends"), value: "share" }, { label: T("🔒 개인정보처리방침", "🔒 Privacy Policy"), value: "privacy" }, { label: "☁️ 저장 · 기기 이전", value: "cloud" }, { label: "🏠 타이틀로", value: "home" }, { label: "닫기", value: null, cls: "btn-primary" }] }).then((v) => v && hudBtn(v));
   else if (h === "cloud") openCloud();
   else if (h === "squad") openSquad();
   else if (h === "career") openCareer();
@@ -426,7 +433,7 @@ async function maybeEvent() {
   }
   const choice = await modal({
     emoji: ev.emoji, img: evImg(ev.id), title: `${ev.emoji} ${ev.title}`, html: `${sig ? `<p class="sig-tag">📡 방금 일어난 일</p>` : ""}<p class="ev-text">${esc(ev.text(S, d)).replace(/\n/g, "<br/>")}</p>`,
-    buttons: ev.choices.map((c, i) => ({ label: c.label, hint: c.hint, value: i, cls: i === 0 ? "btn-primary" : "btn-ghost" })),
+    buttons: ev.choices.map((c, i) => ({ label: c.label, hint: c.hint, value: i, cls: "btn-choice" })),
   });
   S._d = d;
   const out = ev.choices[choice].fx(S);

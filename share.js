@@ -43,9 +43,9 @@ function titleExtras() {
   const box = document.getElementById("title-extras");
   if (!box) return;
   const canInstall = !isStandalone() && (installEvt || isIOS() || /android/i.test(navigator.userAgent));
-  box.innerHTML = `${canInstall ? `<button class="btn btn-ghost sm" id="btn-install">📲 ${T("홈 화면에 추가", "Add to Home")}</button>` : ""}<button class="btn btn-ghost sm" id="btn-share-game">🔗 ${T("친구에게 공유", "Share")}</button>`;
+  box.innerHTML = canInstall ? `<button class="btn btn-ghost" id="btn-install">📲 ${T("홈 화면에 추가하고 앱처럼 하기", "Add to Home Screen")}</button>` : "";
   const bi = document.getElementById("btn-install"); if (bi) bi.onclick = installApp;
-  document.getElementById("btn-share-game").onclick = () => shareGame();
+  const sg = document.getElementById("btn-share-game"); if (sg) sg.onclick = () => shareGame();
 }
 (() => {
   const ver = document.getElementById("ver");
