@@ -277,6 +277,7 @@ function nextScheduleText() {
   return { left: 0, name: opp, text: `📅 R${S.pro.round + 1}/${ROUNDS} 다음 상대 <b>${esc(opp)}</b> (전력 ${Math.round(clubStr(S.pro.league, opp))})${rivalMatch ? ` <em class="rv">⚔️ 라이벌 매치</em>` : ""}` };
 }
 function trainPreview(k) {
+  if (S.stats[k] >= statCap(k) - .05) return mastNeed(k) ? "최대치 · 숙련 ×2" : "모두 완성";
   const g = trainGain(k, true);
   return `+${g[0].toFixed(1)}~${g[1].toFixed(1)}`;
 }
@@ -419,15 +420,25 @@ function applyAction(a, btn) {
   }
   const k = a.key, risk = injuryRisk();
   const g = trainGain(k);
-  const before = S.stats[k];
+  const before = S.stats[k], atCap = before >= statCap(k) - .05;
   S.stats[k] = clamp(S.stats[k] + g, 1, statCap(k));
-  addMast(k, S.buff > 1 ? 2 : 1);
+  // 최대치에 닿은 능력치는 숫자 대신 숙련이 2배로 쌓여요 (초월로 최대치를 넓히는 길)
+  const mBefore = (S.mast && S.mast[k]) || 0, trBefore = trOf(k), talBefore = S.talent[k];
+  addMast(k, (S.buff > 1 ? 2 : 1) * (atCap ? 2 : 1));
   S.cond = clamp(S.cond - trainCost(), 0, 100);
   const used = S.buff > 1 ? ` (🔥×${S.buff})` : "";
   S.buff = 1;
+  if (atCap) {
+    const lvUp = trOf(k) !== trBefore || S.talent[k] !== talBefore, need = mastNeed(k);
+    const mtxt = lvUp ? "단계 상승!" : need ? `숙련 ${(S.mast[k] || 0)}/${need} (+${(S.mast[k] || 0) - mBefore})` : "완성";
+    addLog(`${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} 최대치 ${statCap(k)} · ${mtxt}${used}`);
+    S.lastAct = { key: k, txt: `${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} 최대치 · ${mtxt}${used}` };
+    floatFx(btn, lvUp ? "🌌 단계 상승" : `숙련 +${(S.mast[k] || 0) - mBefore}`);
+  } else {
   addLog(`${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} 훈련 +${(S.stats[k] - before).toFixed(1)} → ${Math.round(S.stats[k])}${used}`);
   S.lastAct = { key: k, txt: `${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} +${(S.stats[k] - before).toFixed(1)} → ${Math.round(S.stats[k])}${used}` };
   floatFx(btn, `${STAT_NAME[k]} +${(S.stats[k] - before).toFixed(1)}`);
+  }
   if (risk && Math.random() * 100 < risk * (1 - G("shin") * .2)) {
     S.injured = randi(1, 2);
     S.cond = clamp(S.cond - 10, 0, 100);
@@ -1609,7 +1620,7 @@ function openMast(k) {
   modal({ emoji: s.emoji, title: `${s.name} 숙련도`,
     html: `<ul class="tip-list"><li>지금 재능 <b>${talentStr(k)}</b>, 능력치 <b>${Math.round(S.stats[k])}</b> / 최대 <b>${statCap(k)}</b></li>
       <li>숙련도 <b>${need ? `${have} / ${need}` : "완성"}</b>${need ? ` · 다 차면 <b>${next}</b>` : ""}</li>
-      <li>이 능력치를 훈련할수록 숙련도가 쌓여요. MOM, 해외 연수, 재능 개발 프로그램으로도 올라요.</li>
+      <li>이 능력치를 훈련할수록 숙련도가 쌓여요. 최대치에 닿은 뒤에는 2배로 쌓여요. MOM, 해외 연수, 재능 개발 프로그램으로도 올라요.</li>
       <li>재능 ★이 높을수록 훈련으로 오르는 폭이 커져요. ★5 다음은 초월(Ⅰ~Ⅲ)이고, 단계마다 최대치가 2씩 올라 105까지 가요.</li></ul>`,
     buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }] });
 }
