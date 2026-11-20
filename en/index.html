@@ -343,6 +343,36 @@ body.ad-on main{padding-bottom:70px}main{margin-top:var(--anchor-top,0px)}.priva
 body.ad-on #toast{bottom:84px}.ad-ph{width:320px;height:50px;border:1px dashed #557;color:#88a;display:flex;align-items:center;justify-content:center;font-size:.75rem}
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#000c;color:#fff;padding:10px 16px;border-radius:12px;z-index:120;font-size:.9rem}
 #toast[hidden]{display:none}
+
+/* ---- UI 정리 (v1.6) ---- */
+#btn-continue.btn-primary small{color:#0b2416;opacity:.8}
+.btn-choice{border:1.5px solid #3c7a55;color:var(--text,#e8f3ec);background:linear-gradient(180deg,rgba(124,240,172,.08),rgba(124,240,172,.02));text-align:left;padding:12px 14px;font-size:1rem}
+.btn-choice small{color:var(--acc2);opacity:.9}
+.btn-choice:hover,.btn-choice:active{border-color:var(--acc)}
+.hud-btns{display:grid;grid-template-columns:repeat(var(--n,8),1fr);gap:4px;margin:8px 0}
+.hud-btns button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-width:0;padding:6px 1px 5px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--sky);font-size:.66rem;line-height:1.1;white-space:nowrap;overflow:hidden}
+.hud-btns button i{font-style:normal;font-size:1.05rem;line-height:1.2}
+.hud-btns button span{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.hud-btns button:active{transform:scale(.95)}
+.title-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.title-grid .tg{position:relative;display:flex;align-items:center;justify-content:center;gap:6px;height:48px;border-radius:14px;border:1.5px solid var(--line);background:rgba(255,255,255,.03);color:var(--sky);font-family:Jua;font-size:.95rem;white-space:nowrap}
+.title-grid .tg i{font-style:normal;font-size:1.1rem}
+.title-grid .tg:active,.m-btns.grid .btn:active{transform:scale(.97)}
+.title-grid .tg.has-dot::after,.hud-btns button.has-dot::after{content:"";position:absolute;top:6px;right:8px;width:8px;height:8px;border-radius:50%;background:#ff4d4d;box-shadow:0 0 0 2px #0b1e14}
+.hud-btns button{position:relative}
+#title-extras{display:block;margin-top:8px}#title-extras .btn{width:100%;margin:0;display:block;padding:11px;font-size:.95rem}
+.m-btns.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+.m-btns.grid .btn{margin:0;padding:8px 6px;font-size:.9rem;min-height:52px;display:flex;align-items:center;justify-content:center;line-height:1.25}
+.m-btns.grid .btn-primary{grid-column:1 / -1}
+.lg-seg:has([data-lg]){display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.lg-seg:has([data-tab]){flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+.lg-seg:has([data-tab])::-webkit-scrollbar{display:none}
+.lg-seg:has([data-tab]) button{flex:0 0 auto;padding:6px 12px}
+.lg-seg button{overflow:hidden;text-overflow:ellipsis}
+.tbl th{white-space:nowrap;font-size:.72rem}
+.m-html{overflow-x:auto}
+.mbox .tbl td{white-space:nowrap}
+.btn:focus-visible,.tg:focus-visible,.hud-btns button:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -354,9 +384,12 @@ body.ad-on #toast{bottom:84px}.ad-ph{width:320px;height:50px;border:1px dashed #
       <p class="desc">A football life, growing up with your destined Rival.<br/>From Youth to the Ballon d'Or.</p>
       <button class="btn btn-primary" id="btn-new">Create new player</button>
       <button class="btn btn-ghost" id="btn-continue" hidden>Continue</button>
-      <button class="btn btn-ghost" id="btn-hof">🏛️ Hall of Fame</button>
-      <button class="btn btn-ghost sm" id="btn-xfer">☁️ Continue with a transfer code</button>
-      <button class="btn btn-ghost sm" id="btn-notice">📢 Notices</button>
+      <div class="title-grid">
+        <button class="tg" id="btn-hof"><i>🏛️</i><span>Hall of Fame</span></button>
+        <button class="tg" id="btn-notice"><i>📢</i><span>Notices</span></button>
+        <button class="tg" id="btn-xfer"><i>☁️</i><span>Transfer</span></button>
+        <button class="tg" id="btn-share-game"><i>🔗</i><span>Share</span></button>
+      </div>
       <p class="ver" id="ver"></p>
     </div>
   </section>
@@ -416,20 +449,20 @@ body.ad-on #toast{bottom:84px}.ad-ph{width:320px;height:50px;border:1px dashed #
 </main>
 <div id="modal" hidden></div>
 <div id="toast" hidden></div>
-<script src="en/ads.js?v=1.5.1"></script>
-<script src="en/data.js?v=1.5.1"></script>
-<script src="avatar.js?v=1.5.1"></script>
-<script src="en/match.js?v=1.5.1"></script>
-<script src="sound.js?v=1.5.1"></script>
-<script src="en/minigames.js?v=1.5.1"></script>
-<script src="en/events.js?v=1.5.1"></script>
-<script src="en/life.js?v=1.5.1"></script>
-<script src="en/world.js?v=1.5.1"></script>
-<script src="en/game.js?v=1.5.1"></script>
-<script src="en/cloud.js?v=1.5.1"></script>
-<script src="en/online.js?v=1.5.1"></script>
-<script src="en/nav.js?v=1.5.1"></script>
+<script src="en/ads.js?v=1.6"></script>
+<script src="en/data.js?v=1.6"></script>
+<script src="avatar.js?v=1.6"></script>
+<script src="en/match.js?v=1.6"></script>
+<script src="sound.js?v=1.6"></script>
+<script src="en/minigames.js?v=1.6"></script>
+<script src="en/events.js?v=1.6"></script>
+<script src="en/life.js?v=1.6"></script>
+<script src="en/world.js?v=1.6"></script>
+<script src="en/game.js?v=1.6"></script>
+<script src="en/cloud.js?v=1.6"></script>
+<script src="en/online.js?v=1.6"></script>
+<script src="en/nav.js?v=1.6"></script>
 <script src="en/en-patch.js"></script>
-<script src="share.js?v=1.5.1"></script>
+<script src="share.js?v=1.6"></script>
 </body>
 </html>
