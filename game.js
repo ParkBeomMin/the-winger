@@ -65,9 +65,13 @@ function show(id) {
 function modal({ emoji = "", title = "", html = "", buttons = [{ label: "확인", value: true, cls: "btn-primary" }], wide = false, img = "", grid = false }) {
   return new Promise((resolve) => {
     const m = $("modal");
+    // 이미 떠 있는 창을 다시 그리면(탭 전환 등) 깜빡이지 않게: 애니메이션 없이, 스크롤 위치 유지
+    const keep = !m.hidden && m.querySelector(".mbox");
+    const prevTop = keep ? m.querySelector(".mbox").scrollTop : 0, prevLeft = keep ? [...m.querySelectorAll(".seg")].map((s) => s.scrollLeft) : [];
     m.innerHTML = `<div class="mbox ${wide ? "wide" : ""}">${img ? `<img class="m-img" src="${img}" alt="" />` : emoji ? `<div class="m-emoji">${emoji}</div>` : ""}${title ? `<h3>${title}</h3>` : ""}<div class="m-html">${html}</div>
       <div class="m-btns${grid ? " grid" : ""}">${buttons.map((b, i) => `<button class="btn ${b.cls || "btn-ghost"}" data-i="${i}">${b.label}${b.hint ? `<small>${b.hint}</small>` : ""}</button>`).join("")}</div></div>`;
     m.hidden = false;
+    if (keep) { const bx = m.querySelector(".mbox"); bx.classList.add("still"); bx.scrollTop = prevTop; m.querySelectorAll(".seg").forEach((s, i) => { if (prevLeft[i]) s.scrollLeft = prevLeft[i]; }); }
     m.querySelectorAll("[data-i]").forEach((b) => b.onclick = () => { Sfx.tap(); m.hidden = true; m.innerHTML = ""; resolve(buttons[+b.dataset.i].value); });
   });
 }
@@ -1411,8 +1415,8 @@ function openLeague(lgId = S.pro.league, tab = "table") {
   }
   const p = modal({ title: "🏆 세계 축구", wide: true, html: `<div class="seg wrap lg-seg">${lgBtns}</div><div class="seg wrap lg-seg">${tabs}</div><div class="lg-body">${body}</div>`, buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }] });
   setTimeout(() => {
-    document.querySelectorAll("#modal [data-lg]").forEach((b) => b.onclick = () => { $("modal").hidden = true; openLeague(+b.dataset.lg, tab); });
-    document.querySelectorAll("#modal [data-tab]").forEach((b) => b.onclick = () => { $("modal").hidden = true; openLeague(lgId, b.dataset.tab); });
+    document.querySelectorAll("#modal [data-lg]").forEach((b) => b.onclick = () => openLeague(+b.dataset.lg, tab));
+    document.querySelectorAll("#modal [data-tab]").forEach((b) => b.onclick = () => openLeague(lgId, b.dataset.tab));
     bindPlayerLinks($("modal"));
     document.querySelectorAll("#modal [data-club]").forEach((a) => a.onclick = () => { $("modal").hidden = true; openSquad(a.dataset.club); });
   }, 0);
