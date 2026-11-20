@@ -338,12 +338,20 @@ function renderMain() {
   html += `<button class="act rest" data-rest="1"><span>${inj ? "🏥" : "🛌"}</span><b>${inj ? "Rehab" : "Rest"}</b><small>Condition +${32 + S.gear.recovery * 8}</small></button>`;
   if (S.phase === "youth") html += `<button class="act auto" data-auto="1" ${inj ? "disabled" : ""}><span>⏩</span><b>Auto-play</b><small>Until next tournament</small></button>`;
   else html += `<button class="act auto" data-auto="1"><span>⏩</span><b>Auto-play</b><small>Until the match</small></button>`;
+  const ready = pro && S.pending === "match";
+  if (ready) {
+    const opp = S.pro.schedule[S.pro.round], home = S.pro.home[S.pro.round];
+    html = `<div class="ready"><div class="ready-done">✅ Ready for this round<small>${(S.lastAct && S.lastAct.txt) || ""} · Condition ${Math.round(S.cond)}</small></div>
+      <button class="btn btn-primary" id="b-kick">⚽ To the stadium<small>R${S.pro.round + 1} vs ${esc(opp)} · ${home ? "Home" : "Away"}</small></button></div>`;
+  }
   $("actions").innerHTML = html;
+  if (ready) $("b-kick").onclick = (e) => { if (busy) return; e.currentTarget.disabled = true; proRound(); };
+  if (ready && S.lastAct && S.lastAct.key) { const i = STATS.findIndex((s) => s.key === S.lastAct.key); const row = $("stats").querySelectorAll(".st")[i]; if (row) row.classList.add("up"); }
   $("actions").querySelectorAll("[data-train]").forEach((b) => b.onclick = () => turn({ kind: "train", key: b.dataset.train }, b));
-  $("actions").querySelector("[data-rest]").onclick = (e) => turn({ kind: "rest" }, e.currentTarget);
+  const rs = $("actions").querySelector("[data-rest]"); if (rs) rs.onclick = (e) => turn({ kind: "rest" }, e.currentTarget);
   const au = $("actions").querySelector("[data-auto]"); if (au) au.onclick = openAuto;
   const qk = $("actions").querySelector("[data-quick]"); if (qk) qk.onclick = quickSeason;
-  $("actions-title").textContent = pro ? `Prepare for this round (once before the match)` : `What will you do this month?`;
+  $("actions-title").textContent = ready ? `Ready for kickoff` : pro ? `Prepare for this round (once before the match)` : `What will you do this month?`;
 
   const hb = [...(pro ? [["league", "🏆", "World"], ["squad", "👥", "Squad"], ["news", "📰", "News"]] : []), ["career", "📊", "Career"], ["rival", "🆚", "Rival"], ...(S.shopOpen ? [["shop", "🛍️", "Shop"]] : []), ["notice", "📢", "Notices"], ["menu", "⚙️", "Menu"]];
   $("hud-btns").style.setProperty("--n", hb.length);
@@ -384,6 +392,7 @@ function applyAction(a, btn) {
     const v = 32 + S.gear.recovery * 8;
     S.cond = clamp(S.cond + v, 0, 100);
     addLog(S.injured ? `🏥 Rehab treatment. Condition +${v}` : `🛌 Had a good rest. Condition +${v}`);
+    S.lastAct = { key: null, txt: S.injured ? `🏥 Rehab · Condition +${v}` : `🛌 Rest · Condition +${v}` };
     floatFx(btn, `Condition +${v}`);
     return;
   }
@@ -396,11 +405,13 @@ function applyAction(a, btn) {
   const used = S.buff > 1 ? ` (🔥×${S.buff})` : "";
   S.buff = 1;
   addLog(`${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} Training +${(S.stats[k] - before).toFixed(1)} → ${Math.round(S.stats[k])}${used}`);
+  S.lastAct = { key: k, txt: `${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} +${(S.stats[k] - before).toFixed(1)} → ${Math.round(S.stats[k])}${used}` };
   floatFx(btn, `${STAT_NAME[k]} +${(S.stats[k] - before).toFixed(1)}`);
   if (risk && Math.random() * 100 < risk * (1 - G("shin") * .2)) {
     S.injured = randi(1, 2);
     S.cond = clamp(S.cond - 10, 0, 100);
     addLog(`🤕 Injured from overtraining! You can only rehab for ${S.injured} turns.`);
+    if (S.lastAct) S.lastAct.txt += " · 🤕 Injured";
   }
 }
 function rivalGrow(scale = 1) {
@@ -474,7 +485,8 @@ async function turn(a, btn, fromAuto = false) {
       nextMonth();
     } else {
       S.pending = "match"; save(); busy = false;
-      await proRound();
+      if (fromAuto) { await proRound(); return "stop"; }
+      renderMain(); window.scrollTo({ top: Math.max(0, $("actions").getBoundingClientRect().top + window.scrollY - 220), behavior: "smooth" });
       return "stop";
     }
     save(); renderMain();
@@ -1642,7 +1654,7 @@ async function resume() {
   if (S.phase === "pro") syncTrust();
   show("scr-main"); renderMain();
   if (S.pending === "tournament") await runTournament();
-  else if (S.pending === "match") await proRound();
+  else if (S.pending === "match") { /* 메인의 '경기장으로' 버튼에서 시작 */ }
   else if (S.pending === "cups") await roundTail();
   else if (S.pending === "season") await seasonEnd();
   else if (S.pending === "offers") await youthEnd();
