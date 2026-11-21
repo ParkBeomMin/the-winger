@@ -1653,9 +1653,11 @@ function openCareer() {
     title: "📊 Career", wide: true,
     html: `${yRows}${rows ? `<table class="tbl"><tr><th>Season</th><th>Club</th><th>Rank</th><th>Apps</th><th>⚽</th><th>🅰️</th><th>Pass%</th><th>Key passes</th><th>Rating</th><th>Ballon</th></tr>${rows}</table>` : "<p>No pro records yet.</p>"}
       ${S.phase === "pro" && W && W.p.me.s.ap ? `<p class="label">This season in detail (League)</p>${seasonStatHTML(W.p.me.s)}` : ""}
-      <p class="small">Career ${c.apps} apps ⚽${c.g} 🅰️${c.a} · MOTM ${c.mom} · 🇰🇷 Intl caps ${c.caps || 0}${(c.ig || 0) + (c.wcG || 0) ? ` ${(c.ig || 0) + (c.wcG || 0)} goals` : ""} · ${fameGrade(S.fame).name}${c.wc ? ` · 🌍 World Cup ${c.wc.join(", ")}` : ""}</p>
-      ${c.awards.length || c.trophies.length ? `<div class="aw-list">${[...c.trophies.map((t) => "🏆 " + t), ...c.awards].map((a) => `<span>${a}</span>`).join("")}</div>` : ""}
-      ${S.phase === "pro" ? `<p class="small">Current career score ${careerScore()} · ${gradeOf(careerScore())}</p>` : ""}`,
+      <p class="label">Career totals (up to last season)</p>
+      <div class="mystats"><span><b>${c.apps}</b><small>Apps</small></span><span><b>${c.g}</b><small>⚽ Goals</small></span><span><b>${c.a}</b><small>🅰️ Assists</small></span><span><b>${c.mom}</b><small>⭐ MOM</small></span><span><b>${c.caps || 0}</b><small>🇰🇷 Caps · ${(c.ig || 0) + (c.wcG || 0)} goals</small></span><span><b class="fm">${fameGrade(S.fame).name}</b><small>Fame</small></span></div>
+      ${c.wc && c.wc.length ? `<div class="car-wc">${c.wc.map((w) => `<span>🌍 ${esc(w)}</span>`).join("")}</div>` : ""}
+      ${c.awards.length ? `<p class="label">Trophies & awards</p><div class="aw-list">${c.awards.map((a) => `<span>${a}</span>`).join("")}</div>` : ""}
+      ${S.phase === "pro" ? `<div class="car-score"><span>Current career score</span><b>${careerScore()}</b><em>${gradeOf(careerScore())}</em></div>` : ""}`,
     buttons: [{ label: "Close", value: 1, cls: "btn-primary" }],
   });
 }
