@@ -1653,9 +1653,11 @@ function openCareer() {
     title: "📊 커리어", wide: true,
     html: `${yRows}${rows ? `<table class="tbl"><tr><th>시즌</th><th>클럽</th><th>순위</th><th>경기</th><th>⚽</th><th>🅰️</th><th>패스%</th><th>키패스</th><th>평점</th><th>발롱</th></tr>${rows}</table>` : "<p>아직 프로 기록이 없어요.</p>"}
       ${S.phase === "pro" && W && W.p.me.s.ap ? `<p class="label">이번 시즌 상세 (리그)</p>${seasonStatHTML(W.p.me.s)}` : ""}
-      <p class="small">통산 ${c.apps}경기 ⚽${c.g} 🅰️${c.a} · MOM ${c.mom} · 🇰🇷 A매치 ${c.caps || 0}경기${(c.ig || 0) + (c.wcG || 0) ? ` ${(c.ig || 0) + (c.wcG || 0)}골` : ""} · ${fameGrade(S.fame).name}${c.wc ? ` · 🌍 월드컵 ${c.wc.join(", ")}` : ""}</p>
-      ${c.awards.length || c.trophies.length ? `<div class="aw-list">${[...c.trophies.map((t) => "🏆 " + t), ...c.awards].map((a) => `<span>${a}</span>`).join("")}</div>` : ""}
-      ${S.phase === "pro" ? `<p class="small">현재 커리어 점수 ${careerScore()} · ${gradeOf(careerScore())}</p>` : ""}`,
+      <p class="label">통산 기록 (지난 시즌까지)</p>
+      <div class="mystats"><span><b>${c.apps}</b><small>경기</small></span><span><b>${c.g}</b><small>⚽ 골</small></span><span><b>${c.a}</b><small>🅰️ 도움</small></span><span><b>${c.mom}</b><small>⭐ MOM</small></span><span><b>${c.caps || 0}</b><small>🇰🇷 A매치 · ${(c.ig || 0) + (c.wcG || 0)}골</small></span><span><b class="fm">${fameGrade(S.fame).name}</b><small>명성</small></span></div>
+      ${c.wc && c.wc.length ? `<div class="car-wc">${c.wc.map((w) => `<span>🌍 ${esc(w)}</span>`).join("")}</div>` : ""}
+      ${c.awards.length ? `<p class="label">우승과 수상</p><div class="aw-list">${c.awards.map((a) => `<span>${a}</span>`).join("")}</div>` : ""}
+      ${S.phase === "pro" ? `<div class="car-score"><span>현재 커리어 점수</span><b>${careerScore()}</b><em>${gradeOf(careerScore())}</em></div>` : ""}`,
     buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }],
   });
 }
