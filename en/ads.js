@@ -96,7 +96,9 @@ function adAnchorWatch() {
     // 아래쪽 앵커는 우리 배너와 실제로 겹칠 때만 배너를 숨겨요 (애드센스 "의도 기반" 검색 칩처럼 배너 위에 떠 있는 건 겹치지 않으니 배너 유지)
     if (a) { const r = a.getBoundingClientRect(); if (r.top < innerHeight / 2) top = Math.round(r.height); else { const br = bar && bar.getBoundingClientRect(); bottom = !br || !br.height || r.bottom > br.top + 4; } }
     document.documentElement.style.setProperty("--anchor-top", top + "px");
-    if (bar && document.body.classList.contains("ad-on")) bar.style.visibility = bottom ? "hidden" : "visible";
+    // 하단 배너는 어떤 경우에도 숨기지 않아요 (앵커는 사이트 설정에서 꺼져 있고, 의도 기반 검색 칩은 그대로 둬요)
+    if (bar && bar.style.visibility === "hidden") bar.style.visibility = "visible";
+    void bottom;
   }, 1500);
 }
 adAnchorWatch();
