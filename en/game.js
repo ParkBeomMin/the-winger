@@ -784,6 +784,24 @@ function youthSquad(name, kit, nat, base, extra = []) {
 }
 /* 유스 대회: 8팀, 2개 조 풀리그(3경기) → 조 1·2위 4강 → 결승.
  * 조 추첨도, 다른 팀 경기도 전부 같은 엔진으로 돌려요. 라이벌 팀과는 조별리그·4강·결승 어디서든 만날 수 있고, 못 만날 수도 있어요. */
+/* 🔭 스카우트 관심도 — 유스 졸업 때 프로 제안을 정하는 점수와 같은 식이에요 (지금 실력 기준) */
+function scoutScore() { return OVR() + Math.min(S.fame, 120) / 24 + S.youth.trophies * 1.5 + (S.youth.deep || 0) * .8 + DIFF[S.diff || "normal"].offer; }
+function scoutInfo() {
+  const sc = scoutScore();
+  const all = LEAGUES.flatMap((l) => l.clubs.map((c) => ({ lg: l, club: c[0], str: clubStr(l.id, c[0]) })));
+  const watch = all.filter((x) => x.str <= sc + 3 && x.str >= sc - 12).sort((a, b) => b.str - a.str).slice(0, 3);
+  const next = all.filter((x) => x.str > sc + 3).sort((a, b) => a.str - b.str)[0];
+  return { sc, pct: Math.round(clamp((sc - 40) / 50 * 100, 0, 100)), watch, next, need: next ? Math.max(1, Math.ceil(next.str - 3 - sc)) : 0 };
+}
+function scoutHTML() {
+  const s = scoutInfo(), prev = S.youth.scoutPrev, d = prev == null ? null : s.pct - prev;
+  S.youth.scoutPrev = s.pct;
+  return `<div class="scout"><div class="sc-h">🔭 Scout interest <b>${s.pct}</b>${d == null ? "" : d > 0 ? `<em class="up">▲ ${d}</em>` : d < 0 ? `<em class="dn">▼ ${-d}</em>` : `<em>-</em>`}</div>
+    <div class="sc-bar"><i style="width:${s.pct}%"></i></div>
+    <div class="sc-w">${s.watch.length ? "Watching: " + s.watch.map((x) => `${x.lg.flag} ${esc(x.club)}`).join(" · ") : "No clubs watching yet"}</div>
+    ${s.next ? `<div class="sc-n">About +${s.need} overall and ${s.next.lg.flag} <b>${esc(s.next.club)}</b> (${s.next.lg.name}) will take notice too</div>` : ""}
+    <div class="sc-t">${S.year === 3 && S.month === 12 ? "Pro offers will come soon based on this" : "Rises with your rating, fame and tournament results. Pro offers at youth graduation are decided by it"}</div></div>`;
+}
 async function runTournament() {
   const final = S.month === 12;
   const name = final ? (S.year === 3 ? "Youth Championship · Pro scouts are watching" : "Youth Championship") : "Spring Youth League";
@@ -876,7 +894,8 @@ async function runTournament() {
       <div class="aw-row"><b>Semi-finals</b> ${esc(sf[0][0])} vs ${esc(sf[0][1])} · ${esc(sf[1][0])} vs ${esc(sf[1][1])}</div>
       <div class="aw-row"><b>🏆 Champions</b> ${esc(champ)}${champ === rvName ? " ⚔️" : ""} · Runner-up ${esc(runner)}</div>
       <p class="small">⚔️ Rival team (${esc(rvName)}) ${rvRes}${metRival ? ` · Faced them ${metRival}x this tournament` : " · Didn't meet them this time"}</p>
-      <p>💰 +${fmtMoney(prize)} · ⭐ Fame +${fame}</p>`,
+      <p>💰 +${fmtMoney(prize)} · ⭐ Fame +${fame}</p>
+      ${scoutHTML()}`,
   });
   S.pending = null;
   if (typeof adNext === "function" && S.month === 12) { await loadingOn(S.year === 3 ? "Waiting for pro offers" : "Preparing next season"); await adNext("youth_cup"); }
@@ -949,7 +968,7 @@ async function youthEnd() {
   W = S.world;
   if (!W.p.rv.c) rivalPickClub();
   save();
-  const score = OVR() + Math.min(S.fame, 120) / 24 + S.youth.trophies * 1.5 + (S.youth.deep || 0) * .8 + DIFF[S.diff || "normal"].offer;
+  const score = scoutScore();
   const offers = offerList(score, { agent: G("agent") > 0 });
   if (!offers.find((o) => o.club === S.rival.club) && Math.abs(clubStr(S.rival.league, S.rival.club) - score) < 10) {
     const c = clubData(S.rival.league, S.rival.club); offers.push({ league: S.rival.league, club: c[0], str: clubStr(S.rival.league, c[0]), kit: [c[2], c[3]] });
