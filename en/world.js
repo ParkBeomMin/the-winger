@@ -83,6 +83,8 @@ const PASS_W = { gk: .45, df: 1.15, mf: 1.45, wg: .85, fw: .6 };
 const PASS_ACC = { gk: -.1, df: .07, mf: .05, wg: -.03, fw: -.07 };
 const DRIB_W = { fw: 2.2, wg: 3.2, mf: 1.3, df: .4, gk: 0 };
 const TACK_W = { df: 2.6, mf: 2.2, wg: .9, fw: .5, gk: 0 };
+const ITC_W = { df: 1.7, mf: 1.3, wg: .45, fw: .25, gk: .1 };   // 가로채기
+const CLR_W = { df: 3.0, gk: 1.0, mf: .6, wg: .25, fw: .3 };    // 걷어내기
 const passPct = (s) => s && s.pa ? Math.round(s.pc / s.pa * 100) : 0;
 
 function natName(nat, used) {
@@ -443,7 +445,7 @@ function autoMoment0(ev) {
 /* 경기 마무리: 평점·MOM */
 function finishMatch(m) {
   const all = new Map();
-  const add = (p, side, mins, start) => { if (!all.has(p)) all.set(p, { p, side, mins, start, g: 0, a: 0, sh: 0, sot: 0, xg: 0, kp: 0, blk: 0, sv: 0, fail: 0, okm: 0, pa: 0, pc: 0, da: 0, dc: 0, ta: 0, tc: 0 }); };
+  const add = (p, side, mins, start) => { if (!all.has(p)) all.set(p, { p, side, mins, start, g: 0, a: 0, sh: 0, sot: 0, xg: 0, kp: 0, blk: 0, sv: 0, fail: 0, okm: 0, pa: 0, pc: 0, da: 0, dc: 0, ta: 0, tc: 0, ic: 0, cl: 0 }); };
   for (const [T, side] of [[m.H, "home"], [m.A, "away"]]) {
     const offAt = (p) => { const o = (T.off || []).find((x) => x.p === p); return o ? o.min : 90; };
     T.xi.forEach((p) => { const s = T.subs.find((x) => x.out === p); add(p, side, Math.min(s ? s.min : 90, offAt(p)), true); });
@@ -489,6 +491,10 @@ function finishMatch(m) {
       x.da += da; x.dc += Math.round(da * clamp(.45 + (eff(x.p, "dri") - oppDef) / 120, .2, .85));
       const ta = poisson(k * TACK_W[r] * eff(x.p, "def") / 70) + x.blk;
       x.ta += ta; x.tc += Math.min(ta, x.blk + Math.round((ta - x.blk) * clamp(.55 + (eff(x.p, "def") - oppAtt) / 120, .3, .9)));
+      // 수비 기록: 공을 덜 가질수록(상대가 더 공격할수록) 많아져요
+      const dfn = k * (1.4 - pos * .8);
+      x.ic += poisson(dfn * ITC_W[r] * eff(x.p, "def") / 70);
+      x.cl += poisson(dfn * CLR_W[r] * oppAtt / 70);
     }
     team[side] = { pos: Math.round(pos * 100), sh: xs.reduce((s, x) => s + x.sh, 0), sot: xs.reduce((s, x) => s + x.sot, 0), xg: Math.round(xs.reduce((s, x) => s + x.xg, 0) * 10) / 10,
       pa: xs.reduce((s, x) => s + x.pa, 0), pc: xs.reduce((s, x) => s + x.pc, 0), ta: xs.reduce((s, x) => s + x.ta, 0) };
@@ -496,8 +502,8 @@ function finishMatch(m) {
   const ratings = new Map();
   for (const x of all.values()) {
     const p = x.p, gf = x.side === "home" ? hg : ag, ga = x.side === "home" ? ag : hg;
-    let r = 6.24 + x.g * 1.0 + x.a * .65 + x.sh * .05 + x.kp * .12 + x.blk * .2 + x.sv * .3 + x.okm * .2 - x.fail * .2
-      + x.dc * .07 + (x.tc - x.blk) * .1 + (x.pa >= 15 ? (x.pc / x.pa - .79 - PASS_ACC[p.r]) * 1.2 : 0);
+    let r = 6.15 + x.g * 1.0 + x.a * .65 + x.sh * .05 + x.kp * .12 + x.blk * .2 + x.sv * .3 + x.okm * .2 - x.fail * .2
+      + x.dc * .07 + (x.tc - x.blk) * .1 + x.ic * .07 + x.cl * .03 + (x.pa >= 15 ? (x.pc / x.pa - .79 - PASS_ACC[p.r]) * 1.2 : 0);
     r += gf > ga ? .3 : gf < ga ? -.3 : 0;
     if (p.r === "df" || p.r === "gk") r += ga === 0 ? .5 : -Math.max(0, ga - 1) * .18;
     r += (pOvr(p) - 70) / 60 + rand(-.35, .35) - (x.yc ? .2 : 0) - (x.rc ? 1.2 : 0);
@@ -518,6 +524,8 @@ function credit(res, kind, lgId, hName, aName) {
     st.g += x.g; st.a += x.a; st.rs += r; if (res.mom === p && r >= 7.3) st.mom++;
     st.pa = (st.pa || 0) + x.pa; st.pc = (st.pc || 0) + x.pc; st.sh = (st.sh || 0) + x.sh; st.sot = (st.sot || 0) + x.sot; st.xg = (st.xg || 0) + Math.round(x.xg * 100);
     st.kp = (st.kp || 0) + x.kp + x.a; st.da = (st.da || 0) + x.da; st.dc = (st.dc || 0) + x.dc; st.ta = (st.ta || 0) + x.ta; st.tc = (st.tc || 0) + x.tc; st.sv = (st.sv || 0) + x.sv;
+    st.ic = (st.ic || 0) + x.ic; st.cl = (st.cl || 0) + x.cl; st.bk = (st.bk || 0) + x.blk;
+    if ((p.r === "df" || p.r === "gk") && x.mins >= 60 && (x.side === "home" ? res.ag : res.hg) === 0) st.cs = (st.cs || 0) + 1;
     if (p.id !== "me") {
       const tgt = p.id === "rv" ? S.rival : p;
       if (x.yc && kind === "league") { st.yc = (st.yc || 0) + 1; if (st.yc % 5 === 0) { tgt.ban = 1; tgt.nw = 1; } }
