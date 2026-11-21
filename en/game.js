@@ -10,9 +10,9 @@ let S = null, busy = false;
 const YOUTH_OPP = [["Cheonghae Youth", "#2b7bd6", "#fff"], ["Bukhang Youth", "#222", "#ffd23f"], ["Donglim Academy", "#7a2b4a", "#fff"],
                    ["Seogang Youth", "#e4572e", "#fff"], ["Libera Youth", "#0b5b3a", "#fff"], ["Port Valley Academy", "#5a2a82", "#ffd23f"]];
 const DIFF = {
-  easy: { name: "Easy", train: 1.15, inj: .6, rival: .92, offer: 3, shot: 1.2 },
-  normal: { name: "Normal", train: 1, inj: 1, rival: 1, offer: 0, shot: 1 },
-  hard: { name: "Hard", train: .88, inj: 1.3, rival: 1.08, offer: -2, shot: .88 },
+  easy: { name: "Easy", train: 1.15, inj: .6, rival: .92, offer: 3, shot: 1.2, mult: .8 },
+  normal: { name: "Normal", train: 1, inj: 1, rival: 1, offer: 0, shot: 1, mult: 1 },
+  hard: { name: "Hard", train: .88, inj: 1.3, rival: 1.08, offer: -2, shot: .88, mult: 1.2 },
 };
 const DF = () => DIFF[(S && S.diff) || "normal"];
 
@@ -1559,7 +1559,14 @@ function openNews() {
 }
 
 /* ---------- 은퇴 / 선수 카드 ---------- */
-function careerScore() {
+/* 명예의 전당 점수: 난이도 배율 (쉬움 ×0.8, 보통 ×1, 어려움 ×1.2) */
+function hofAdj(e) {
+  let d = e && e.d; if (typeof d === "string") { try { d = JSON.parse(d); } catch { d = null; } }
+  const raw = Number(e && e.score) || 0;
+  return d && d.adj ? Math.round(raw) : Math.round(raw * ((DIFF[e && e.diff] || DIFF.normal).mult || 1));
+}
+function careerScore() { return Math.round(careerScoreRaw() * (DF().mult || 1)); }
+function careerScoreRaw() {
   const c = S.career, pf = POS_F[S.pos] || 1;
   return Math.round(c.apps * .3 + (c.g + c.a * .8) * pf * .8 + c.mom * .5 + (c.awardScore || 0) + c.ballon * 60 + c.ballonTop3 * 20 + Math.max(0, c.peakOvr - 55) * 4 + c.peakTier * 15 + (c.caps || 0));
 }
@@ -1570,7 +1577,7 @@ async function retire() {
   if (typeof achToast === "function") achToast({ retire: true });
   S.phase = "retired"; S.pending = null;
   const entry = { name: S.name, pos: S.pos, look: S.look, kit: S.pro.kit, grade, score: sc, peak: S.career.peakOvr, apps: S.career.apps, g: S.career.g, a: S.career.a,
-    ballon: S.career.ballon, trophies: S.career.trophies.length, rival: S.rival.name, h2h: { ...S.h2h }, date: new Date().toISOString().slice(0, 10), d: hofDetailData() };
+    ballon: S.career.ballon, trophies: S.career.trophies.length, rival: S.rival.name, h2h: { ...S.h2h }, date: new Date().toISOString().slice(0, 10), diff: S.diff || "normal", d: hofDetailData() };
   const hof = JSON.parse(localStorage.getItem(HOF_KEY) || "[]"); hof.push(entry); hof.sort((a, b) => b.score - a.score); localStorage.setItem(HOF_KEY, JSON.stringify(hof.slice(0, 30)));
   if (typeof hofSubmit === "function") hofSubmit(entry).then((ok) => ok && toast("🌍 Inducted into the World Hall of Fame!", 3000));
   if (Sfx.fanfare) Sfx.fanfare();
@@ -1660,7 +1667,7 @@ function openCareer() {
       <div class="mystats"><span><b>${c.apps}</b><small>Apps</small></span><span><b>${c.g}</b><small>⚽ Goals</small></span><span><b>${c.a}</b><small>🅰️ Assists</small></span><span><b>${c.mom}</b><small>⭐ MOM</small></span><span><b>${c.caps || 0}</b><small>🇰🇷 Caps · ${(c.ig || 0) + (c.wcG || 0)} goals</small></span><span><b class="fm">${fameGrade(S.fame).name}</b><small>Fame</small></span></div>
       ${c.wc && c.wc.length ? `<div class="car-wc">${c.wc.map((w) => `<span>🌍 ${esc(w)}</span>`).join("")}</div>` : ""}
       ${c.awards.length ? `<p class="label">Trophies & awards</p><div class="aw-list">${c.awards.map((a) => `<span>${a}</span>`).join("")}</div>` : ""}
-      ${S.phase === "pro" ? `<div class="car-score"><span>Current career score</span><b>${careerScore()}</b><em>${gradeOf(careerScore())}</em></div>` : ""}`,
+      ${S.phase === "pro" ? `<div class="car-score"><span>Current career score${DF().mult !== 1 ? ` (${DF().name} ×${DF().mult})` : ""}</span><b>${careerScore()}</b><em>${gradeOf(careerScore())}</em></div>` : ""}`,
     buttons: [{ label: "Close", value: 1, cls: "btn-primary" }],
   });
 }
@@ -1716,7 +1723,7 @@ function openHelp() {
 function hofDetailData() {
   const c = S.career, cut = (x, n) => String(x == null ? "" : x).slice(0, n);
   const d = {
-    ag: S.age, org: S.origin, mom: c.mom | 0, caps: c.caps | 0, ig: ((c.ig || 0) + (c.wcG || 0)) | 0, fame: cut(fameGrade(S.fame).name, 16),
+    adj: 1, ag: S.age, org: S.origin, mom: c.mom | 0, caps: c.caps | 0, ig: ((c.ig || 0) + (c.wcG || 0)) | 0, fame: cut(fameGrade(S.fame).name, 16),
     y: S.youth ? [S.youth.apps | 0, S.youth.g | 0, S.youth.a | 0, S.youth.trophies | 0] : null,
     s: c.seasons.slice(-25).map((s) => [s.season | 0, cut(s.club, 16), s.league | 0, s.rank | 0, s.apps | 0, s.g | 0, s.a | 0, Math.round((s.avg || 0) * 100), s.ballon | 0]),
     tr: c.trophies.slice(-20).map((t) => cut(t, 28)), aw: c.awards.slice(-20).map((t) => cut(t, 28)), wc: (c.wc || []).slice(0, 6).map((t) => cut(t, 20)),
@@ -1732,7 +1739,7 @@ function openHofDetail(e, rank) {
   const N = (x) => Number.isFinite(+x) ? Math.round(+x) : 0, A = (x) => Array.isArray(x) ? x : [];
   const h2h = e.h2h ? [e.h2h.w, e.h2h.d, e.h2h.l] : d && A(d.rv).length === 3 ? d.rv : null;
   const org = (d && d.org) || e.origin;
-  const head = `<div class="hd-head"><div class="hav" id="hd-av"></div><div><b>${esc(e.name)}</b><small>${POS[e.pos] ? POS[e.pos].name : ""}${ORIGINS[org] ? " · " + ORIGINS[org].flag + " " + ORIGINS[org].name : ""}${d && d.ag ? ` · retired at ${N(d.ag)}` : ""}</small><span>${esc(e.grade || "")}</span></div><em>${rank ? "#" + rank + "<br/>" : ""}${N(e.score)} pts</em></div>`;
+  const head = `<div class="hd-head"><div class="hav" id="hd-av"></div><div><b>${esc(e.name)}</b><small>${POS[e.pos] ? POS[e.pos].name : ""}${ORIGINS[org] ? " · " + ORIGINS[org].flag + " " + ORIGINS[org].name : ""}${d && d.ag ? ` · retired at ${N(d.ag)}` : ""}</small><span>${esc(gradeOf(hofAdj(e)))}</span></div><em>${rank ? "#" + rank + "<br/>" : ""}${hofAdj(e)} pts</em></div>`;
   const chips = [["Apps", N(e.apps)], ["⚽ Goals", N(e.g)], ["🅰️ Assists", N(e.a)], ["Peak rating", N(e.peak)], ["🏆 Champions", N(e.trophies)], ["🏅 Ballon d'Or", N(e.ballon)]];
   if (d) chips.push(["⭐ MOM", N(d.mom)], [`Caps · ${N(d.ig)} goals`, N(d.caps)]);
   let html = head + `<div class="hd-chips">${chips.map(([k, v]) => `<div><b>${v}</b><small>${k}</small></div>`).join("")}</div>`;
@@ -1751,8 +1758,8 @@ function openHof(tab = "world") {
   $("hof-tabs").innerHTML = `<button class="${tab === "world" ? "on" : ""}" data-ht="world">🌍 World ranking</button><button class="${tab === "mine" ? "on" : ""}" data-ht="mine">📱 My records</button>`;
   document.querySelectorAll("[data-ht]").forEach((b) => b.onclick = () => openHof(b.dataset.ht));
   if (tab === "world" && typeof openHofWorld === "function") { show("scr-hof"); return openHofWorld(); }
-  const hof = JSON.parse(localStorage.getItem(HOF_KEY) || "[]");
-  $("hof-list").innerHTML = hof.length ? hof.map((e, i) => `<div class="hof-row"><span>${i + 1}</span><div class="hav" data-i="${i}"></div><div><b>${esc(e.name)} <small>${POS[e.pos].short} · Peak ${Math.round(e.peak)}</small></b><span>${e.grade}</span><small>⚽${e.g} 🅰️${e.a} 🏆${e.trophies} 🏅${e.ballon} · vs ${esc(e.rival)} ${e.h2h.w}-${e.h2h.d}-${e.h2h.l}</small></div><em>${e.score}</em></div>`).join("") : `<p class="hint">No retired players yet.</p>`;
+  const hof = JSON.parse(localStorage.getItem(HOF_KEY) || "[]").map((e) => ({ ...e, sc: hofAdj(e) })).sort((a, b) => b.sc - a.sc);
+  $("hof-list").innerHTML = hof.length ? hof.map((e, i) => `<div class="hof-row"><span>${i + 1}</span><div class="hav" data-i="${i}"></div><div><b>${esc(e.name)} <small>${POS[e.pos].short} · Peak ${Math.round(e.peak)}${DIFF[e.diff] && e.diff !== "normal" ? ` · ${DIFF[e.diff].name}&nbsp;×${DIFF[e.diff].mult}` : ""}</small></b><span>${gradeOf(e.sc)}</span><small>⚽${e.g} 🅰️${e.a} 🏆${e.trophies} 🏅${e.ballon} · vs ${esc(e.rival)} ${e.h2h.w}-${e.h2h.d}-${e.h2h.l}</small></div><em>${e.sc}</em></div>`).join("") : `<p class="hint">No retired players yet.</p>`;
   document.querySelectorAll("#hof-list .hav").forEach((d) => { const e = hof[+d.dataset.i]; d.appendChild(avatarCanvas(e.look, e.kit, 44)); const row = d.closest(".hof-row"); if (row) row.onclick = () => openHofDetail(e, +d.dataset.i + 1); });
   show("scr-hof");
 }
