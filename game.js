@@ -346,6 +346,7 @@ function renderMain() {
       <span class="rc-cmp">나 <b>${my}</b> : <b>${ro}</b> 라이벌 ${diff > 0 ? `<em class="up">+${diff} 앞섬</em>` : diff < 0 ? `<em class="dn">${diff} 뒤짐</em>` : "<em>동률</em>"}</span></div>
     <span class="rc-more">›</span>`;
   $("rc-av").appendChild(avatarCanvas(rv.look, rivalKit(), 46, { mood: diff > 0 ? "angry" : "smug" }));
+  const gEl = $("goals"); if (gEl) { const gh = pro && typeof goalsCard === "function" ? goalsCard() : ""; gEl.innerHTML = gh; gEl.hidden = !gh; }
   $("rival-card").onclick = openRival;
 
   // 능력치
@@ -388,7 +389,8 @@ function renderMain() {
 function hudBtn(h) {
   if (h === "league") openLeague();
   else if (h === "news") openNews();
-  else if (h === "menu") modal({ title: "⚙️ 메뉴", html: `<p class="small">난이도: ${DF().name} · ${VERSION}</p>`, grid: true, buttons: [{ label: "❓ 도움말", value: "help" }, { label: Sfx.muted ? "🔇 소리 켜기" : "🔊 소리 끄기", value: "snd" }, { label: typeof Bgm !== "undefined" && Bgm.on ? "🎵 배경음악 끄기" : "🎵 배경음악 켜기", value: "bgm" }, { label: "📢 공지사항", value: "notice" }, { label: T("🔗 친구에게 공유", "🔗 Share with friends"), value: "share" }, { label: T("🔒 개인정보처리방침", "🔒 Privacy Policy"), value: "privacy" }, { label: "☁️ 저장 · 기기 이전", value: "cloud" }, { label: "🏠 타이틀로", value: "home" }, { label: "닫기", value: null, cls: "btn-primary" }] }).then((v) => v && hudBtn(v));
+  else if (h === "menu") modal({ title: "⚙️ 메뉴", html: `<p class="small">난이도: ${DF().name} · ${VERSION}</p>`, grid: true, buttons: [{ label: "❓ 도움말", value: "help" }, { label: Sfx.muted ? "🔇 소리 켜기" : "🔊 소리 끄기", value: "snd" }, { label: typeof Bgm !== "undefined" && Bgm.on ? "🎵 배경음악 끄기" : "🎵 배경음악 켜기", value: "bgm" }, { label: "📢 공지사항", value: "notice" }, { label: "🏅 업적", value: "ach" }, { label: T("🔗 친구에게 공유", "🔗 Share with friends"), value: "share" }, { label: T("🔒 개인정보처리방침", "🔒 Privacy Policy"), value: "privacy" }, { label: "☁️ 저장 · 기기 이전", value: "cloud" }, { label: "🏠 타이틀로", value: "home" }, { label: "닫기", value: null, cls: "btn-primary" }] }).then((v) => v && hudBtn(v));
+  else if (h === "ach") openAch();
   else if (h === "cloud") openCloud();
   else if (h === "squad") openSquad();
   else if (h === "career") openCareer();
@@ -666,7 +668,7 @@ function summarize(res, m, mySide, rvOpp) {
     moments: m.evs.filter((e) => e.mom && e.res).map((e) => ({ type: e.mom, ok: e.res.ok })),
     rivalGoal: rvOpp && res.goals.some((g) => g.sh.id === "rv"), rvX: [...res.all.values()].find((x) => x.p.id === "rv"),
     goalsList: res.goals, mySide, cards: [],
-    my: meX ? { pa: meX.pa, pc: meX.pc, sh: meX.sh, sot: meX.sot, xg: meX.xg, kp: meX.kp + meX.a, da: meX.da, dc: meX.dc, ta: meX.ta, tc: meX.tc } : null,
+    my: meX ? { pa: meX.pa, pc: meX.pc, sh: meX.sh, sot: meX.sot, xg: meX.xg, kp: meX.kp + meX.a, da: meX.da, dc: meX.dc, ta: meX.ta, tc: meX.tc, ic: meX.ic, cl: meX.cl, bk: meX.blk, sv: meX.sv, r: meX.p.r, cs: ga === 0 } : null,
     tm: res.team ? (mySide === "home" ? [res.team.home, res.team.away] : [res.team.away, res.team.home]) : null,
   };
 }
@@ -680,11 +682,23 @@ function teamStatsHTML(tm) {
 }
 function myStatsHTML(s) {
   if (!s) return "";
-  return `<div class="mystats"><span><b>${s.pc}/${s.pa}</b><small>패스 ${s.pa ? Math.round(s.pc / s.pa * 100) : 0}%</small></span><span><b>${s.sh} (${s.sot})</b><small>슈팅 (유효)</small></span><span><b>${s.xg.toFixed(2)}</b><small>xG</small></span><span><b>${s.kp}</b><small>키패스</small></span><span><b>${s.dc}/${s.da}</b><small>드리블</small></span><span><b>${s.tc}/${s.ta}</b><small>태클</small></span></div>`;
+  const c = (v, l) => `<span><b>${v}</b><small>${l}</small></span>`, pp = s.pa ? Math.round(s.pc / s.pa * 100) : 0;
+  const cells = {
+    pass: c(`${s.pc}/${s.pa}`, `패스 ${pp}%`), shot: c(`${s.sh} (${s.sot})`, "슈팅 (유효)"), xg: c(s.xg.toFixed(2), "xG"), kp: c(s.kp, "키패스"),
+    dri: c(`${s.dc}/${s.da}`, "드리블"), tack: c(`${s.tc}/${s.ta}`, "태클"), ic: c(s.ic || 0, "가로채기"), cl: c(s.cl || 0, "걷어내기"), bk: c(s.bk || 0, "슈팅 차단"),
+    sv: c(s.sv || 0, "선방"), cs: c(s.cs ? "✅" : "-", "무실점"),
+  };
+  const lay = { df: ["tack", "ic", "cl", "bk", "pass", "cs"], gk: ["sv", "cs", "cl", "pass", "ic", "kp"], mf: ["pass", "kp", "tack", "ic", "shot", "dri"] }[s.r] || ["pass", "shot", "xg", "kp", "dri", "tack"];
+  return `<div class="mystats">${lay.map((k) => cells[k]).join("")}</div>`;
 }
+
 /* 시즌 상세 스탯 한 줄 */
-function seasonStatHTML(s) {
+function seasonStatHTML(s, role = S.pos) {
   if (!s || !s.ap) return "";
+  if (role === "df" || role === "gk") {
+    const pp = s.pa ? Math.round(s.pc / s.pa * 100) : 0;
+    return `<div class="mystats"><span><b>${s.tc || 0}/${s.ta || 0}</b><small>태클</small></span><span><b>${s.ic || 0}</b><small>가로채기</small></span><span><b>${s.cl || 0}</b><small>걷어내기</small></span><span><b>${s.bk || 0}</b><small>슈팅 차단</small></span><span><b>${s.cs || 0}</b><small>무실점 경기</small></span><span><b>${pp}%</b><small>패스 성공률 (${s.pa || 0})</small></span>${s.sv ? `<span><b>${s.sv}</b><small>선방</small></span>` : ""}</div>`;
+  }
   const pp = s.pa ? Math.round(s.pc / s.pa * 100) : 0;
   return `<div class="mystats"><span><b>${pp}%</b><small>패스 성공률 (${s.pa})</small></span><span><b>${s.kp || 0}</b><small>키패스</small></span><span><b>${s.sh || 0} (${s.sot || 0})</b><small>슈팅 (유효)</small></span><span><b>${((s.xg || 0) / 100).toFixed(1)}</b><small>xG</small></span><span><b>${s.dc || 0}/${s.da || 0}</b><small>드리블</small></span><span><b>${s.tc || 0}/${s.ta || 0}</b><small>태클</small></span>${s.sv ? `<span><b>${s.sv}</b><small>선방</small></span>` : ""}</div>`;
 }
@@ -729,6 +743,7 @@ function applyMatch(r, opts = {}) {
   if (S.form < pf && G("mental") && Math.random() < G("mental") * .25) { S.form = pf; lines.push("🧘 멘탈 코치 덕분에 폼 유지"); }
   if (S.form !== pf) lines.push(`폼 ${S.form > pf ? "▲" : "▼"} ${formStr(S.form)}`);
   S.cond = clamp(S.cond - (r.mins >= 60 ? 10 : 4), 0, 100);
+  if (typeof achAfterMatch === "function") lines.push(...achAfterMatch(r));
   return lines;
 }
 
@@ -883,6 +898,7 @@ async function runTournament() {
   else if (imIn) { title = "🥉 4강"; prize = 25; fame = 2; }
   else { title = `😢 조별리그 ${grpRank(groups[myG]).indexOf(myName) + 1}위 탈락`; prize = 10; fame = 1; }
   S.money += prize; S.fame += fame;
+  if (typeof achToast === "function") achToast();
   S.youth.deep = (S.youth.deep || 0) + (runner === myName ? 1 : imIn && champ !== myName ? .5 : 0);
   const rvRes = champ === rvName ? "우승" : runner === rvName ? "준우승" : fin.includes(rvName) || sf.flat().includes(rvName) ? "4강" : "조별리그 탈락";
   addLog(`${name} ${title} (💰+${prize}만, 명성 +${fame}) · 라이벌 팀 ${rvRes}${metRival ? ` · 맞대결 ${metRival}번` : " · 맞대결 없음"}`);
@@ -1044,6 +1060,7 @@ function initSeason(first) {
   S.ycount = 0;
   Object.assign(S.pro, { round: 0, lastBench: false, s: { apps: 0, starts: 0, g: 0, a: 0, ratings: [], mom: 0 }, cup: { ap: 0, g: 0, a: 0 } });
   setSchedule();
+  if (typeof goalsInit === "function") goalsInit();
   S.cond = Math.max(S.cond, 80);
   S.pro.streak = 0; S.pro.benchRun = 0; S.flags.trSeason = 0;
   if (syncTrust()) pushSig("newcoach", { n: coachOf(S.pro.club).n, f: coachOf(S.pro.club).f, s: coachOf(S.pro.club).s });
@@ -1265,6 +1282,9 @@ async function seasonEnd() {
   S.fame += fameGain;
   const prize = rank === 1 ? lg.pay * 6 : 0;
   S.money += prize;
+  const goalsHTML = typeof goalsSettle === "function" ? goalsSettle() : "";
+  const achNew = typeof achCheck === "function" ? achCheck({}) : [];
+  achNew.forEach((m) => addLog(m));
   for (const l of LEAGUES) news(`🏆 ${l.flag} ${l.name} ${P.season}시즌 우승: ${AW[l.id].champ}${AW[l.id].boot ? ` · 득점왕 ${AW[l.id].boot.n} ${AW[l.id].boot.s.g}골` : ""}`);
 
   show("scr-season");
@@ -1284,6 +1304,7 @@ async function seasonEnd() {
       <div class="ss-me"><div id="ss-av"></div><div>리그 ${P.s.apps}경기 (선발 ${P.s.starts})<br/>⚽ ${P.s.g}골 · 🅰️ ${P.s.a}도움 · MOM ${P.s.mom}<br/>평균 평점 <b>${myAvg ? myAvg.toFixed(2) : "-"}</b>${P.cup.ap ? `<br/>대륙컵 ${P.cup.ap}경기 ⚽ ${P.cup.g} 🅰️ ${P.cup.a}` : ""}<br/>
       ${awards.length ? awards.map((a) => `<span class="aw">${a.name}</span>`).join(" ") : "<small>이번 시즌 수상은 없어요</small>"}
       ${prize ? `<br/>💰 우승 상금 +${prize}만` : ""}<br/>⭐ 명성 +${fameGain}</div></div></div>
+    ${goalsHTML}${achNew.length ? `<div class="ss-card"><h4>🏅</h4>${achNew.map((m) => `<div class="small">${m}</div>`).join("")}</div>` : ""}
     <div class="ss-card two"><div><h4>👟 득점 순위</h4>${topBy(P.league, "g", 5).map((p) => plRow(p, p.s.g + "골")).join("")}</div>
       <div><h4>🎯 도움 순위</h4>${topBy(P.league, "a", 5).map((p) => plRow(p, p.s.a + "도움")).join("")}</div></div>
     <div class="ss-card rvc"><h4>⚔️ 라이벌 ${esc(rv.name)}</h4>
@@ -1413,6 +1434,8 @@ async function offseason() {
     const upL = LEAGUES[W.c[P.club].l].div === 1;
     P.league = W.c[P.club].l;
     if (upL) S.fame += 8;
+    if (upL) S.flags.achPro = 1; else S.flags.achRel = 1;
+    if (typeof achToast === "function") achToast();
     addLog(upL ? `⬆️ ${P.club}, ${LEAGUES[P.league].name} 승격!` : `⬇️ ${P.club}, ${LEAGUES[P.league].name}로 강등`);
     save();
     await modal({ emoji: upL ? "⬆️" : "⬇️", title: upL ? "1부 승격!" : "2부 강등", html: upL
@@ -1521,7 +1544,7 @@ function openPlayer(id) {
     title: `${NATIONS[p.nat].flag} ${esc(p.n)}${id === "rv" ? " ⚔️" : ""}`, wide: true,
     html: `<p class="small">${ROLE_KO[p.r]} · ${ageOf(p)}세 · ${NATIONS[p.nat].name} · ${p.c ? `<a class="pl" data-club="${esc(p.c)}">${crestHTML(p.c, 14)} ${esc(p.c)}</a>` : "무소속"} · 종합 <b>${Math.round(pOvr(p))}</b> · 시장가치 <b>${fmtMV(marketValue(p))}</b>${p.inj > 0 ? ` · 🚑 부상 ${p.inj}경기` : ""}</p>
       <div class="roll">${STATS.map((s) => { const t5 = id === "rv" ? S.rival.talent[s.key] === 5 : (aiEnsure(p), aiTal(p, STAT_KEYS.indexOf(s.key)) === 5); return `<div><span>${s.emoji} ${s.name}</span><b class="${st[s.key] > 99 ? "over" : ""}">${Math.round(st[s.key])}</b><i class="${t5 ? "t5" : ""}">${id === "rv" ? talentStr(s.key, S.rival.talent[s.key], trOf(s.key, S.rival)) : aiTalentStr(p, s.key)}</i></div>`; }).join("")}</div>
-      ${p.s.ap ? `<p class="label">이번 시즌 상세</p>${seasonStatHTML(p.s)}` : ""}
+      ${p.s.ap ? `<p class="label">이번 시즌 상세</p>${seasonStatHTML(p.s, p.r)}` : ""}
       <table class="tbl"><tr><th>시즌</th><th>클럽</th><th>경기</th><th>⚽</th><th>🅰️</th><th>패스%</th><th>키패스</th><th>평점</th></tr>${hist.slice().reverse().map((h) => `<tr><td>${h.y}${h.now ? "*" : ""}</td><td>${esc(shortName(h.c))}</td><td>${h.ap}</td><td>${h.g}</td><td>${h.a}</td><td>${h.now ? passPct(p.s) : h.pp ?? "-"}</td><td>${h.now ? p.s.kp || 0 : h.kp ?? "-"}</td><td>${h.r ? h.r.toFixed(2) : "-"}</td></tr>`).join("")}</table>
       <p class="small">통산 ⚽ ${hist.reduce((s, h) => s + h.g, 0)} · 🅰️ ${hist.reduce((s, h) => s + h.a, 0)} (기록 보관 이후)</p>`,
     buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }],
@@ -1541,6 +1564,7 @@ function gradeOf(sc) { let g = CAREER_GRADES[0][1]; for (const [t, n] of CAREER_
 async function retire() {
   const sc = careerScore(), grade = gradeOf(sc);
   if (typeof track === "function") track("retire", { score: sc, seasons: S.career.seasons.length, age: S.age, ballon: S.career.ballon });
+  if (typeof achToast === "function") achToast({ retire: true });
   S.phase = "retired"; S.pending = null;
   const entry = { name: S.name, pos: S.pos, look: S.look, kit: S.pro.kit, grade, score: sc, peak: S.career.peakOvr, apps: S.career.apps, g: S.career.g, a: S.career.a,
     ballon: S.career.ballon, trophies: S.career.trophies.length, rival: S.rival.name, h2h: { ...S.h2h }, date: new Date().toISOString().slice(0, 10), d: hofDetailData() };
@@ -1743,6 +1767,7 @@ async function resume() {
   if (S.phase === "pro" && !S.contract && S.pro) S.contract = { club: S.pro.club, years: 2, sal: Math.round(LEAGUES[S.pro.league].pay * Math.pow(OVR() / 65, 2)), rel: Math.max(1, Math.round(marketValue(W.p.me) * 1.6)), since: S.pro.season };
   if (S.phase === "pro") syncTrust();
   show("scr-main"); renderMain();
+  if (!S.pending && typeof dailyCheck === "function") setTimeout(dailyCheck, 500);
   if (S.pending === "tournament") await runTournament();
   else if (S.pending === "match") { /* 메인의 '경기장으로' 버튼에서 시작 */ }
   else if (S.pending === "cups") await roundTail();

@@ -1,0 +1,168 @@
+/* 더 윙어 2 - 🎯 시즌 목표(감독 미션) · 🏅 업적 · 📅 출석 보상
+ * share.js 뒤에 읽혀서 T(한국어, 영어)로 두 언어를 같이 써요 (영어판 빌드가 이 파일은 번역하지 않아요).
+ * 업적과 출석은 기기 전체 기록이라 선수를 새로 만들어도 남아요. 보상은 지금 진행 중인 선수에게 들어가요. */
+"use strict";
+const ACH_PFX = window.W2_LANG === "en" ? "w2en-" : "w2-";
+const ACH_KEY = ACH_PFX + "ach", DAILY_KEY = ACH_PFX + "daily";
+const achRd = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch { return d; } };
+const achWr = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const kstDay = (t = Date.now()) => new Date(t + 9 * 3600e3).toISOString().slice(0, 10);
+
+/* ---------- 🎯 시즌 목표 ---------- */
+const GOAL_DEF = {
+  g: { e: "⚽", n: () => T("리그 골", "League goals"), v: () => S.pro.s.g },
+  ga: { e: "🔥", n: () => T("공격 포인트 (골+도움)", "Goals + assists"), v: () => S.pro.s.g + S.pro.s.a },
+  a: { e: "🅰️", n: () => T("리그 도움", "League assists"), v: () => S.pro.s.a },
+  cs: { e: "🧱", n: () => T("무실점 경기", "Clean sheets"), v: () => (W && W.p.me.s.cs) || 0 },
+  tc: { e: "🛡️", n: () => T("태클 성공", "Tackles won"), v: () => (W && W.p.me.s.tc) || 0 },
+  rt: { e: "⭐", n: () => T("평균 평점 (9경기 이상)", "Avg rating (9+ apps)"), v: () => S.pro.s.ratings.length >= 9 ? Math.round(avg(S.pro.s.ratings) * 100) / 100 : 0, f: (x) => x ? x.toFixed(2) : "-" },
+  rk: { e: "🏆", n: () => T("팀 순위", "Team finish"), v: () => S.pro.round ? myRank() : 0, low: true, f: (x) => x ? T(`${x}위`, `#${x}`) : "-" },
+};
+function goalsInit() {
+  if (S.phase !== "pro" || !W) return;
+  const P = S.pro, club = P.club, rel = OVR() - clubStr(P.league, club);
+  const order = LEAGUES[P.league].clubs.map((c) => [c[0], clubStr(P.league, c[0])]).sort((a, b) => b[1] - a[1]).map((x) => x[0]);
+  const exp = order.indexOf(club) + 1;
+  const cl = (v, a, b) => Math.round(clamp(v, a, b));
+  const stat = { fw: ["g", cl(8 + rel * .6, 3, 25)], wg: ["ga", cl(9 + rel * .6, 4, 28)], mf: ["a", cl(5 + rel * .35, 2, 15)], df: ["tc", cl(36 + rel * .9, 18, 60)], gk: ["cs", cl(4 + rel * .2, 2, 9)] }[S.pos] || ["ga", 8];
+  // 지난 시즌에 해낸 만큼은 기대해요 (같은 팀이면 90%, 팀을 옮겼으면 75%)
+  const pv = P.prevGoal && P.prevGoal.k === stat[0] ? P.prevGoal : null;
+  if (pv) stat[1] = Math.max(stat[1], Math.round(pv.v * (pv.club === club ? .9 : .75)));
+  const goals = [{ k: stat[0], t: stat[1] }, { k: "rt", t: Math.round(clamp(6.7 + rel * .015, 6.4, 7.4) * 10) / 10 }, { k: "rk", t: exp <= 1 ? 1 : Math.min(LEAGUES[P.league].clubs.length, exp - (Math.random() < .5 ? 1 : 0)) }];
+  if (S.pos === "df") goals.splice(1, 0, { k: "cs", t: cl(4 + (10 - exp) * .5, 2, 9) });
+  P.goals = goals.slice(0, 3);
+  P.goals.forEach((g) => { g.hit = false; });
+}
+function goalMet(g) { const v = GOAL_DEF[g.k].v(); return GOAL_DEF[g.k].low ? v > 0 && v <= g.t : v >= g.t; }
+function goalsCard() {
+  const P = S.pro;
+  if (S.phase !== "pro" || !P || !P.goals) return "";
+  const rows = P.goals.map((g) => {
+    const D = GOAL_DEF[g.k], v = D.v(), f = D.f || ((x) => x);
+    const pct = D.low ? (P.round ? clamp((LEAGUES[P.league].clubs.length - v + 1) / (LEAGUES[P.league].clubs.length - g.t + 1) * 100, 0, 100) : 0) : clamp(v / g.t * 100, 0, 100);
+    const ok = goalMet(g);
+    return `<div class="gl-row ${ok ? "ok" : ""}"><span>${D.e} ${D.n()}</span><div class="gl-bar"><i style="width:${ok ? 100 : pct}%"></i></div><b>${D.low ? T(`${f(v)} / ${g.t}위 안`, `${f(v)} / top ${g.t}`) : `${f(v)} / ${D.f ? D.f(g.t) : g.t}`}</b>${ok ? "<em>✅</em>" : ""}</div>`;
+  }).join("");
+  return `<div class="goals-card"><div class="gl-h">🎯 ${T("이번 시즌 감독 목표", "Coach's goals this season")} <small>${T("시즌 끝에 달성한 만큼 보상", "Rewards at season end")}</small></div>${rows}</div>`;
+}
+/* 경기 뒤: 시즌 중에 새로 채운 목표(골·도움 같은 누적 목표만) 알림 */
+function goalsAfterMatch() {
+  const P = S.pro, out = [];
+  if (S.phase !== "pro" || !P || !P.goals) return out;
+  for (const g of P.goals) if (!g.hit && g.k !== "rk" && g.k !== "rt" && goalMet(g)) { g.hit = true; out.push(`🎯 ${T("감독 목표 달성", "Goal reached")}: ${GOAL_DEF[g.k].n()} ${g.t}!`); }
+  return out;
+}
+/* 시즌 결산: 목표 판정과 보상 */
+function goalsSettle() {
+  const P = S.pro;
+  if (!P || !P.goals || P.goalsDone === P.season) return P && P.goalsHTML || "";
+  const pay = salaryOf(P.league);
+  let ok = 0;
+  const rows = P.goals.map((g) => {
+    const D = GOAL_DEF[g.k], v = D.v(), f = D.f || ((x) => x), met = goalMet(g);
+    if (met) ok++;
+    return `<div class="gl-row ${met ? "ok" : "no"}"><span>${D.e} ${D.n()}</span><b>${D.low ? T(`${f(v)} (목표 ${g.t}위 안)`, `${f(v)} (goal top ${g.t})`) : `${f(v)} / ${D.f ? D.f(g.t) : g.t}`}</b><em>${met ? "✅" : "❌"}</em></div>`;
+  }).join("");
+  const money = pay * 2 * ok, fame = 4 * ok, fail = P.goals.length - ok;
+  S.money += money; S.fame += fame;
+  if (typeof addTrust === "function") { if (ok) addTrust(4 * ok); if (fail) addTrust(-3 * fail); }
+  const all = ok === P.goals.length;
+  if (all) { S.career.goalsAll = (S.career.goalsAll || 0) + 1; S.money += pay * 3; }
+  addLog(`🎯 ${T("감독 목표", "Coach goals")} ${ok}/${P.goals.length}`);
+  P.goalsDone = P.season;
+  P.prevGoal = { k: P.goals[0].k, v: GOAL_DEF[P.goals[0].k].v(), club: P.club };
+  P.goalsHTML = `<div class="ss-card goals-card"><h4>🎯 ${T("감독 목표", "Coach's goals")} ${ok}/${P.goals.length}</h4>${rows}
+    <p class="small">${ok ? T(`💰 +${fmtMoney(money + (all ? pay * 3 : 0))} · ⭐ 명성 +${fame} · 👔 감독 신뢰 +${4 * ok}`, `💰 +${fmtMoney(money + (all ? pay * 3 : 0))} · ⭐ Fame +${fame} · 👔 Trust +${4 * ok}`) : ""}${fail ? T(` · 못 채운 목표 ${fail}개, 감독 신뢰 -${3 * fail}`, ` · ${fail} missed, trust -${3 * fail}`) : ""}${all ? T(" · 🎉 전부 달성 보너스!", " · 🎉 All-clear bonus!") : ""}</p></div>`;
+  return P.goalsHTML;
+}
+
+/* ---------- 🏅 업적 ---------- */
+const cG = () => S.career.g + (S.phase === "pro" && S.pro ? S.pro.s.g + S.pro.cup.g : 0) + (S.youth ? S.youth.g : 0);
+const cA = () => S.career.a + (S.phase === "pro" && S.pro ? S.pro.s.a + S.pro.cup.a : 0) + (S.youth ? S.youth.a : 0);
+const cApps = () => S.career.apps + (S.phase === "pro" && S.pro ? S.pro.s.apps + S.pro.cup.ap : 0);
+const cMom = () => S.career.mom + (S.phase === "pro" && S.pro ? S.pro.s.mom : 0);
+const hasAw = (re) => (S.career.awards || []).some((a) => re.test(a));
+const ACH = [
+  ["goal1", "⚽", ["첫 골", "First goal"], ["공식 경기에서 첫 골", "Score your first goal"], 1, (c) => cG() >= 1],
+  ["hat", "🎩", ["해트트릭", "Hat-trick"], ["한 경기 3골", "3 goals in one match"], 2, (c) => c.r && c.r.goals >= 3],
+  ["poker", "🃏", ["포트트릭", "Haul of four"], ["한 경기 4골 이상", "4+ goals in one match"], 3, (c) => c.r && c.r.goals >= 4],
+  ["ten", "💯", ["평점 10.0", "Perfect 10"], ["한 경기 평점 10.0", "A 10.0 match rating"], 2, (c) => c.r && c.r.rating >= 9.95],
+  ["mom10", "⭐", ["MOM 10회", "10 MOM awards"], ["프로 MOM 10번", "10 pro Man of the Match"], 2, () => cMom() >= 10],
+  ["g50", "🥅", ["통산 50골", "50 goals"], ["유스 포함 통산 50골", "50 career goals"], 2, () => cG() >= 50],
+  ["g100", "💥", ["통산 100골", "100 goals"], ["유스 포함 통산 100골", "100 career goals"], 3, () => cG() >= 100],
+  ["a50", "🎯", ["통산 50도움", "50 assists"], ["유스 포함 통산 50도움", "50 career assists"], 2, () => cA() >= 50],
+  ["apps100", "👟", ["100경기", "100 games"], ["프로 100경기 출전", "100 pro appearances"], 1, () => cApps() >= 100],
+  ["apps300", "🦿", ["300경기", "300 games"], ["프로 300경기 출전", "300 pro appearances"], 3, () => cApps() >= 300],
+  ["ycup", "🏆", ["유스 챔피언", "Youth champion"], ["유스 대회 우승", "Win a youth tournament"], 1, () => S.youth && S.youth.trophies >= 1],
+  ["debut", "✍️", ["프로 데뷔", "Pro debut"], ["첫 프로 계약", "Sign your first pro contract"], 1, () => S.phase === "pro" || S.career.seasons.length > 0],
+  ["big", "🌍", ["빅리그 입성", "Big league"], ["스페인·잉글랜드 1부에서 뛰기", "Play in Spain or England's top tier"], 2, () => S.phase === "pro" && LEAGUES[S.pro.league].tier >= 3],
+  ["title", "🏆", ["리그 우승", "League champion"], ["리그 우승", "Win a league title"], 2, () => (S.career.trophies || []).some((t) => !/컵|Cup/i.test(t))],
+  ["cup", "🏅", ["대륙 정복", "Continental glory"], ["대륙컵 우승", "Win a continental cup"], 3, () => (S.career.trophies || []).some((t) => /컵|Cup/i.test(t))],
+  ["boot", "👟", ["득점왕", "Golden Boot"], ["리그 득점왕", "League top scorer"], 2, () => hasAw(/👟/)],
+  ["mvp", "👑", ["리그 MVP", "League MVP"], ["리그 MVP 수상", "League MVP award"], 3, () => hasAw(/👑/)],
+  ["top3", "🥉", ["발롱도르 후보", "Ballon d'Or podium"], ["발롱도르 3위 안", "Top 3 in the Ballon d'Or"], 3, () => (S.career.ballonTop3 || 0) + (S.career.ballon || 0) >= 1],
+  ["ballon", "🏅", ["발롱도르", "Ballon d'Or"], ["발롱도르 수상", "Win the Ballon d'Or"], 3, () => (S.career.ballon || 0) >= 1],
+  ["promo", "⬆️", ["승격의 기쁨", "Promoted"], ["우리 팀 1부 승격", "Get promoted with your club"], 2, () => S.flags && S.flags.achPro],
+  ["relg", "⬇️", ["쓴맛", "Bitter taste"], ["우리 팀 2부 강등", "Get relegated with your club"], 1, () => S.flags && S.flags.achRel],
+  ["rv5", "⚔️", ["라이벌 킬러", "Rival slayer"], ["라이벌 상대 5승", "Beat your rival 5 times"], 2, () => S.h2h && S.h2h.w >= 5],
+  ["rv15", "🗡️", ["영원한 승자", "Eternal winner"], ["라이벌 상대 15승", "Beat your rival 15 times"], 3, () => S.h2h && S.h2h.w >= 15],
+  ["star5", "🌟", ["재능 ★5", "Talent ★5"], ["능력치 하나를 재능 ★5로", "Raise a stat to ★5 talent"], 1, () => Object.values(S.talent || {}).some((t) => t >= 5)],
+  ["trans", "🌌", ["초월", "Transcend"], ["능력치 하나 초월 Ⅰ 도달", "Reach Transcend I on a stat"], 2, () => Object.values(S.trans || {}).some((t) => t >= 1)],
+  ["trans3", "♾️", ["초월 Ⅲ", "Transcend III"], ["능력치 하나 초월 Ⅲ 도달", "Reach Transcend III on a stat"], 3, () => Object.values(S.trans || {}).some((t) => t >= 3)],
+  ["caps20", "🇰🇷", ["국가대표", "International"], ["A매치 20경기", "20 international caps"], 2, () => (S.career.caps || 0) >= 20],
+  ["wc", "🌐", ["월드컵 무대", "World Cup stage"], ["월드컵 출전", "Play at a World Cup"], 2, () => (S.career.wc || []).length > 0],
+  ["wcwin", "🏆", ["월드컵 우승", "World champion"], ["월드컵 우승", "Win the World Cup"], 3, () => (S.career.wc || []).some((x) => /🏆/.test(x))],
+  ["goals3", "🎯", ["완벽한 시즌", "Perfect season"], ["감독 목표 전부 달성", "Clear all coach goals in a season"], 2, () => (S.career.goalsAll || 0) >= 1],
+  ["cs10", "🧱", ["철벽", "The wall"], ["한 시즌 무실점 10경기", "10 clean sheets in a season"], 2, () => S.phase === "pro" && W && (W.p.me.s.cs || 0) >= 10],
+  ["rich", "💰", ["10억 자산", "Big money"], ["돈 10억 모으기", "Save ₩1B"], 2, () => S.money >= 100000],
+  ["icon", "👑", ["축구 아이콘", "Football icon"], ["명성 최고 등급", "Reach the top fame tier"], 3, () => typeof fameGrade === "function" && !fameGrade(S.fame).next],
+  ["legend", "🏛️", ["전설의 은퇴", "Legendary farewell"], ["커리어 점수 1000점 이상으로 은퇴", "Retire with 1000+ career score"], 3, (c) => c.retire && typeof careerScore === "function" && careerScore() >= 1000],
+];
+const ACH_W = { 1: [2, 2], 2: [5, 5], 3: [12, 12] };   // [수당 배수, 명성]
+function achAll() { return achRd(ACH_KEY, {}); }
+function achCheck(ctx = {}) {
+  if (!S || !S.career) return [];
+  const got = achAll(), out = [];
+  for (const [id, e, nm, , tier, fn] of ACH) {
+    if (got[id]) continue;
+    let ok = false; try { ok = !!fn(ctx); } catch { ok = false; }
+    if (!ok) continue;
+    got[id] = kstDay();
+    const base = S.phase === "pro" && S.pro ? salaryOf(S.pro.league) : 15, [mx, fm] = ACH_W[tier];
+    S.money += base * mx; S.fame += fm;
+    out.push(`🏅 ${T("업적", "Achievement")}: ${e} ${T(nm[0], nm[1])} (💰 +${fmtMoney(base * mx)} · ⭐ +${fm})`);
+    if (typeof track === "function") track("achievement", { id });
+  }
+  if (out.length) { achWr(ACH_KEY, got); if (Sfx.levelup) Sfx.levelup(); }
+  return out;
+}
+function achToast(ctx) { const o = achCheck(ctx); o.forEach((m, i) => setTimeout(() => toast(m, 3200), i * 1800)); o.forEach((m) => addLog(m)); return o; }
+function achAfterMatch(r) { return [...goalsAfterMatch(), ...achCheck({ r })]; }
+function openAch() {
+  const got = achAll(), n = ACH.filter((a) => got[a[0]]).length;
+  const rows = ACH.map(([id, e, nm, ds, tier]) => `<div class="ach ${got[id] ? "on" : ""}"><i>${got[id] ? e : "🔒"}</i><div><b>${T(nm[0], nm[1])}</b><small>${T(ds[0], ds[1])}</small></div><em>${got[id] ? got[id].slice(5).replace("-", "/") : "★".repeat(tier)}</em></div>`).join("");
+  modal({ title: `🏅 ${T("업적", "Achievements")} ${n}/${ACH.length}`, wide: true,
+    html: `<p class="small">${T("기기 기록이라 새 선수로 해도 남아요. 처음 달성할 때 지금 선수에게 보상이 들어가요.", "Saved on this device across careers. Rewards go to your current player the first time.")}</p><div class="ach-list">${rows}</div>`,
+    buttons: [{ label: T("닫기", "Close"), value: 1, cls: "btn-primary" }] });
+}
+
+/* ---------- 📅 출석 보상 ---------- */
+async function dailyCheck() {
+  if (!S || !(S.phase === "pro" || S.phase === "youth") || S.pending) return;
+  const d = achRd(DAILY_KEY, {}), today = kstDay();
+  if (d.last === today) return;
+  const yest = kstDay(Date.now() - 86400e3);
+  const streak = d.last === yest ? Math.min((d.streak || 0) + 1, 7) : 1;
+  achWr(DAILY_KEY, { last: today, streak });
+  const base = S.phase === "pro" && S.pro ? salaryOf(S.pro.league) : 15;
+  const money = Math.round(base * (1 + streak * .5)), cond = 10 + streak * 2;
+  S.money += money; S.cond = clamp(S.cond + cond, 0, 100);
+  if (streak === 7) addMast(mainStatOf(S.pos), 3);
+  addLog(`📅 ${T(`출석 ${streak}일째`, `Day ${streak} check-in`)} 💰 +${fmtMoney(money)}`);
+  save(); renderMain();
+  const days = [1, 2, 3, 4, 5, 6, 7].map((i) => `<span class="${i < streak ? "on" : i === streak ? "now" : ""}">${i === 7 ? "🎁" : i}</span>`).join("");
+  await modal({ emoji: "📅", title: T(`출석 ${streak}일째!`, `Day ${streak} check-in!`),
+    html: `<div class="daily">${days}</div><p>💰 +${fmtMoney(money)} · 🩹 ${T("컨디션", "Condition")} +${cond}${streak === 7 ? T(" · 🎁 주력 능력치 숙련 +3", " · 🎁 Main stat mastery +3") : ""}</p><p class="small">${T("매일 들어오면 7일까지 보상이 커져요. 하루 빠지면 1일째부터 다시 시작해요.", "Rewards grow for 7 days in a row. Miss a day and it restarts.")}</p>`,
+    buttons: [{ label: T("받기", "Claim"), value: 1, cls: "btn-primary" }] });
+  achToast();
+}
