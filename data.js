@@ -1,7 +1,7 @@
 /* 더 윙어 2 : 라이벌 - 데이터 */
 "use strict";
 
-const VERSION = "v1.6 베타";
+const VERSION = "v1.9 베타";
 
 const STATS = [
   { key: "sho", name: "슛", emoji: "⚽", desc: "결정력·마무리" },
