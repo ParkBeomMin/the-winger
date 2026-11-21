@@ -639,6 +639,7 @@ function cupResolve(key, h, a, res, so) {
     pk = ` (승부차기 ${so ? `${so.a}:${so.b}` : ""} ${win} 승)`;
   }
   c.log.push(`${CUP_STAGE[c.stage] || c.stage + "강"} ${h} ${res.hg}:${res.ag} ${a}${pk}`);
+  (c.res = c.res || []).push({ h, a, hg: res.hg, ag: res.ag, win, so: so ? `${so.a}:${so.b}` : "" });
   credit(res, "cup");
   return { win, pk };
 }
