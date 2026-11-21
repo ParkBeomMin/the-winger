@@ -95,7 +95,7 @@ function modal({ emoji = "", title = "", html = "", buttons = [{ label: "OK", va
 }
 let toastTimer = null;
 function toast(msg, ms = 2600) {
-  const t = $("toast"); t.innerHTML = msg; t.hidden = false;
+  const t = $("toast"); t.innerHTML = msg; t.hidden = false; t.onclick = () => (t.hidden = true);
   clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), ms);
 }
 /* 처음 한 번만 뜨는 코치 한마디 — 시스템을 한꺼번에 설명하지 않고 필요할 때 하나씩 */
@@ -1198,7 +1198,10 @@ async function runCups(roundDone, quick) {
     cupAdvance(key, winners);
     if (C.alive.length === 2 && C.alive.includes(S.pro.club)) pushSig("cupfinal", { cup: cup.name });
     if (C.winner === S.pro.club) { S.career.trophies.push(`Season ${S.pro.season} ${cup.name}`); S.career.awards.push(`Season ${S.pro.season} ${cup.emoji} ${cup.name} winner`); S.career.awardScore = (S.career.awardScore || 0) + 12 * cup.weight; S.fame += 20; }
-    if (!quick && !myLine) toast(`${cup.emoji} ${cup.name} ${stageName}: ${C.log.slice(-winners.length).join(" / ")}`, 3500);
+    if (!quick && !myLine) {
+      const rs = (C.res || []).slice(-winners.length);
+      toast(`<div class="cupt"><b>${cup.emoji} ${cup.name} ${stageName}</b>${rs.map((x) => `<div class="cupt-r"><span class="${x.win === x.h ? "w" : ""}">${crestHTML(x.h, 16)} ${esc(x.h)}</span><em>${x.hg}:${x.ag}</em><span class="${x.win === x.a ? "w" : ""}">${esc(x.a)} ${crestHTML(x.a, 16)}</span>${x.so ? `<small>Penalties ${x.so} · ${esc(x.win)} win</small>` : ""}</div>`).join("")}</div>`, 5000);
+    }
   }
 }
 

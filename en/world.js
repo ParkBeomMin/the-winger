@@ -639,6 +639,7 @@ function cupResolve(key, h, a, res, so) {
     pk = ` (${win} win ${so ? `${so.a}:${so.b}` : ""} on pens)`;
   }
   c.log.push(`${CUP_STAGE[c.stage] || "Round of " + c.stage} ${h} ${res.hg}:${res.ag} ${a}${pk}`);
+  (c.res = c.res || []).push({ h, a, hg: res.hg, ag: res.ag, win, so: so ? `${so.a}:${so.b}` : "" });
   credit(res, "cup");
   return { win, pk };
 }
