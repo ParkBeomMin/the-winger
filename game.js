@@ -1298,7 +1298,7 @@ async function seasonEnd() {
   const awLine = (l) => { const A = AW[l.id]; return `<div class="aw-row"><b>${l.flag} ${l.name}</b> 🏆 ${esc(A.champ)} · 👟 ${A.boot ? `${pl(A.boot)} ${A.boot.s.g}골` : "-"} · 👑 ${A.mvp ? pl(A.mvp) : "-"}</div>`; };
   const cupLine = Object.entries(S.cups).map(([k, c]) => `<div class="aw-row"><b>${CUPS[k].emoji} ${CUPS[k].name}</b> 우승 ${esc(c.winner || "-")}${c.teams.includes(P.club) ? ` · 우리 ${c.winner === P.club ? "🏆 우승" : "탈락"}` : ""}</div>`).join("");
   const heroAw = awards.find((a) => a.k === "ballon") || awards[0];
-  $("ss-body").innerHTML = `${heroAw ? `<div class="ss-hero" style="background-image:url(assets/ceremony.webp)"><b>${awards.map((a) => a.name).join(" · ")}</b></div>` : ""}
+  $("ss-body").innerHTML = `${heroAw ? `<div class="ss-hero" style="background-image:url(assets/ceremony.webp)"><div class="ss-aw">${awards.map((a) => `<span class="${a.k === "ballon" ? "gold" : ""}">${a.name}</span>`).join("")}</div></div>` : ""}
     <div class="ss-card"><h4>${lg.flag} ${lg.name} 최종 순위</h4>
       <table class="tbl"><tr><th>#</th><th>클럽</th><th>승</th><th>무</th><th>패</th><th>득실</th><th>승점</th></tr>
       ${tbl.map(([n, t], i) => `<tr class="${myRow(n)} ${zoneCls(P.league, i)}"><td>${i + 1}</td><td>${crestHTML(n, 14)} ${esc(n)}${n === rvp.c ? " ⚔️" : ""}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table></div>
