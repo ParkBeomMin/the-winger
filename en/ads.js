@@ -78,8 +78,25 @@ function houseAd(bar, ins) {
   b.onclick = () => { track("ad_inquiry_open"); if (typeof openAdInquiry === "function") openAdInquiry(); };
   bar.appendChild(b);
 }
+/* 애드센스가 광고 대신 넣는 검색 칩(unfill-optimized)은 스크롤하면 스스로 숨어서 띠가 비어 보일 때가 있어요.
+ * 그 순간에만 뒤쪽에 광고 문의 배너를 보여 줘요 (칩이 다시 나오면 숨겨요. 진짜 광고·칩은 절대 가리지 않아요) */
+function houseLayerWatch(bar, ins) {
+  if (bar.__layer) return;
+  const L = document.createElement("button"); L.type = "button"; L.className = "house-ad house-layer";
+  L.innerHTML = `<b>${adT("📢 이 자리에 광고하세요", "📢 Advertise here")}</b><small>${adT("더 윙어 2 광고 문의 ›", "The Winger 2 ad inquiry ›")}</small>`;
+  L.onclick = () => { track("ad_inquiry_open"); if (typeof openAdInquiry === "function") openAdInquiry(); };
+  bar.appendChild(L); bar.__layer = L;
+  setInterval(() => {
+    if (ins.getAttribute("data-ad-status") !== "unfill-optimized" || getComputedStyle(bar).display === "none") { L.classList.remove("on"); return; }
+    const r = bar.getBoundingClientRect(); let seen = false;
+    L.style.visibility = "hidden";
+    for (const fx of [.2, .35, .5, .65, .8]) { const el = document.elementFromPoint(r.left + r.width * fx, r.top + r.height / 2); if (el && ins.contains(el) && el !== ins && (el.textContent || "").trim()) { seen = true; break; } }
+    L.style.visibility = "";
+    L.classList.toggle("on", !seen);
+  }, 900);
+}
 function houseAdWatch(bar, ins) {
-  const check = () => { const st = ins.getAttribute("data-ad-status"); if (st === "unfilled") houseAd(bar, ins); return !!st; };
+  const check = () => { const st = ins.getAttribute("data-ad-status"); if (st === "unfilled") houseAd(bar, ins); if (st === "unfill-optimized") houseLayerWatch(bar, ins); return !!st; };
   new MutationObserver(check).observe(ins, { attributes: true, attributeFilter: ["data-ad-status"] });
   setTimeout(() => { if (!check() && !ins.querySelector("iframe")) houseAd(bar, ins); }, 8000);
 }
