@@ -1231,6 +1231,31 @@ const avg = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
 const POS_F = { fw: .8, wg: .9, mf: 1.3, df: 2.6, gk: 2.6 };
 /* 발롱도르 점수 (v1.9.8): 기록과 우승 비중을 키우고 능력치 비중은 줄였어요 */
 const BALLON_W = { ovr: .5, tier: 5, rate: 8, ga: .75, champ: 8, boot: 6, ast: 4, mvp: 5 };
+/* 발롱도르 계산식 보기: 항목별 점수 (1위와 나) */
+function ballonParts(o) {
+  const B = BALLON_W, pf = POS_F[o.pos] || 1;
+  return [
+    [T("종합 능력치", "Overall"), `${Math.round(o.ovr)} × ${B.ovr}`, o.ovr * B.ovr],
+    [T("리그 수준", "League level"), `${o.tier} × ${B.tier}`, o.tier * B.tier],
+    [T("평균 평점", "Avg rating"), `(${o.avg.toFixed(2)} − 6.5) × ${B.rate}`, (o.avg - 6.5) * B.rate],
+    [T("골·도움", "Goals·assists"), `(${o.g} + ${o.a}×0.8) × ${pf} × ${B.ga}`, (o.g + o.a * .8) * pf * B.ga],
+    [T("리그 우승", "League title"), o.champ ? `+${B.champ}` : "-", o.champ ? B.champ : 0],
+    [T("득점왕 · 도움왕 · MVP", "Golden Boot · Assists · MVP"), [o.boot && "👟", o.ast && "🎯", o.mvp && "👑"].filter(Boolean).join(" ") || "-", (o.boot ? B.boot : 0) + (o.ast ? B.ast : 0) + (o.mvp ? B.mvp : 0)],
+    [T("대륙컵 · 월드컵", "Cups · World Cup"), (o.cup || 0) + (o.wc || 0) ? "+" + ((o.cup || 0) + (o.wc || 0)).toFixed(1) : "-", (o.cup || 0) + (o.wc || 0)],
+  ];
+}
+function openBallonInfo() {
+  const I = window.__ballon; if (!I || !I.top) return;
+  const cols = [I.top, I.me && I.me !== I.top ? I.me : null].filter(Boolean);
+  const nm = (c) => `${NATIONS[c.nat] ? NATIONS[c.nat].flag : ""} ${esc(c.name)}`;
+  const parts = cols.map(ballonParts);
+  const rows = parts[0].map((r, i) => `<tr><td>${r[0]}</td>${parts.map((p) => `<td><small>${p[i][1]}</small><b>${p[i][2] ? (p[i][2] > 0 ? "+" : "") + p[i][2].toFixed(1) : "0"}</b></td>`).join("")}</tr>`).join("");
+  modal({ title: T("🏅 발롱도르 계산식", "🏅 Ballon d'Or formula"), wide: true,
+    html: `<p class="small">${T("리그 9경기 이상 뛴 모든 선수를 아래 점수 합으로 줄 세워요. 포지션 배율: 공격수 0.8 · 윙어 0.9 · 미드 1.3 · 수비 2.6", "Every player with 9+ league games is ranked by this total. Position factor: FW 0.8 · WG 0.9 · MF 1.3 · DF 2.6")}</p>
+      <div class="hd-scroll"><table class="tbl bf"><tr><th></th>${cols.map((c, i) => `<th>${i === 0 ? "1. " : I.myRank + ". "}${nm(c)}</th>`).join("")}</tr>${rows}
+      <tr class="me"><td><b>${T("합계", "Total")}</b></td>${cols.map((c) => `<td><b>${c.sc.toFixed(1)}</b></td>`).join("")}</tr></table></div>`,
+    buttons: [{ label: T("닫기", "Close"), value: 1, cls: "btn-primary" }] });
+}
 function ballonScore(o) { const B = BALLON_W; return o.ovr * B.ovr + o.tier * B.tier + (o.avg - 6.5) * B.rate + (o.g + o.a * .8) * (POS_F[o.pos] || 1) * B.ga + (o.champ ? B.champ : 0) + (o.boot ? B.boot : 0) + (o.ast ? B.ast : 0) + (o.mvp ? B.mvp : 0) + (o.cup || 0) + (o.wc || 0); }
 function leagueAwards(lgId) {
   const ps = leaguePlayers(lgId).filter((p) => p.s.ap >= 9);
@@ -1271,6 +1296,7 @@ async function seasonEnd() {
     return { id: p.id, name: p.n, nat: p.nat, club: p.c, pos: p.r, ovr: pOvr(p), tier: LEAGUES[l].tier, avg: pAvg(p), g: p.s.g + p.cs.g, a: p.s.a + p.cs.a, champ: AW[l].champ === p.c, boot: !!AW[l].boot && AW[l].boot.id === p.id, ast: !!AW[l].ast && AW[l].ast.id === p.id, mvp: !!AW[l].mvp && AW[l].mvp.id === p.id, cup: cupBonus(p.c), wc: S.wcWinner && S.wcWinner.nat === p.nat && S.wcWinner.season === P.season ? 6 : 0 };
   }).map((c) => ({ ...c, sc: ballonScore(c) })).sort((a, b) => b.sc - a.sc);
   const myB = cands.findIndex((c) => c.id === "me") + 1, rvB = cands.findIndex((c) => c.id === "rv") + 1;
+  window.__ballon = { top: cands[0], me: myB ? cands[myB - 1] : null, myRank: myB };
   if (myB === 1) { awards.push({ k: "ballon", name: "🏅 발롱도르", w: 0 }); S.career.ballon++; }
   else if (myB && myB <= 3) S.career.ballonTop3++;
   if (rvB === 1) { rvAwards.push("🏅 발롱도르"); rv.career.ballon++; }
@@ -1321,8 +1347,9 @@ async function seasonEnd() {
     <div class="ss-card"><h4>🏅 발롱도르 순위</h4>
       ${cands.slice(0, 5).map((c, i) => `<div class="bl ${c.id === "me" ? "me" : c.id === "rv" ? "rv" : ""}"><span>${i + 1}</span><b>${NATIONS[c.nat].flag} <a class="pl" data-pid="${c.id}">${esc(c.name)}</a>${c.id === "rv" ? " ⚔️" : ""}</b><small>${esc(shortName(c.club))} ⚽${c.g} 🅰️${c.a}</small><em>${c.sc.toFixed(1)}</em></div>`).join("")}
       ${myB > 5 ? `<div class="bl me"><span>${myB}</span><b>${esc(S.name)}</b><small></small><em>${cands[myB - 1].sc.toFixed(1)}</em></div>` : ""}
-      ${rvB > 5 ? `<div class="bl rv"><span>${rvB}</span><b>${esc(rv.name)} ⚔️</b><small></small><em>${cands[rvB - 1].sc.toFixed(1)}</em></div>` : ""}<p class="small">${T("평점·골·도움·우승·개인상(득점왕·도움왕·MVP)으로 매겨요", "Based on rating, goals, assists, trophies and awards (Golden Boot, assists, MVP)")}</p></div>`;
+      ${rvB > 5 ? `<div class="bl rv"><span>${rvB}</span><b>${esc(rv.name)} ⚔️</b><small></small><em>${cands[rvB - 1].sc.toFixed(1)}</em></div>` : ""}<button class="btn btn-ghost bf-btn" id="bf-open">${T("📐 계산식 보기 (1위 vs 나)", "📐 See the formula (1st vs me)")}</button></div>`;
   $("ss-av").appendChild(avatarCanvas(S.look, P.kit, 56, { mood: awards.length ? "joy" : undefined }));
+  const bfB = $("bf-open"); if (bfB) bfB.onclick = openBallonInfo;
   bindPlayerLinks($("ss-body"));
   if (awards.some((a) => a.k === "ballon")) { Sfx.goal(); if (Sfx.fanfare) Sfx.fanfare(); }
   addLog(`📋 ${P.season}시즌 ${rank}위 · ⚽${P.s.g} 🅰️${P.s.a}${awards.length ? " · " + awards.map((a) => a.name).join(", ") : ""}`);
