@@ -266,11 +266,13 @@ function addMast(k, n, E = S) {
   } else if (trOf(k, E) < 3) addTg(k, n * trStep(trOf(k, E)) / 2, E);
   return awakeNotify(out, k, E);
 }
-/* 🌌 초월 도전 한 번: 성공하면 단계 +1(최대치 +2, 능력치 +1~2), 실패하면 게이지 +천장 한 칸(× mult) */
-function transAttempt(k, E = S, mult = 1) {
+/* 🌌 초월 도전 한 번: 성공하면 단계 +1(최대치 +2, 능력치 +1~2), 실패하면 게이지 +천장 한 칸(× mult)
+ * 🔥 모험 도전(bold): 성공 확률 2배, 대신 실패하면 그 능력치 -1 (다시 훈련으로 채워야 도전 가능) */
+const boldCh = (ch) => Math.min(100, ch * 2);
+function transAttempt(k, E = S, mult = 1, bold = false) {
   const tr = trOf(k, E); if (tr >= 3) return null;
   if (!E.trans) E.trans = {};
-  const ch = transChance(k, E);
+  const ch = bold ? boldCh(transChance(k, E)) : transChance(k, E);
   if (Math.random() * 100 < ch) {
     E.trans[k] = tr + 1; if (E.tg) E.tg[k] = 0;
     const up = randi(1, 2), b = E.stats[k];
@@ -279,7 +281,8 @@ function transAttempt(k, E = S, mult = 1) {
     return { ok: true, ch, up: E.stats[k] - b };
   }
   addTg(k, trStep(tr) * mult, E);
-  return { ok: false, ch, next: transChance(k, E) };
+  if (bold) E.stats[k] = Math.max(1, E.stats[k] - 1);
+  return { ok: false, ch, next: bold ? boldCh(transChance(k, E)) : transChance(k, E), lost: bold ? 1 : 0 };
 }
 
 /* ---------- 세계의 AI 선수도 같은 규칙 ----------
