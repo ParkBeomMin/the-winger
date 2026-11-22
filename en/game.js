@@ -279,7 +279,7 @@ function nextScheduleText() {
   return { left: 0, name: opp, text: `📅 R${S.pro.round + 1}/${ROUNDS} Next: <b>${esc(opp)}</b> (Str ${Math.round(clubStr(S.pro.league, opp))})${rivalMatch ? ` <em class="rv">⚔️ Rival Match</em>` : ""}` };
 }
 function trainPreview(k) {
-  if (S.stats[k] >= statCap(k) - .05) return mastNeed(k) ? "Max · mastery x2" : "All complete";
+  if (S.stats[k] >= statCap(k) - .05) { const sp = spillKey(k); return mastNeed(k) ? T(`숙련 ×3${sp ? " · " + STAT_NAME[sp] + "↑" : ""}`, `Mastery x3${sp ? " · " + STAT_NAME[sp] + "↑" : ""}`) : T(`완성 · ${sp ? STAT_NAME[sp] + "↑" : "컨디션↑"}`, `Maxed · ${sp ? STAT_NAME[sp] + "↑" : "Cond↑"}`); }
   const g = trainGain(k, true);
   return `+${g[0].toFixed(1)}~${g[1].toFixed(1)}`;
 }
@@ -305,6 +305,12 @@ function trainGain(k, range = false) {
 }
 
 /* 종합에 가장 많이 보탬이 되는 훈련 — 자동 진행·빠른 시즌이 써요 */
+/* 최대치 능력치를 훈련하면 넘친 훈련량이 가장 낮은 주력 능력치로 가요 (훈련이 헛되지 않게) */
+function spillKey(from) {
+  const ks = Object.entries(POS[S.pos].w).filter(([k, w]) => w > 0 && k !== from && S.stats[k] < statCap(k) - .05).map(([k]) => k);
+  const pool = ks.length ? ks : STAT_KEYS.filter((k) => k !== from && S.stats[k] < statCap(k) - .05);
+  return pool.sort((a, b) => S.stats[a] - S.stats[b])[0] || null;
+}
 function bestTrainKey() {
   let best = null, bv = -1;
   for (const [k, w] of Object.entries(POS[S.pos].w)) {
@@ -429,16 +435,21 @@ function applyAction(a, btn) {
   S.stats[k] = clamp(S.stats[k] + g, 1, statCap(k));
   // 최대치에 닿은 능력치는 숫자 대신 숙련이 2배로 쌓여요 (초월로 최대치를 넓히는 길)
   const mBefore = (S.mast && S.mast[k]) || 0, trBefore = trOf(k), talBefore = S.talent[k];
-  addMast(k, (S.buff > 1 ? 2 : 1) * (atCap ? 2 : 1));
-  S.cond = clamp(S.cond - trainCost(), 0, 100);
+  addMast(k, (S.buff > 1 ? 2 : 1) * (atCap ? 3 : 1));
+  // 최대치 훈련: 가볍게 하니 피로는 절반, 넘친 훈련량은 가장 낮은 주력 능력치로 (숙련이 남았으면 40%, 다 완성했으면 70%)
+  let spill = null;
+  if (atCap) { const sk = spillKey(k); if (sk) { const sb = S.stats[sk]; S.stats[sk] = clamp(sb + trainGain(sk) * (mastNeed(k) ? .4 : .7), 1, statCap(sk)); spill = [sk, S.stats[sk] - sb]; } }
+  S.cond = clamp(S.cond - trainCost() * (atCap ? .5 : 1), 0, 100);
+  if (atCap && !spill) S.cond = clamp(S.cond + 10, 0, 100);
   const used = S.buff > 1 ? ` (🔥×${S.buff})` : "";
   S.buff = 1;
   if (atCap) {
     const lvUp = trOf(k) !== trBefore || S.talent[k] !== talBefore, need = mastNeed(k);
-    const mtxt = lvUp ? "Level up!" : need ? `Mastery ${(S.mast[k] || 0)}/${need} (+${(S.mast[k] || 0) - mBefore})` : "Complete";
-    addLog(`${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} at max ${statCap(k)} · ${mtxt}${used}`);
-    S.lastAct = { key: k, txt: `${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} at max · ${mtxt}${used}` };
-    floatFx(btn, lvUp ? "🌌 Level up" : `Mastery +${(S.mast[k] || 0) - mBefore}`);
+    const mtxt = lvUp ? T("단계 상승!", "Level up!") : need ? T(`숙련 ${(S.mast[k] || 0)}/${need} (+${(S.mast[k] || 0) - mBefore})`, `Mastery ${(S.mast[k] || 0)}/${need} (+${(S.mast[k] || 0) - mBefore})`) : T("완성", "Complete");
+    const stxt = spill ? ` · ${T("넘침", "overflow")} → ${STATS.find((s) => s.key === spill[0]).emoji} ${STAT_NAME[spill[0]]} +${spill[1].toFixed(1)} → ${Math.round(S.stats[spill[0]])}` : T(" · 컨디션 +10", " · Condition +10");
+    addLog(`${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} ${T("최대치", "max")} ${statCap(k)} · ${mtxt}${stxt}${used}`);
+    S.lastAct = { key: spill ? spill[0] : k, txt: `${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} ${T("최대치", "max")} · ${mtxt}${stxt}${used}` };
+    floatFx(btn, lvUp ? T("🌌 단계 상승", "🌌 Level up") : spill ? `${STAT_NAME[spill[0]]} +${spill[1].toFixed(1)}` : T(`숙련 +${(S.mast[k] || 0) - mBefore}`, `Mastery +${(S.mast[k] || 0) - mBefore}`));
   } else {
   addLog(`${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} Training +${(S.stats[k] - before).toFixed(1)} → ${Math.round(S.stats[k])}${used}`);
   S.lastAct = { key: k, txt: `${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} +${(S.stats[k] - before).toFixed(1)} → ${Math.round(S.stats[k])}${used}` };
@@ -1726,7 +1737,7 @@ function openMast(k) {
   modal({ emoji: s.emoji, title: `${s.name} mastery`,
     html: `<ul class="tip-list"><li>Talent <b>${talentStr(k)}</b>, rating <b>${Math.round(S.stats[k])}</b> / max <b>${statCap(k)}</b></li>
       <li>Mastery <b>${need ? `${have} / ${need}` : "Complete"}</b>${need ? ` · when full: <b>${next}</b>` : ""}</li>
-      <li>Training this stat builds mastery, twice as fast once the stat is at its max. MOM awards, overseas training and the talent program also add to it.</li>
+      <li>Training this stat builds mastery, 3x as fast once the stat is at its max, and the leftover training goes to your lowest key stat. MOM awards, overseas training and the talent program also add to it.</li>
       <li>Higher talent ★ means bigger training gains. After ★5 comes Transcendence (I to III), each raising the max by 2, up to 105.</li></ul>`,
     buttons: [{ label: "Close", value: 1, cls: "btn-primary" }] });
 }
