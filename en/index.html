@@ -366,8 +366,8 @@ a.pl{color:inherit;text-decoration:underline dotted;cursor:pointer}.rvn{color:#f
 .hof-row.me{outline:2px solid var(--acc);border-radius:10px}.hof-row{cursor:pointer}.hof-row:active{filter:brightness(1.15)}.hof-row::after{content:"›";color:var(--dim);font-size:1.2rem;margin-left:2px}
 .hd-head{display:flex;gap:12px;align-items:center;text-align:left;margin-bottom:10px}.hd-head>div:nth-child(2){flex:1;display:flex;flex-direction:column;gap:2px}.hd-head b{font-family:Jua;font-size:1.25rem;color:var(--acc)}.hd-head small{color:var(--dim);font-size:.78rem;word-break:keep-all}.hd-head span{color:#ffd23f;font-size:.85rem}.hd-head em{font-family:Jua;font-style:normal;color:var(--acc2);text-align:right;font-size:.95rem;line-height:1.2}
 .hd-chips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:4px 0 8px}.hd-chips div{background:rgba(0,0,0,.22);border-radius:10px;padding:7px 4px;display:flex;flex-direction:column}.hd-chips b{font-family:Jua;font-size:1rem}.hd-chips small{color:var(--dim);font-size:.68rem;word-break:keep-all}.hd-scroll{overflow-x:auto;max-width:100%}#hof-tabs{margin-bottom:10px}
-#adbar{position:fixed;left:0;right:0;bottom:0;height:60px;z-index:80;display:none;align-items:center;justify-content:center;background:#07110b;border-top:1px solid var(--line)}
-body.ad-on main,body.ad-on #app{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}main{margin-top:var(--anchor-top,0px)}.privacy-link{display:inline-block;margin:6px 8px 0;font-size:.72rem;color:var(--dim)}#title-extras{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:6px}#title-extras .btn{width:auto;margin:0}
+#adbar{position:relative;height:60px;margin:18px auto 4px;display:none;align-items:center;justify-content:center}
+body.ad-on main,body.ad-on #app{padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}main{margin-top:var(--anchor-top,0px)}.privacy-link{display:inline-block;margin:6px 8px 0;font-size:.72rem;color:var(--dim)}#title-extras{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:6px}#title-extras .btn{width:auto;margin:0}
 body.ad-on #toast{bottom:84px}.ad-ph{width:320px;height:50px;border:1px dashed #557;color:#88a;display:flex;align-items:center;justify-content:center;font-size:.75rem}
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#000c;color:#fff;padding:10px 16px;border-radius:12px;z-index:120;font-size:.9rem}
 #toast[hidden]{display:none}
@@ -420,8 +420,7 @@ body.ad-on #toast{bottom:84px}.ad-ph{width:320px;height:50px;border:1px dashed #
 .ttl{display:inline-block;font-style:normal;font-family:Jua;font-size:.68rem;color:#ffd23f;background:rgba(255,210,63,.12);border:1px solid rgba(255,210,63,.4);border-radius:999px;padding:1px 7px;margin:0 4px;vertical-align:middle;white-space:nowrap}.hd-head .ttl{align-self:flex-start;margin:2px 0}.ttl-end{font-family:Jua;color:#ffd23f;font-size:1.1rem;margin-bottom:4px}
 .ttl-row{width:100%;border:0;text-align:left;font:inherit;color:inherit;cursor:pointer}.ttl-row.eq{outline:2px solid #ffd23f}
 .wc-tb{margin:6px 0 10px;text-align:left}.wc-tb>b{font-family:Jua;color:var(--acc);display:block;margin-bottom:4px}.wc-tb .tbl td,.wc-tb .tbl th{font-size:.78rem}
-#adbar{position:fixed}#adbar .house-layer{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);opacity:0;pointer-events:none;transition:opacity .2s;z-index:0}#adbar .house-layer.on{opacity:1;pointer-events:auto;z-index:2}#adbar ins{position:relative;z-index:1}
-body.ad-on #adbar{display:flex!important;visibility:visible!important;opacity:1!important;transform:none!important;top:auto!important;bottom:0!important;height:60px!important}
+#adbar .house-layer{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);opacity:0;pointer-events:none;transition:opacity .2s;z-index:0}#adbar .house-layer.on{opacity:1;pointer-events:auto;z-index:2}#adbar ins{position:relative;z-index:1}
 .st.tgm .bar u{background:linear-gradient(90deg,#4fc3ff,#9be7ff);height:4px}
 .bold-tg{grid-column:1/-1;display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--muted,#9ab)}.bold-tg>span{flex:0 0 auto;margin-right:2px}.bold-tg button{flex:1;background:var(--card);border:1.5px solid var(--line);border-radius:10px;padding:5px 4px;color:inherit;font:inherit;display:flex;flex-direction:column;align-items:center;line-height:1.25}.bold-tg button small{font-size:.66rem;opacity:.75}.bold-tg button.on{border-color:#4fc3ff;color:#fff;background:rgba(79,195,255,.12)}.bold-tg button.on.bold{border-color:#ff7a45;background:rgba(255,122,69,.14)}
 </style>
@@ -501,21 +500,21 @@ body.ad-on #adbar{display:flex!important;visibility:visible!important;opacity:1!
 </main>
 <div id="modal" hidden></div>
 <div id="toast" hidden></div>
-<script src="en/ads.js?v=2.3.0"></script>
-<script src="en/data.js?v=2.3.0"></script>
-<script src="avatar.js?v=2.3.0"></script>
-<script src="en/match.js?v=2.3.0"></script>
-<script src="sound.js?v=2.3.0"></script>
-<script src="en/minigames.js?v=2.3.0"></script>
-<script src="en/events.js?v=2.3.0"></script>
-<script src="en/life.js?v=2.3.0"></script>
-<script src="en/world.js?v=2.3.0"></script>
-<script src="en/game.js?v=2.3.0"></script>
-<script src="en/cloud.js?v=2.3.0"></script>
-<script src="en/online.js?v=2.3.0"></script>
-<script src="en/nav.js?v=2.3.0"></script>
+<script src="en/ads.js?v=2.3.1"></script>
+<script src="en/data.js?v=2.3.1"></script>
+<script src="avatar.js?v=2.3.1"></script>
+<script src="en/match.js?v=2.3.1"></script>
+<script src="sound.js?v=2.3.1"></script>
+<script src="en/minigames.js?v=2.3.1"></script>
+<script src="en/events.js?v=2.3.1"></script>
+<script src="en/life.js?v=2.3.1"></script>
+<script src="en/world.js?v=2.3.1"></script>
+<script src="en/game.js?v=2.3.1"></script>
+<script src="en/cloud.js?v=2.3.1"></script>
+<script src="en/online.js?v=2.3.1"></script>
+<script src="en/nav.js?v=2.3.1"></script>
 <script src="en/en-patch.js"></script>
-<script src="share.js?v=2.3.0"></script>
-<script src="ach.js?v=2.3.0"></script>
+<script src="share.js?v=2.3.1"></script>
+<script src="ach.js?v=2.3.1"></script>
 </body>
 </html>

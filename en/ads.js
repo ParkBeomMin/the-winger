@@ -51,7 +51,9 @@ const HIDE_AD_ON = [];   // 모든 화면에 하단 배너 (미니게임 창이 
 function adBanner(screenId) {
   if (!ADS.on) return;
   let bar = document.getElementById("adbar");
-  if (!bar) { bar = ADS.bar || document.createElement("div"); bar.id = "adbar"; document.body.appendChild(bar); }
+  // 하단 띠는 화면에 고정하지 않고 콘텐츠 맨 아래에 붙여요 (모바일 고정 광고는 애드센스 정책 위반이라 구글이 스크롤 때 접어 버려요. 시즌1과 같은 방식)
+  const host = document.getElementById("app") || document.body;
+  if (!bar) { bar = ADS.bar || document.createElement("div"); bar.id = "adbar"; host.appendChild(bar); }
   ADS.bar = bar;
   const show = !HIDE_AD_ON.includes(screenId);
   bar.style.display = show ? "flex" : "none";
@@ -95,7 +97,8 @@ function houseLayerWatch(bar, ins) {
 /* 칩 글자가 실제로 띠 안에 보이는지: 숨김·투명·잘림·밀려남·다른 것에 가려짐을 모두 걸러요 */
 function adChipsSeen(bar, ins, L) {
   const r = bar.getBoundingClientRect();
-  if (!r.height || r.top >= innerHeight) return false;
+  if (!r.height) return false;
+  if (r.top >= innerHeight || r.bottom <= 0) return true;   // 화면 밖이면 판단 보류(문의 배너 안 띄움)
   const op = (el) => { let o = 1; for (let x = el; x && x !== bar; x = x.parentElement) { const cs = getComputedStyle(x); if (cs.display === "none" || cs.visibility === "hidden") return 0; o *= +cs.opacity; } return o; };
   const pe = L ? L.style.pointerEvents : ""; if (L) L.style.pointerEvents = "none";
   let seen = false;
@@ -142,7 +145,8 @@ function adBarGuard() {
   setInterval(() => {
     const bar = document.getElementById("adbar") || ADS.bar;
     if (!bar || !document.body.classList.contains("ad-on")) return;
-    if (bar.parentNode !== document.body) document.body.appendChild(bar);
+    const host = document.getElementById("app") || document.body;
+    if (bar.parentNode !== host || bar !== host.lastElementChild) host.appendChild(bar);
     for (const p of ["visibility", "opacity", "transform", "top", "height"]) if (bar.style[p]) bar.style[p] = "";
     if (bar.style.display !== "flex") bar.style.display = "flex";
   }, 1000);
