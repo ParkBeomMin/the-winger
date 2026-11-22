@@ -92,16 +92,16 @@ async function bragCard(d) {
   x.textAlign = "right"; x.fillStyle = "rgba(255,255,255,.7)"; x.font = J(34); x.fillText(T(`${last.season}시즌`, `SEASON ${last.season}`), Wd - 64, 84); x.textAlign = "left";
   const hs = fit(head, Wd - 128, 88, J); x.fillStyle = "#fff"; x.shadowColor = "rgba(0,0,0,.5)"; x.shadowBlur = 18; x.fillText(head, 64, 84 + 24 + hs); x.shadowBlur = 0;
   // 선수 카드
-  const cy = 250, ch = 400; rr2(48, cy, Wd - 96, ch, 36); x.fillStyle = "rgba(10,30,20,.78)"; x.fill(); x.strokeStyle = "rgba(143,227,174,.35)"; x.lineWidth = 3; x.stroke();
-  x.save(); rr2(76, cy + 28, 330, 344, 28); x.clip();
-  g = x.createLinearGradient(0, cy, 0, cy + ch); g.addColorStop(0, (d.P && d.P.kit && d.P.kit[0]) || "#2a6"); g.addColorStop(1, "#0a1a12"); x.fillStyle = g; x.fillRect(76, cy + 28, 330, 344);
-  try { if (S.look && S.look.face && typeof faceReady === "function" && !faceReady(S.look.face) && FACE_IMG[S.look.face]) await new Promise((r) => { FACE_IMG[S.look.face].addEventListener("load", r, { once: true }); setTimeout(r, 1500); }); drawAvatar(x, 241, cy + 40, 330, S.look, (d.P && d.P.kit) || ["#2a6", "#fff"], { mood: aw.length ? "joy" : undefined }); } catch {}
+  const cy = 250, ch = 370; rr2(48, cy, Wd - 96, ch, 36); x.fillStyle = "rgba(10,30,20,.78)"; x.fill(); x.strokeStyle = "rgba(143,227,174,.35)"; x.lineWidth = 3; x.stroke();
+  x.save(); rr2(76, cy + 28, 330, ch - 56, 28); x.clip();
+  g = x.createLinearGradient(0, cy, 0, cy + ch); g.addColorStop(0, (d.P && d.P.kit && d.P.kit[0]) || "#2a6"); g.addColorStop(1, "#0a1a12"); x.fillStyle = g; x.fillRect(76, cy + 28, 330, ch - 56);
+  try { if (S.look && S.look.face && typeof faceReady === "function" && !faceReady(S.look.face) && FACE_IMG[S.look.face]) await new Promise((r) => { FACE_IMG[S.look.face].addEventListener("load", r, { once: true }); setTimeout(r, 1500); }); drawAvatar(x, 241, cy + 40, 300, S.look, (d.P && d.P.kit) || ["#2a6", "#fff"], { mood: aw.length ? "joy" : undefined }); } catch {}
   x.restore();
   const tx = 440, tw = Wd - 96 - (tx - 48) - 40;
-  let ty = cy + 92;
+  let ty = cy + 80;
   const ns = fit(S.name, tw, 66, J); x.fillStyle = "#fff"; x.fillText(S.name, tx, ty); ty += 20;
-  if (S.title && typeof titleName === "function") { const tn = titleName(S.title); x.font = G(30, 1); const w = x.measureText(tn).width + 36; rr2(tx, ty, w, 50, 25); x.fillStyle = "#f5c842"; x.fill(); x.fillStyle = "#3a2a00"; x.fillText(tn, tx + 18, ty + 36); ty += 64; } else ty += 14;
-  x.font = G(32, 1); x.fillStyle = "rgba(255,255,255,.82)"; x.fillText(`${nat ? nat.flag + " " : ""}${POS[S.pos].name} · ${T(`${last.age}세`, `age ${last.age}`)} · ${T("종합", "OVR")} ${last.ovr}`, tx, ty + 34); ty += 70;
+  if (S.title && typeof titleName === "function") { const tn = titleName(S.title); x.font = G(30, 1); const w = x.measureText(tn).width + 36; rr2(tx, ty, w, 50, 25); x.fillStyle = "#f5c842"; x.fill(); x.fillStyle = "#3a2a00"; x.fillText(tn, tx + 18, ty + 36); ty += 60; } else ty += 14;
+  x.font = G(32, 1); x.fillStyle = "rgba(255,255,255,.82)"; x.fillText(`${nat ? nat.flag + " " : ""}${POS[S.pos].name} · ${T(`${last.age}세`, `age ${last.age}`)} · ${T("종합", "OVR")} ${last.ovr}`, tx, ty + 34); ty += 58;
   const cid = typeof crestId === "function" ? crestId(last.club) : null;
   const ci = cid && typeof CREST_READY !== "undefined" && CREST_READY.has(cid) ? await loadImg(`assets/crests/${cid}.webp`) : null;
   if (ci) x.drawImage(ci, tx, ty, 76, 76); else { x.fillStyle = (crestKit(last.club) || ["#2a6"])[0]; rr2(tx + 6, ty + 4, 64, 68, 14); x.fill(); }
@@ -110,14 +110,14 @@ async function bragCard(d) {
   // 통산 기록 칩
   const mom = (d.P && d.P.s && d.P.s.mom) || 0, C = S.career || {};
   const chips = [mom ? T(`⭐ MOM ${mom}회`, `⭐ MOM x${mom}`) : null, T(`통산 ⚽ ${C.g || 0} · 🅰️ ${C.a || 0}`, `Career ⚽ ${C.g || 0} · 🅰️ ${C.a || 0}`)].filter(Boolean);
-  let chx = tx; const chy = Math.min(ty + 98, cy + ch - 58); x.font = G(26, 1);
+  let chx = tx; const chy = Math.min(ty + 90, cy + ch - 56); x.font = G(26, 1);
   for (const c of chips) { const w = x.measureText(c).width + 32; if (chx + w > Wd - 76) break; rr2(chx, chy, w, 48, 24); x.fillStyle = "rgba(255,255,255,.09)"; x.fill(); x.fillStyle = "rgba(255,255,255,.88)"; x.fillText(c, chx + 16, chy + 33); chx += w + 12; }
   // 큰 숫자 4칸
   const tiles = [[last.g, T("골", "Goals"), "#ffd25a"], [last.a, T("도움", "Assists"), "#7fd4ff"], [Number(last.avg).toFixed(2), T("평점", "Rating"), "#8fe3ae"], [last.apps, T("경기", "Apps"), "#fff"]];
-  const ty0 = cy + ch + 34, tw4 = (Wd - 96 - 3 * 20) / 4;
-  tiles.forEach(([v, l, c], i) => { const X = 48 + i * (tw4 + 20); rr2(X, ty0, tw4, 190, 28); x.fillStyle = "rgba(255,255,255,.07)"; x.fill(); x.textAlign = "center"; x.fillStyle = c; fit(String(v), tw4 - 24, 92, J); x.fillText(String(v), X + tw4 / 2, ty0 + 112); x.font = G(30, 1); x.fillStyle = "rgba(255,255,255,.75)"; x.fillText(l, X + tw4 / 2, ty0 + 162); x.textAlign = "left"; });
+  const ty0 = cy + ch + 30, tw4 = (Wd - 96 - 3 * 20) / 4;
+  tiles.forEach(([v, l, c], i) => { const X = 48 + i * (tw4 + 20); rr2(X, ty0, tw4, 170, 28); x.fillStyle = "rgba(255,255,255,.07)"; x.fill(); x.textAlign = "center"; x.fillStyle = c; fit(String(v), tw4 - 24, 92, J); x.fillText(String(v), X + tw4 / 2, ty0 + 100); x.font = G(30, 1); x.fillStyle = "rgba(255,255,255,.75)"; x.fillText(l, X + tw4 / 2, ty0 + 146); x.textAlign = "left"; });
   // 포지션별 세부 기록
-  let y = ty0 + 190 + 52; x.font = G(28, 1);
+  let y = ty0 + 170 + 48; x.font = G(28, 1);
   const subT = sub.map(([l, v]) => `${l} ${v}`).join("   ·   ");
   x.fillStyle = "rgba(255,255,255,.7)"; x.textAlign = "center"; x.fillText(subT, Wd / 2, y); x.textAlign = "left"; y += 34;
   // 수상 배지
@@ -127,16 +127,22 @@ async function bragCard(d) {
   for (const b of badges.slice(0, 8)) { const w = x.measureText(b).width + 44; if (bx + w > Wd - 48) { bx = 48; by += 66; } rows.push([b, bx, by, w]); bx += w + 14; }
   for (const [b, X, Y, w] of rows) { const gold = b.includes("🏅") && !b.match(/\d+[위#]|#\d/); rr2(X, Y, w, 54, 27); x.fillStyle = gold ? "#f5c842" : b.includes("🏆") ? "rgba(245,200,66,.22)" : "rgba(143,227,174,.16)"; x.fill(); x.fillStyle = gold ? "#3a2a00" : "#fff"; x.fillText(b, X + 22, Y + 38); }
   // 라이벌: 바닥글 바로 위에 붙여요
-  const rh = 140; y = Math.max(by + 54 + 28, Hd - 86 - 36 - rh);
+  const FH = 180, rh = 120; y = Math.max(by + 54 + 24, Hd - FH - 24 - rh);
   if (rh > 90) {
     rr2(48, y, Wd - 96, rh, 28); x.fillStyle = mine > theirs ? "rgba(90,200,120,.16)" : mine < theirs ? "rgba(230,80,80,.16)" : "rgba(255,255,255,.08)"; x.fill();
-    x.font = J(36); x.fillStyle = "#ff8c8c"; x.fillText(T(`⚔️ 라이벌 ${rv.name}`, `⚔️ Rival ${rv.name}`), 76, y + 52);
-    x.font = G(28, 1); x.fillStyle = "rgba(255,255,255,.8)"; x.fillText(T(`${rr.club || ""} · ⚽ ${rr.g || 0}골 · 🅰️ ${rr.a || 0}도움 · 평점 ${rr.avg ? Number(rr.avg).toFixed(2) : "-"}`, `${rr.club || ""} · ⚽ ${rr.g || 0} G · 🅰️ ${rr.a || 0} A · ${rr.avg ? Number(rr.avg).toFixed(2) : "-"} avg`), 76, y + 96);
-    x.font = J(32); x.fillStyle = "#fff"; x.textAlign = "right"; x.fillText(verdict, Wd - 76, y + 52); x.textAlign = "left";
+    x.font = J(36); x.fillStyle = "#ff8c8c"; x.fillText(T(`⚔️ 라이벌 ${rv.name}`, `⚔️ Rival ${rv.name}`), 76, y + 48);
+    x.font = G(28, 1); x.fillStyle = "rgba(255,255,255,.8)"; x.fillText(T(`${rr.club || ""} · ⚽ ${rr.g || 0}골 · 🅰️ ${rr.a || 0}도움 · 평점 ${rr.avg ? Number(rr.avg).toFixed(2) : "-"}`, `${rr.club || ""} · ⚽ ${rr.g || 0} G · 🅰️ ${rr.a || 0} A · ${rr.avg ? Number(rr.avg).toFixed(2) : "-"} avg`), 76, y + 90);
+    x.font = J(32); x.fillStyle = "#fff"; x.textAlign = "right"; x.fillText(verdict, Wd - 76, y + 48); x.textAlign = "left";
   }
-  // 바닥글
-  x.fillStyle = "#8fe3ae"; x.fillRect(0, Hd - 86, Wd, 86);
-  x.fillStyle = "#062012"; x.font = J(36); x.textAlign = "center"; x.fillText(T("나도 키워보기 ▶ parkbeommin.github.io/the-winger", "Play free ▶ parkbeommin.github.io/the-winger/en"), Wd / 2, Hd - 32); x.textAlign = "left";
+  // 바닥글: 왼쪽 문구 + 오른쪽 QR (찍으면 게임으로)
+  x.fillStyle = "#8fe3ae"; x.fillRect(0, Hd - FH, Wd, FH);
+  const qs = 148, qx = Wd - 56 - qs, qy = Hd - FH + (FH - qs) / 2;
+  const qr = await loadImg(window.W2_LANG === "en" ? "assets/qr-en.png" : "assets/qr-ko.png");
+  rr2(qx - 10, qy - 10, qs + 20, qs + 20, 18); x.fillStyle = "#fff"; x.fill();
+  if (qr) { x.imageSmoothingEnabled = false; x.drawImage(qr, qx, qy, qs, qs); x.imageSmoothingEnabled = true; }
+  x.fillStyle = "#062012"; x.font = J(56); x.fillText(T("나도 키워보기", "Raise your own"), 64, Hd - FH + 82);
+  x.font = G(30, 1); x.fillStyle = "rgba(6,32,18,.82)"; x.fillText(T("📷 QR 찍고 바로 시작 · 무료 축구선수 키우기", "📷 Scan to play · free football career game"), 64, Hd - FH + 132);
+  x.font = J(64); x.fillStyle = "#062012"; x.textAlign = "right"; x.fillText("▶", qx - 26, Hd - FH + 112); x.textAlign = "left";
   return cv;
 }
 async function shareSeason() {
