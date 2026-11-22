@@ -279,7 +279,7 @@ function nextScheduleText() {
   return { left: 0, name: opp, text: `📅 R${S.pro.round + 1}/${ROUNDS} Next: <b>${esc(opp)}</b> (Str ${Math.round(clubStr(S.pro.league, opp))})${rivalMatch ? ` <em class="rv">⚔️ Rival Match</em>` : ""}` };
 }
 function trainPreview(k) {
-  if (atCapOf(k)) return trOf(k) < 3 ? T(`🌌 성공 ${transChance(k)}%`, `🌌 ${transChance(k)}% chance`) : T("다음 경기 +5", "+5 next match");
+  if (atCapOf(k)) return trOf(k) < 3 ? (S.bold ? T(`🔥 ${boldCh(transChance(k))}% · 실패 −1`, `🔥 ${boldCh(transChance(k))}% · fail −1`) : T(`🌌 성공 ${transChance(k)}%`, `🌌 ${transChance(k)}% chance`)) : T("다음 경기 +5", "+5 next match");
   const g = trainGain(k, true);
   return `+${g[0].toFixed(1)}~${g[1].toFixed(1)}`;
 }
@@ -369,6 +369,8 @@ function renderMain() {
   html += `<button class="act rest" data-rest="1"><span>${inj ? "🏥" : "🛌"}</span><b>${inj ? "Rehab" : "Rest"}</b><small>Condition +${32 + S.gear.recovery * 8}</small></button>`;
   if (S.phase === "youth") html += `<button class="act auto" data-auto="1" ${inj ? "disabled" : ""}><span>⏩</span><b>Auto-play</b><small>Until next tournament</small></button>`;
   else html += `<button class="act auto" data-auto="1"><span>⏩</span><b>Auto-play</b><small>Until the match</small></button>`;
+  const canTr = !inj && STATS.some((s) => atCapOf(s.key) && trOf(s.key) < 3);
+  if (canTr) html = `<div class="bold-tg"><span>${T("초월 도전 방식", "Breakthrough mode")}</span><button data-bold="0" class="${S.bold ? "" : "on"}">🌌 ${T("안전", "Safe")}<small>${T("실패해도 손해 없음", "no loss on fail")}</small></button><button data-bold="1" class="${S.bold ? "on bold" : ""}">🔥 ${T("모험", "Bold")}<small>${T("확률 2배 · 실패 시 −1", "2x odds · −1 on fail")}</small></button></div>` + html;
   const ready = pro && S.pending === "match";
   if (ready) {
     const opp = S.pro.schedule[S.pro.round], home = S.pro.home[S.pro.round];
@@ -379,6 +381,7 @@ function renderMain() {
   if (ready) $("b-kick").onclick = (e) => { if (busy) return; e.currentTarget.disabled = true; proRound(); };
   if (ready && S.lastAct && S.lastAct.key) { const i = STATS.findIndex((s) => s.key === S.lastAct.key); const row = $("stats").querySelectorAll(".st")[i]; if (row) row.classList.add("up"); }
   $("actions").querySelectorAll("[data-train]").forEach((b) => b.onclick = () => turn({ kind: "train", key: b.dataset.train }, b));
+  $("actions").querySelectorAll("[data-bold]").forEach((b) => b.onclick = () => { S.bold = b.dataset.bold === "1"; if (typeof Sfx !== "undefined") Sfx.tap(); renderMain(); });
   const rs = $("actions").querySelector("[data-rest]"); if (rs) rs.onclick = (e) => turn({ kind: "rest" }, e.currentTarget);
   const au = $("actions").querySelector("[data-auto]"); if (au) au.onclick = openAuto;
   const qk = $("actions").querySelector("[data-quick]"); if (qk) qk.onclick = quickSeason;
@@ -433,14 +436,15 @@ function applyAction(a, btn) {
   const used = S.buff > 1 ? ` (🔥×${S.buff})` : "", em = STATS.find((s) => s.key === k).emoji;
   if (atCapOf(k) && trOf(k) < 3) {
     // 🌌 초월 도전: 실패하면 게이지가 차서 다음 확률이 올라가요 (🔥버프는 게이지 2배, 피버 숙련 보너스도 게이지에)
-    const r = transAttempt(k, S, (S.buff > 1 ? 2 : 1) * (1 + (typeof F === "function" ? F("mast") : 0)));
+    const bold = !!S.bold, r = transAttempt(k, S, (S.buff > 1 ? 2 : 1) * (1 + (typeof F === "function" ? F("mast") : 0)), bold);
     S.cond = clamp(S.cond - trainCost() * .5, 0, 100);
     S.buff = 1;
     const txt = r.ok ? T(`🌌 ${STAT_NAME[k]} 초월 성공! (${r.ch}%) ${TRANS_NAME[trOf(k)]} · 최대치 ${statCap(k)}`, `🌌 ${STAT_NAME[k]} breakthrough! (${r.ch}%) ${TRANS_NAME[trOf(k)]} · max ${statCap(k)}`)
+      : bold ? T(`🔥 ${STAT_NAME[k]} 모험 실패 (${r.ch}%) · ${STAT_NAME[k]} −1 → ${Math.round(S.stats[k])} · 게이지 ${Math.round(tgOf(k))}%`, `🔥 ${STAT_NAME[k]} bold try failed (${r.ch}%) · ${STAT_NAME[k]} −1 → ${Math.round(S.stats[k])} · gauge ${Math.round(tgOf(k))}%`)
       : T(`${em} ${STAT_NAME[k]} 초월 도전 실패 (${r.ch}%) · 다음 ${r.next}% · 게이지 ${Math.round(tgOf(k))}%`, `${em} ${STAT_NAME[k]} breakthrough failed (${r.ch}%) · next ${r.next}% · gauge ${Math.round(tgOf(k))}%`);
     if (!r.ok) addLog(txt + used);
     S.lastAct = { key: k, txt: txt + used };
-    floatFx(btn, r.ok ? T("🌌 초월 성공!", "🌌 Breakthrough!") : T(`아깝다! 다음 ${r.next}%`, `So close! Next ${r.next}%`));
+    floatFx(btn, r.ok ? T("🌌 초월 성공!", "🌌 Breakthrough!") : bold ? T(`🔥 실패! ${STAT_NAME[k]} −1`, `🔥 Failed! ${STAT_NAME[k]} −1`) : T(`아깝다! 다음 ${r.next}%`, `So close! Next ${r.next}%`));
     if (r.ok && typeof Sfx !== "undefined" && Sfx.goal) Sfx.goal();
   } else if (atCapOf(k)) {
     // 🎯 감각 훈련: 초월 III까지 끝난 능력치는 다음 경기에서만 +5
@@ -1260,6 +1264,7 @@ const POS_F = { fw: .8, wg: .9, mf: 1.3, df: 2.6, gk: 2.6 };
 /* 발롱도르 점수 (v1.9.8): 기록과 우승 비중을 키우고 능력치 비중은 줄였어요 */
 /* 실제 발롱도르 기준(① 개인 활약 ② 팀 우승 ③ 페어플레이)에 맞춰: 큰 대회 우승·큰 경기 골 비중↑, 퇴장 감점, 능력치 비중↓ (v2.0) */
 const BALLON_W = { ovr: .3, tier: 5, rate: 8, ga: .75, big: .5, champ: 8, boot: 6, ast: 4, mvp: 5, red: 3 };
+const BALLON_SPLIT = [1, .6, .4, .3, .25];   // 같은 팀 n번째 후보가 받는 팀 성적 보너스 비율
 /* 발롱도르 계산식 보기: 항목별 점수 (1위와 나) */
 function ballonParts(o) {
   const B = BALLON_W, pf = POS_F[o.pos] || 1;
@@ -1272,6 +1277,7 @@ function ballonParts(o) {
     [T("득점왕 · 도움왕 · MVP", "Golden Boot · Assists · MVP"), [o.boot && "👟", o.ast && "🎯", o.mvp && "👑"].filter(Boolean).join(" ") || "-", (o.boot ? B.boot : 0) + (o.ast ? B.ast : 0) + (o.mvp ? B.mvp : 0)],
     [T("대륙컵 · 월드컵", "Cups · World Cup"), (o.cup || 0) + (o.wc || 0) ? "+" + ((o.cup || 0) + (o.wc || 0)).toFixed(1) : "-", (o.cup || 0) + (o.wc || 0)],
     [T("페어플레이 (퇴장)", "Fair play (red cards)"), o.rc ? `${o.rc} × −${B.red}` : "-", -(o.rc || 0) * B.red],
+    [T("같은 팀 표 나눔", "Same-team vote split"), o.split ? T("팀 내 순위만큼 팀 보너스 감소", "team bonus shared") : "-", -(o.split || 0)],
   ];
 }
 function openBallonInfo() {
@@ -1326,6 +1332,8 @@ async function seasonEnd() {
     const l = W.c[p.c].l;
     return { id: p.id, name: p.n, nat: p.nat, club: p.c, pos: p.r, ovr: pOvr(p), tier: LEAGUES[l].tier, avg: pAvg(p), g: p.s.g + p.cs.g + ((WCW && WCW.goals && WCW.goals[p.id]) || 0), bg: p.cs.g + ((WCW && WCW.goals && WCW.goals[p.id]) || 0), rc: p.s.rc || 0, a: p.s.a + p.cs.a, champ: AW[l].champ === p.c, boot: !!AW[l].boot && AW[l].boot.id === p.id, ast: !!AW[l].ast && AW[l].ast.id === p.id, mvp: !!AW[l].mvp && AW[l].mvp.id === p.id, cup: cupBonus(p.c), wc: WCW ? (WCW.nat === p.nat ? 15 : WCW.runner === p.nat ? 6 : 0) : 0 };
   }).map((c) => ({ ...c, sc: ballonScore(c) })).sort((a, b) => b.sc - a.sc);
+  // 같은 팀 표 나눔: 팀 성적 보너스(리그 우승 + 대륙컵)는 팀 1등 후보만 100%, 2등 60% · 3등 40% · 4등 30% · 그 아래 25% (실제 투표처럼 같은 팀 표가 갈려요)
+  { const seen = {}; for (const c of cands) { const n = seen[c.club] = (seen[c.club] || 0) + 1; const tp = (c.champ ? BALLON_W.champ : 0) + (c.cup || 0); c.split = tp * (1 - (BALLON_SPLIT[n - 1] ?? BALLON_SPLIT[BALLON_SPLIT.length - 1])); c.sc -= c.split; } cands.sort((a, b) => b.sc - a.sc); }
   const myB = cands.findIndex((c) => c.id === "me") + 1, rvB = cands.findIndex((c) => c.id === "rv") + 1;
   window.__ballon = { top: cands[0], me: myB ? cands[myB - 1] : null, myRank: myB };
   if (myB === 1) { awards.push({ k: "ballon", name: "🏅 Ballon d'Or", w: 0 }); S.career.ballon++; if (typeof F === "function" && F("train") > 0) S.flags.feverBallon = 1; }
@@ -1746,7 +1754,8 @@ function openMast(k) {
     html: `<ul class="tip-list"><li>${T("지금 재능", "Talent")} <b>${talentStr(k)}</b>, ${T("능력치", "stat")} <b>${Math.round(S.stats[k])}</b> / ${T("최대", "max")} <b>${statCap(k)}</b></li>
       ${tr < 3 ? `<li>${T(`🌌 초월 게이지 <b>${Math.round(tgOf(k))}%</b> · 다음 도전 성공 확률 <b>${transChance(k)}%</b>`, `🌌 Gauge <b>${Math.round(tgOf(k))}%</b> · next try <b>${transChance(k)}%</b>`)}</li>
       <li>${T(`최대치에 닿으면 훈련이 <b>초월 도전</b>이 돼요. 확률 = 기본 ${TR_BASE[tr]}% + 재능 ★ ${star}% + 게이지 × 0.1. 실패할 때마다 게이지가 차고, 꽉 차면 다음 도전은 <b>확정 성공</b>이에요(최대 ${TR_PITY[tr] + 1}번).`, `At max, training becomes a <b>breakthrough try</b>. Chance = base ${TR_BASE[tr]}% + talent ★ ${star}% + gauge × 0.1. Each fail fills the gauge; when full the next try <b>always succeeds</b> (at most ${TR_PITY[tr] + 1} tries).`)}</li>
-      <li>${T("성공하면 초월 단계 +1, 최대치 +2, 능력치 +1~2. 피로는 보통 훈련의 절반이에요. MOM·해외 연수·재능 개발 프로그램도 게이지를 채워요.", "Success: +1 tier, max +2, stat +1~2. Half the usual fatigue. MOM, training camps and the talent program also fill the gauge.")}</li>`
+      <li>${T("성공하면 초월 단계 +1, 최대치 +2, 능력치 +1~2. 피로는 보통 훈련의 절반이에요. MOM·해외 연수·재능 개발 프로그램도 게이지를 채워요.", "Success: +1 tier, max +2, stat +1~2. Half the usual fatigue. MOM, training camps and the talent program also fill the gauge.")}</li>
+      <li>${T(`🔥 <b>모험 도전</b>을 고르면 성공 확률이 2배(지금 ${boldCh(transChance(k))}%)지만, 실패하면 능력치가 1 떨어져서 훈련으로 다시 최대치를 채워야 해요. 게이지는 똑같이 차요. 도전 방식은 훈련 버튼 위에서 바꿔요.`, `🔥 A <b>bold try</b> doubles the odds (now ${boldCh(transChance(k))}%), but a fail drops the stat by 1, so you must train it back to max first. The gauge still fills. Switch modes above the training buttons.`)}</li>`
       : `<li>${T("🎯 초월 III 완성! 이제 이 능력치 훈련은 <b>감각 훈련</b>이에요. 다음 경기에서만 이 능력치가 +5로 계산돼요(피로 절반).", "🎯 Transcendence III complete! Training this stat is now <b>sharpness</b>: +5 to it for your next match only (half fatigue).")}</li>`}
       <li>${T("초월은 Ⅰ~Ⅲ까지, 단계마다 최대치가 2씩 올라 105까지 가고 나이 들어 떨어지는 폭도 줄어요. 라이벌과 세계의 모든 선수도 같은 확률 규칙이에요.", "Tiers I-III raise the max by 2 each (up to 105) and slow aging decline. Your rival and every player use the same odds.")}</li></ul>`,
     buttons: [{ label: T("닫기", "Close"), value: 1, cls: "btn-primary" }] });
