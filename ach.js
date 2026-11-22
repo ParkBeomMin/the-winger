@@ -134,10 +134,11 @@ function achCheck(ctx = {}) {
     if (typeof track === "function") track("achievement", { id });
   }
   if (out.length) { achWr(ACH_KEY, got); if (Sfx.levelup) Sfx.levelup(); }
+  if (typeof titleCheck === "function") out.push(...titleCheck());
   return out;
 }
 function achToast(ctx) { const o = achCheck(ctx); o.forEach((m, i) => setTimeout(() => toast(m, 3200), i * 1800)); o.forEach((m) => addLog(m)); return o; }
-function achAfterMatch(r) { return [...goalsAfterMatch(), ...achCheck({ r })]; }
+function achAfterMatch(r) { if (r && r.goals >= 3 && S.career) S.career.hat = (S.career.hat || 0) + 1; return [...goalsAfterMatch(), ...achCheck({ r })]; }
 function openAch() {
   const got = achAll(), n = ACH.filter((a) => got[a[0]]).length;
   const rows = ACH.map(([id, e, nm, ds, tier]) => `<div class="ach ${got[id] ? "on" : ""}"><i>${got[id] ? e : "🔒"}</i><div><b>${T(nm[0], nm[1])}</b><small>${T(ds[0], ds[1])}</small></div><em>${got[id] ? got[id].slice(5).replace("-", "/") : "★".repeat(tier)}</em></div>`).join("");
@@ -165,4 +166,65 @@ async function dailyCheck() {
     html: `<div class="daily">${days}</div><p>💰 +${fmtMoney(money)} · 🩹 ${T("컨디션", "Condition")} +${cond}${streak === 7 ? T(" · 🎁 주력 능력치 숙련 +3", " · 🎁 Main stat mastery +3") : ""}</p><p class="small">${T("매일 들어오면 7일까지 보상이 커져요. 하루 빠지면 1일째부터 다시 시작해요.", "Rewards grow for 7 days in a row. Miss a day and it restarts.")}</p>`,
     buttons: [{ label: T("받기", "Claim"), value: 1, cls: "btn-primary" }] });
   achToast();
+}
+
+/* ---------- 🎖️ 칭호 ----------
+ * 커리어 기록으로 열리고(기기 기록), 선수마다 하나를 골라 달아요. 메인 화면 이름 옆 · 명예의 전당에 보여요 */
+const TITLE_KEY = ACH_PFX + "titles";
+const ssn = () => (S.career && S.career.seasons) || [];
+const curS = () => (S.phase === "pro" && S.pro && S.pro.s) || null;
+const meS = () => (S.phase === "pro" && typeof W !== "undefined" && W && W.p && W.p.me && W.p.me.s) || {};
+const anySeason = (f) => ssn().some(f);
+const TITLES = [
+  ["sniper", "⚽", ["골잡이", "Goal Hunter"], ["리그 한 시즌 20골", "20 league goals in a season"], () => (curS() && curS().g >= 20) || anySeason((s) => s.g >= 20)],
+  ["hatmac", "🎩", ["해트트릭 머신", "Hat-trick Machine"], ["해트트릭 5번", "5 hat-tricks"], () => (S.career.hat || 0) >= 5],
+  ["machine", "💥", ["득점 기계", "Goal Machine"], ["통산 200골", "200 career goals"], () => cG() >= 200],
+  ["wizard", "🪄", ["마법사", "The Wizard"], ["리그 한 시즌 15도움", "15 league assists in a season"], () => (curS() && curS().a >= 15) || anySeason((s) => s.a >= 15)],
+  ["maker", "🎯", ["플레이메이커", "Playmaker"], ["통산 100도움", "100 career assists"], () => cA() >= 100],
+  ["wall", "🧱", ["통곡의 벽", "The Great Wall"], ["한 시즌 무실점 12경기", "12 clean sheets in a season"], () => (meS().cs || 0) >= 12],
+  ["tackle", "✂️", ["태클 장인", "Tackle Master"], ["한 시즌 태클 성공 60번", "60 tackles won in a season"], () => (meS().tc || 0) >= 60 || anySeason((s) => (s.tc || 0) >= 60)],
+  ["dribble", "🏃", ["질주 본능", "Born to Run"], ["한 시즌 드리블 성공 60번", "60 dribbles in a season"], () => (meS().dc || 0) >= 60],
+  ["biggame", "🌟", ["빅게임 플레이어", "Big Game Player"], ["대륙컵 통산 10골", "10 continental cup goals"], () => ssn().reduce((x, s) => x + ((s.cup && s.cup.g) || 0), 0) + ((S.pro && S.pro.cup && S.pro.cup.g) || 0) >= 10],
+  ["ucl", "🏆", ["챔스의 사나이", "Mr. Champions"], ["챔피언스 컵 2번 우승", "Win the Champions Cup twice"], () => (S.career.trophies || []).filter((t) => t.endsWith(" " + CUPS.eu.name) && !t.includes(CUPS.as.name)).length >= 2],
+  ["treble", "🥇", ["더블 크라운", "Double Crown"], ["한 시즌 리그와 대륙컵 동시 우승", "League and continental cup in one season"], () => { const t = S.career.trophies || []; const by = {}; for (const x of t) { const k = x.split(" ")[0]; (by[k] = by[k] || []).push(x); } return Object.values(by).some((a) => a.some((x) => /컵|Cup/.test(x)) && a.some((x) => !/컵|Cup/.test(x))); }],
+  ["wchero", "🌍", ["월드컵 영웅", "World Cup Hero"], ["월드컵 우승", "Win the World Cup"], () => (S.career.wc || []).some((x) => /🏆/.test(x))],
+  ["taeguk", "🇰🇷", ["태극전사", "Taegeuk Warrior"], ["A매치 50경기", "50 international caps"], () => (S.career.caps || 0) >= 50],
+  ["oneclub", "💙", ["원클럽맨", "One-Club Man"], ["한 팀에서 10시즌", "10 seasons at one club"], () => { const s = ssn(); if (s.length < 10) return false; const c = {}; s.forEach((x) => (c[x.club] = (c[x.club] || 0) + 1)); return Math.max(...Object.values(c)) >= 10; }],
+  ["journey", "✈️", ["저니맨", "Journeyman"], ["6개 팀 이상에서 뛰기", "Play for 6+ clubs"], () => new Set(S.career.clubs || []).size >= 6],
+  ["bottom", "🪜", ["밑바닥부터", "From the Bottom"], ["2부에서 시작해 빅리그 우승", "Start in a second tier, win a big-league title"], () => { const s = ssn(); return s.length && LEAGUES[s[0].league] && LEAGUES[s[0].league].div === 2 && s.some((x) => x.rank === 1 && LEAGUES[x.league] && LEAGUES[x.league].tier >= 3); }],
+  ["rvkill", "⚔️", ["라이벌 킬러", "Rival Killer"], ["라이벌전 20승", "Beat your rival 20 times"], () => S.h2h && S.h2h.w >= 20],
+  ["rival", "🤝", ["영원한 맞수", "Eternal Rivals"], ["라이벌과 함께 발롱도르 3위 안 3번", "You and your rival both top 3 in the Ballon d'Or, 3 times"], () => ssn().filter((s) => s.ballon && s.ballon <= 3 && s.rv && s.rv.b && s.rv.b <= 3).length >= 3],
+  ["king", "👑", ["왕 중의 왕", "King of Kings"], ["발롱도르 3번", "3 Ballon d'Or wins"], () => (S.career.ballon || 0) >= 3],
+  ["late", "🐢", ["대기만성", "Late Bloomer"], ["27세 이후 첫 발롱도르", "First Ballon d'Or at 27+"], () => { const f = ssn().find((s) => s.ballon === 1); return !!f && f.age >= 27; }],
+  ["prodigy", "⚡", ["신성", "Wonderkid"], ["21세 이하 발롱도르", "Ballon d'Or at 21 or younger"], () => ssn().some((s) => s.ballon === 1 && s.age <= 21)],
+  ["iron", "🎖️", ["철인", "Iron Man"], ["통산 400경기", "400 career games"], () => cApps() >= 400],
+  ["perfect", "🎯", ["완벽주의자", "Perfectionist"], ["감독 목표 전부 달성 5시즌", "Clear all coach goals in 5 seasons"], () => (S.career.goalsAll || 0) >= 5],
+  ["beyond", "🌌", ["초월자", "Transcendent"], ["초월 Ⅲ 능력치 2개", "Two stats at Transcend III"], () => Object.values(S.trans || {}).filter((t) => t >= 3).length >= 2],
+  ["bad", "😈", ["악동", "Bad Boy"], ["한 시즌 퇴장 3번", "3 red cards in a season"], () => (meS().rc || 0) >= 3],
+  ["fever", "🔥", ["피버 레전드", "Fever Legend"], ["피버 중에 발롱도르", "Win the Ballon d'Or during a Fever"], () => S.flags && S.flags.feverBallon],
+];
+function titleName(id) { const t = TITLES.find((x) => x[0] === id); return t ? `${t[1]} ${T(t[2][0], t[2][1])}` : ""; }
+function titleTag() { return S && S.title ? `<span class="ttl">${titleName(S.title)}</span>` : ""; }
+function titleCheck() {
+  if (!S || !S.career) return [];
+  const got = achRd(TITLE_KEY, {}), out = [];
+  for (const [id, e, nm, , fn] of TITLES) {
+    if (got[id]) continue;
+    let ok = false; try { ok = !!fn(); } catch { ok = false; }
+    if (!ok) continue;
+    got[id] = kstDay();
+    if (!S.title) S.title = id;
+    out.push(`🎖️ ${T("칭호 획득", "New title")}: ${e} ${T(nm[0], nm[1])}`);
+    if (typeof track === "function") track("title", { id });
+  }
+  if (out.length) achWr(TITLE_KEY, got);
+  return out;
+}
+function openTitles() {
+  const got = achRd(TITLE_KEY, {}), n = TITLES.filter((t) => got[t[0]]).length;
+  const rows = TITLES.map(([id, e, nm, ds]) => `<button class="ach ttl-row ${got[id] ? "on" : ""} ${S && S.title === id ? "eq" : ""}" data-ttl="${got[id] ? id : ""}"><i>${got[id] ? e : "🔒"}</i><div><b>${T(nm[0], nm[1])}</b><small>${T(ds[0], ds[1])}</small></div><em>${S && S.title === id ? T("장착 중", "Equipped") : got[id] ? T("달기", "Equip") : ""}</em></button>`).join("");
+  modal({ title: `🎖️ ${T("칭호", "Titles")} ${n}/${TITLES.length}`, wide: true,
+    html: `<p class="small">${T("열린 칭호를 눌러 내 선수에게 달아요. 메인 화면과 명예의 전당에 보여요. 칭호는 기기에 남아서 새 선수도 쓸 수 있어요.", "Tap an unlocked title to equip it. It shows on the main screen and in the Hall of Fame. Titles stay on this device for future players.")}</p><div class="ach-list">${rows}</div>`,
+    buttons: [{ label: T("칭호 떼기", "Remove title"), value: "off" }, { label: T("닫기", "Close"), value: 1, cls: "btn-primary" }] }).then((v) => { if (v === "off" && S) { S.title = null; save(); renderMain(); } });
+  setTimeout(() => document.querySelectorAll("#modal [data-ttl]").forEach((b) => b.onclick = () => { if (!b.dataset.ttl || !S) return; S.title = b.dataset.ttl; save(); if (typeof renderMain === "function" && document.getElementById("scr-main").classList.contains("active")) renderMain(); openTitles(); }), 0);
 }

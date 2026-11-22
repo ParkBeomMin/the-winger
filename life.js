@@ -3,8 +3,9 @@
 
 /* ---------- ⭐ 명성 등급 ---------- */
 const FAME_GRADES = [
-  [0, "🌱 무명"], [30, "🌿 유망주"], [100, "⭐ 주목받는 신예"], [250, "🌟 리그 스타"],
-  [500, "🏅 국가대표급"], [900, "💫 월드스타"], [1600, "👑 레전드급"], [2800, "🐐 축구 아이콘"],
+  [0, "🌱 무명"], [30, "🌿 유망주"], [100, "⭐ 주목받는 신예"], [170, "👕 1군 주전"], [250, "🌟 리그 스타"],
+  [370, "📣 팬들의 영웅"], [500, "🏅 국가대표급"], [680, "🎯 리그의 얼굴"], [900, "💫 월드스타"], [1200, "🚀 슈퍼스타"],
+  [1600, "👑 레전드급"], [2100, "🏛️ 살아있는 전설"], [2800, "🐐 축구 아이콘"], [3800, "⚡ 축구의 신"],
 ];
 function fameGrade(f) {
   let i = 0; for (let k = 0; k < FAME_GRADES.length; k++) if (f >= FAME_GRADES[k][0]) i = k;
@@ -212,8 +213,8 @@ function evImg(id) { const k = SIG_IMG[id] || id; return EV_IMG.has(k) ? `assets
 /* 명성 등급이 오르면 알려줘요 */
 function checkFameUp() {
   const g = fameGrade(S.fame).i;
-  if (S.fameI == null) { S.fameI = g; return; }
-  if (g > S.fameI) { S.fameI = g; const n = FAME_GRADES[g][1]; addLog(`⭐ 명성 등급 상승: ${n}`); toast(`⭐ 명성 등급 UP! ${n}`, 3000); if (g >= 3) news(`⭐ ${S.name}, 이제 '${n.replace(/^\S+\s/, "")}'`); }
+  if (S.fameI == null || S.fameV !== 2) { S.fameI = g; S.fameV = 2; return; }   // v2: 등급이 14단계로 늘어 옛 번호는 다시 맞춰요
+  if (g > S.fameI) { S.fameI = g; const n = FAME_GRADES[g][1]; addLog(`⭐ 명성 등급 상승: ${n}`); toast(`⭐ 명성 등급 UP! ${n}`, 3000); if (g >= 4) news(`⭐ ${S.name}, 이제 '${n.replace(/^\S+\s/, "")}'`); }
   else if (g < S.fameI) S.fameI = g;
 }
 

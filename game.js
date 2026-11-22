@@ -320,7 +320,7 @@ function renderMain() {
   const hud = $("hud");
   hud.innerHTML = `
     <div class="hud-av" id="hud-av"></div>
-    <div class="hud-id"><b>${esc(S.name)} <small>${POS[S.pos].short} · ${S.age}세</small></b>
+    <div class="hud-id"><b>${esc(S.name)} ${typeof titleTag === "function" ? titleTag() : ""}<small>${POS[S.pos].short} · ${S.age}세</small></b>
       <span>${pro ? `${crestHTML(S.pro.club, 15)} ${esc(S.pro.club)}` : `${ORIGINS[S.origin].flag} ${ORIGINS[S.origin].team}`} · 종합 <em>${OVR()}</em></span></div>
     <div class="hud-r"><b>${pro ? `${S.pro.season}시즌` : `${S.year}년차 ${S.month}월`}</b><span>💰 ${fmtMoney(S.money)}</span></div>`;
   $("hud-av").appendChild(avatarCanvas(S.look, myKit(), 48));
@@ -389,8 +389,9 @@ function renderMain() {
 function hudBtn(h) {
   if (h === "league") openLeague();
   else if (h === "news") openNews();
-  else if (h === "menu") modal({ title: "⚙️ 메뉴", html: `<p class="small">난이도: ${DF().name} · ${VERSION}</p>`, grid: true, buttons: [{ label: "❓ 도움말", value: "help" }, { label: Sfx.muted ? "🔇 소리 켜기" : "🔊 소리 끄기", value: "snd" }, { label: typeof Bgm !== "undefined" && Bgm.on ? "🎵 배경음악 끄기" : "🎵 배경음악 켜기", value: "bgm" }, { label: "📢 공지사항", value: "notice" }, { label: "🏅 업적", value: "ach" }, { label: T("🔗 친구에게 공유", "🔗 Share with friends"), value: "share" }, { label: T("🔒 개인정보처리방침", "🔒 Privacy Policy"), value: "privacy" }, { label: "☁️ 저장 · 기기 이전", value: "cloud" }, { label: "🏠 타이틀로", value: "home" }, { label: "닫기", value: null, cls: "btn-primary" }] }).then((v) => v && hudBtn(v));
+  else if (h === "menu") modal({ title: "⚙️ 메뉴", html: `<p class="small">난이도: ${DF().name} · ${VERSION}</p>`, grid: true, buttons: [{ label: "❓ 도움말", value: "help" }, { label: Sfx.muted ? "🔇 소리 켜기" : "🔊 소리 끄기", value: "snd" }, { label: typeof Bgm !== "undefined" && Bgm.on ? "🎵 배경음악 끄기" : "🎵 배경음악 켜기", value: "bgm" }, { label: "📢 공지사항", value: "notice" }, { label: "🏅 업적", value: "ach" }, { label: T("🎖️ 칭호", "🎖️ Titles"), value: "titles" }, { label: T("🔗 친구에게 공유", "🔗 Share with friends"), value: "share" }, { label: T("🔒 개인정보처리방침", "🔒 Privacy Policy"), value: "privacy" }, { label: "☁️ 저장 · 기기 이전", value: "cloud" }, { label: "🏠 타이틀로", value: "home" }, { label: "닫기", value: null, cls: "btn-primary" }] }).then((v) => v && hudBtn(v));
   else if (h === "ach") openAch();
+  else if (h === "titles") openTitles();
   else if (h === "cloud") openCloud();
   else if (h === "squad") openSquad();
   else if (h === "career") openCareer();
@@ -1300,7 +1301,7 @@ async function seasonEnd() {
   }).map((c) => ({ ...c, sc: ballonScore(c) })).sort((a, b) => b.sc - a.sc);
   const myB = cands.findIndex((c) => c.id === "me") + 1, rvB = cands.findIndex((c) => c.id === "rv") + 1;
   window.__ballon = { top: cands[0], me: myB ? cands[myB - 1] : null, myRank: myB };
-  if (myB === 1) { awards.push({ k: "ballon", name: "🏅 발롱도르", w: 0 }); S.career.ballon++; }
+  if (myB === 1) { awards.push({ k: "ballon", name: "🏅 발롱도르", w: 0 }); S.career.ballon++; if (typeof F === "function" && F("train") > 0) S.flags.feverBallon = 1; }
   else if (myB && myB <= 3) S.career.ballonTop3++;
   if (rvB === 1) { rvAwards.push("🏅 발롱도르"); rv.career.ballon++; }
   if (cands[0] && cands[0].id !== "me") news(`🏅 ${P.season}시즌 발롱도르: ${cands[0].name}(${NATIONS[cands[0].nat].flag} ${cands[0].club})`);
@@ -1593,6 +1594,7 @@ function openNews() {
 
 /* ---------- 은퇴 / 선수 카드 ---------- */
 /* 명예의 전당 점수: 난이도 배율 (쉬움 ×0.8, 보통 ×1, 어려움 ×1.2) */
+function hofTtl(e) { if (e && e.ttl) return e.ttl; let d = e && e.d; if (typeof d === "string") { try { d = JSON.parse(d); } catch { d = null; } } return (d && d.ttl) || ""; }
 function hofAdj(e) {
   let d = e && e.d; if (typeof d === "string") { try { d = JSON.parse(d); } catch { d = null; } }
   const raw = Number(e && e.score) || 0;
@@ -1610,7 +1612,7 @@ async function retire() {
   if (typeof achToast === "function") achToast({ retire: true });
   S.phase = "retired"; S.pending = null;
   const entry = { name: S.name, pos: S.pos, look: S.look, kit: S.pro.kit, grade, score: sc, peak: S.career.peakOvr, apps: S.career.apps, g: S.career.g, a: S.career.a,
-    ballon: S.career.ballon, trophies: S.career.trophies.length, rival: S.rival.name, h2h: { ...S.h2h }, date: new Date().toISOString().slice(0, 10), diff: S.diff || "normal", d: hofDetailData() };
+    ballon: S.career.ballon, trophies: S.career.trophies.length, rival: S.rival.name, h2h: { ...S.h2h }, date: new Date().toISOString().slice(0, 10), diff: S.diff || "normal", ttl: S.title && typeof titleName === "function" ? titleName(S.title) : "", d: hofDetailData() };
   const hof = JSON.parse(localStorage.getItem(HOF_KEY) || "[]"); hof.push(entry); hof.sort((a, b) => b.score - a.score); localStorage.setItem(HOF_KEY, JSON.stringify(hof.slice(0, 30)));
   if (typeof hofSubmit === "function") hofSubmit(entry).then((ok) => ok && toast("🌍 세계 명예의 전당에 등록됐어요!", 3000));
   if (Sfx.fanfare) Sfx.fanfare();
@@ -1618,7 +1620,7 @@ async function retire() {
   show("scr-end");
   const rv = S.rival;
   const cmp = S.career.g + S.career.a - (rv.career.g + rv.career.a);
-  $("end-body").innerHTML = `<div class="end-hero"><p>${esc(S.name)}, ${S.age}세. ${S.career.apps}경기의 여정을 마치고 축구화를 벗었어요.</p></div>
+  $("end-body").innerHTML = `<div class="end-hero">${S.title && typeof titleName === "function" ? `<p class="ttl-end">${titleName(S.title)}</p>` : ""}<p>${esc(S.name)}, ${S.age}세. ${S.career.apps}경기의 여정을 마치고 축구화를 벗었어요.</p></div>
     <canvas id="card" width="540" height="820"></canvas>
     <div class="end-rv"><b>⚔️ 라이벌과의 결말</b><p>${rivalEnding()}</p>
       <div>통산 나 ⚽${S.career.g} 🅰️${S.career.a} 🏅${S.career.ballon} · ${esc(rv.name)} ⚽${rv.career.g} 🅰️${rv.career.a} 🏅${rv.career.ballon}</div>
@@ -1756,7 +1758,7 @@ function openHelp() {
 function hofDetailData() {
   const c = S.career, cut = (x, n) => String(x == null ? "" : x).slice(0, n);
   const d = {
-    adj: 1, ag: S.age, org: S.origin, mom: c.mom | 0, caps: c.caps | 0, ig: ((c.ig || 0) + (c.wcG || 0)) | 0, fame: cut(fameGrade(S.fame).name, 16),
+    adj: 1, ttl: S.title && typeof titleName === "function" ? titleName(S.title) : "", ag: S.age, org: S.origin, mom: c.mom | 0, caps: c.caps | 0, ig: ((c.ig || 0) + (c.wcG || 0)) | 0, fame: cut(fameGrade(S.fame).name, 16),
     y: S.youth ? [S.youth.apps | 0, S.youth.g | 0, S.youth.a | 0, S.youth.trophies | 0] : null,
     s: c.seasons.slice(-25).map((s) => [s.season | 0, cut(s.club, 16), s.league | 0, s.rank | 0, s.apps | 0, s.g | 0, s.a | 0, Math.round((s.avg || 0) * 100), s.ballon | 0]),
     tr: c.trophies.slice(-20).map((t) => cut(t, 28)), aw: c.awards.slice(-20).map((t) => cut(t, 28)), wc: (c.wc || []).slice(0, 6).map((t) => cut(t, 20)),
@@ -1772,7 +1774,7 @@ function openHofDetail(e, rank) {
   const N = (x) => Number.isFinite(+x) ? Math.round(+x) : 0, A = (x) => Array.isArray(x) ? x : [];
   const h2h = e.h2h ? [e.h2h.w, e.h2h.d, e.h2h.l] : d && A(d.rv).length === 3 ? d.rv : null;
   const org = (d && d.org) || e.origin;
-  const head = `<div class="hd-head"><div class="hav" id="hd-av"></div><div><b>${esc(e.name)}</b><small>${POS[e.pos] ? POS[e.pos].name : ""}${ORIGINS[org] ? " · " + ORIGINS[org].flag + " " + ORIGINS[org].name : ""}${d && d.ag ? ` · ${N(d.ag)}세 은퇴` : ""}</small><span>${esc(gradeOf(hofAdj(e)))}</span></div><em>${rank ? rank + "위<br/>" : ""}${hofAdj(e)}점</em></div>`;
+  const head = `<div class="hd-head"><div class="hav" id="hd-av"></div><div><b>${esc(e.name)}</b>${hofTtl(e) ? `<i class="ttl">${esc(hofTtl(e))}</i>` : ""}<small>${POS[e.pos] ? POS[e.pos].name : ""}${ORIGINS[org] ? " · " + ORIGINS[org].flag + " " + ORIGINS[org].name : ""}${d && d.ag ? ` · ${N(d.ag)}세 은퇴` : ""}</small><span>${esc(gradeOf(hofAdj(e)))}</span></div><em>${rank ? rank + "위<br/>" : ""}${hofAdj(e)}점</em></div>`;
   const chips = [["경기", N(e.apps)], ["⚽ 골", N(e.g)], ["🅰️ 도움", N(e.a)], ["최고 능력치", N(e.peak)], ["🏆 우승", N(e.trophies)], ["🏅 발롱도르", N(e.ballon)]];
   if (d) chips.push(["⭐ MOM", N(d.mom)], [`A매치 · ${N(d.ig)}골`, N(d.caps)]);
   let html = head + `<div class="hd-chips">${chips.map(([k, v]) => `<div><b>${v}</b><small>${k}</small></div>`).join("")}</div>`;
@@ -1792,7 +1794,7 @@ function openHof(tab = "world") {
   document.querySelectorAll("[data-ht]").forEach((b) => b.onclick = () => openHof(b.dataset.ht));
   if (tab === "world" && typeof openHofWorld === "function") { show("scr-hof"); return openHofWorld(); }
   const hof = JSON.parse(localStorage.getItem(HOF_KEY) || "[]").map((e) => ({ ...e, sc: hofAdj(e) })).sort((a, b) => b.sc - a.sc);
-  $("hof-list").innerHTML = hof.length ? hof.map((e, i) => `<div class="hof-row"><span>${i + 1}</span><div class="hav" data-i="${i}"></div><div><b>${esc(e.name)} <small>${POS[e.pos].short} · 최고 ${Math.round(e.peak)}${DIFF[e.diff] && e.diff !== "normal" ? ` · ${DIFF[e.diff].name}&nbsp;×${DIFF[e.diff].mult}` : ""}</small></b><span>${gradeOf(e.sc)}</span><small>⚽${e.g} 🅰️${e.a} 🏆${e.trophies} 🏅${e.ballon} · vs ${esc(e.rival)} ${e.h2h.w}-${e.h2h.d}-${e.h2h.l}</small></div><em>${e.sc}</em></div>`).join("") : `<p class="hint">아직 은퇴한 선수가 없어요.</p>`;
+  $("hof-list").innerHTML = hof.length ? hof.map((e, i) => `<div class="hof-row"><span>${i + 1}</span><div class="hav" data-i="${i}"></div><div><b>${esc(e.name)} ${hofTtl(e) ? `<i class="ttl">${esc(hofTtl(e))}</i> ` : ""}<small>${POS[e.pos].short} · 최고 ${Math.round(e.peak)}${DIFF[e.diff] && e.diff !== "normal" ? ` · ${DIFF[e.diff].name}&nbsp;×${DIFF[e.diff].mult}` : ""}</small></b><span>${gradeOf(e.sc)}</span><small>⚽${e.g} 🅰️${e.a} 🏆${e.trophies} 🏅${e.ballon} · vs ${esc(e.rival)} ${e.h2h.w}-${e.h2h.d}-${e.h2h.l}</small></div><em>${e.sc}</em></div>`).join("") : `<p class="hint">아직 은퇴한 선수가 없어요.</p>`;
   document.querySelectorAll("#hof-list .hav").forEach((d) => { const e = hof[+d.dataset.i]; d.appendChild(avatarCanvas(e.look, e.kit, 44)); const row = d.closest(".hof-row"); if (row) row.onclick = () => openHofDetail(e, +d.dataset.i + 1); });
   show("scr-hof");
 }
