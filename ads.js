@@ -88,12 +88,26 @@ function houseLayerWatch(bar, ins) {
   bar.appendChild(L); bar.__layer = L;
   setInterval(() => {
     if (ins.getAttribute("data-ad-status") !== "unfill-optimized" || getComputedStyle(bar).display === "none") { L.classList.remove("on"); return; }
-    // 칩 글자가 실제로 띠 안에 보이는지: 화면에 그려지고(투명 아님) 띠 영역과 겹치는 글자가 하나라도 있으면 보이는 것
-    const r = bar.getBoundingClientRect();
-    const op = (el) => { let o = 1; for (let x = el; x && x !== bar; x = x.parentElement) { const cs = getComputedStyle(x); if (cs.display === "none" || cs.visibility === "hidden") return 0; o *= +cs.opacity; } return o; };
-    const seen = [...ins.querySelectorAll("span,a,div")].some((el) => { if (el.children.length || !(el.innerText || "").trim()) return false; const q = el.getBoundingClientRect(); return q.width > 2 && q.height > 2 && q.bottom > r.top + 4 && q.top < r.bottom - 4 && q.right > r.left && q.left < r.right && op(el) > .15; });
-    L.classList.toggle("on", !seen);
-  }, 900);
+    L.classList.toggle("on", !adChipsSeen(bar, ins, L));
+  }, 700);
+}
+/* 칩 글자가 실제로 띠 안에 보이는지: 숨김·투명·잘림·밀려남·다른 것에 가려짐을 모두 걸러요 */
+function adChipsSeen(bar, ins, L) {
+  const r = bar.getBoundingClientRect();
+  if (!r.height || r.top >= innerHeight) return false;
+  const op = (el) => { let o = 1; for (let x = el; x && x !== bar; x = x.parentElement) { const cs = getComputedStyle(x); if (cs.display === "none" || cs.visibility === "hidden") return 0; o *= +cs.opacity; } return o; };
+  const pe = L ? L.style.pointerEvents : ""; if (L) L.style.pointerEvents = "none";
+  let seen = false;
+  for (const el of ins.querySelectorAll("span,a,div,button")) {
+    if (el.children.length || !(el.innerText || "").trim()) continue;
+    const q = el.getBoundingClientRect();
+    if (q.width < 3 || q.height < 3 || q.bottom < r.top + 4 || q.top > r.bottom - 4 || q.right < r.left || q.left > r.right || op(el) < .15) continue;
+    const cx = Math.min(Math.max(q.left + q.width / 2, r.left + 1), r.right - 1), cy = Math.min(Math.max(q.top + q.height / 2, r.top + 1), r.bottom - 1);
+    const hit = document.elementFromPoint(cx, cy);
+    if (hit && (hit === el || el.contains(hit) || hit.contains(el))) { seen = true; break; }
+  }
+  if (L) L.style.pointerEvents = pe;
+  return seen;
 }
 function houseAdWatch(bar, ins) {
   const check = () => { const st = ins.getAttribute("data-ad-status"); if (st === "unfilled") houseAd(bar, ins); if (st === "unfill-optimized") houseLayerWatch(bar, ins); return !!st; };
@@ -119,3 +133,35 @@ function adAnchorWatch() {
   }, 1500);
 }
 adAnchorWatch();
+function adBarGuard() {
+  if (!ADS.on) return;
+  setInterval(() => {
+    const bar = document.getElementById("adbar");
+    if (!bar || !document.body.classList.contains("ad-on")) return;
+    if (bar.parentNode !== document.body) document.body.appendChild(bar);
+    for (const p of ["visibility", "opacity", "transform", "top", "height"]) if (bar.style[p]) bar.style[p] = "";
+    if (bar.style.display !== "flex") bar.style.display = "flex";
+  }, 1000);
+}
+adBarGuard();
+/* 🔎 진단 모드: 주소에 ?adbg=1 을 붙이면 화면 위쪽에 하단 띠 상태가 실시간으로 떠요 (폰에서 사라지는 순간 캡처용) */
+if (/[?&]adbg=1/.test(location.search)) setTimeout(() => {
+  const box = document.createElement("pre");
+  box.style.cssText = "position:fixed;left:4px;top:40px;z-index:2147483647;background:rgba(0,0,0,.82);color:#7f7;font:10px/1.35 monospace;padding:6px;margin:0;border-radius:6px;pointer-events:none;max-width:96vw;white-space:pre-wrap";
+  document.body.appendChild(box);
+  const hist = [];
+  let prev = "";
+  setInterval(() => {
+    const bar = document.getElementById("adbar"), ins = bar && bar.querySelector("ins.adsbygoogle"), L = bar && bar.querySelector(".house-layer");
+    const vv = window.visualViewport;
+    if (!bar) { box.textContent = "NO #adbar"; return; }
+    const r = bar.getBoundingClientRect(), cs = getComputedStyle(bar);
+    const hitEl = document.elementFromPoint(innerWidth / 2, Math.min(r.top + r.height / 2, innerHeight - 2));
+    const hit = hitEl ? (bar.contains(hitEl) ? "bar:" : "OTHER:") + hitEl.tagName + "." + String(hitEl.className).slice(0, 18) : "none";
+    const ir = ins && ins.getBoundingClientRect();
+    const st = `bar ${Math.round(r.top)}/${Math.round(r.height)} ${cs.display} ${cs.visibility} op${cs.opacity}\nins ${ins ? ins.getAttribute("data-ad-status") + " " + Math.round(ir.top) + "/" + Math.round(ir.height) + " " + getComputedStyle(ins).display : "none"} chips:${ins ? adChipsSeen(bar, ins, L) : "-"} layer:${L ? L.classList.contains("on") : "-"}\nhit ${hit}`;
+    const key = st.replace(/\d+\/\d+/g, "");
+    if (key !== prev) { hist.unshift(new Date().toTimeString().slice(0, 8) + " " + st.split("\n").join(" | ")); hist.length = Math.min(hist.length, 4); prev = key; }
+    box.textContent = `v${(document.querySelector('script[src*="ads.js"]') || {}).src?.split("v=")[1] || "?"} sy${Math.round(scrollY)} ih${innerHeight} vv${vv ? Math.round(vv.height) + "+" + Math.round(vv.offsetTop) : "-"}\n${st}\n-- changes --\n${hist.join("\n")}`;
+  }, 400);
+}, 1500);
