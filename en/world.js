@@ -445,7 +445,7 @@ function autoMoment0(ev) {
 /* 경기 마무리: 평점·MOM */
 function finishMatch(m) {
   const all = new Map();
-  const add = (p, side, mins, start) => { if (!all.has(p)) all.set(p, { p, side, mins, start, g: 0, a: 0, sh: 0, sot: 0, xg: 0, kp: 0, blk: 0, sv: 0, fail: 0, okm: 0, pa: 0, pc: 0, da: 0, dc: 0, ta: 0, tc: 0, ic: 0, cl: 0 }); };
+  const add = (p, side, mins, start) => { if (!all.has(p)) all.set(p, { p, side, mins, start, g: 0, a: 0, sh: 0, sot: 0, xg: 0, kp: 0, blk: 0, sv: 0, fail: 0, okm: 0, okmG: 0, pa: 0, pc: 0, da: 0, dc: 0, ta: 0, tc: 0, ic: 0, cl: 0 }); };
   for (const [T, side] of [[m.H, "home"], [m.A, "away"]]) {
     const offAt = (p) => { const o = (T.off || []).find((x) => x.p === p); return o ? o.min : 90; };
     T.xi.forEach((p) => { const s = T.subs.find((x) => x.out === p); add(p, side, Math.min(s ? s.min : 90, offAt(p)), true); });
@@ -467,7 +467,7 @@ function finishMatch(m) {
       if (ev.out === "block" && df) df.blk++;
       if (ev.out === "save" && gk) gk.sv++;
     }
-    if (ev.mom && ev.res) { const mine = all.get(W && W.p && W.p.me) || [...all.values()].find((x) => x.p.id === "me"); if (mine) ev.res.ok ? mine.okm++ : mine.fail++; }
+    if (ev.mom && ev.res) { const mine = all.get(W && W.p && W.p.me) || [...all.values()].find((x) => x.p.id === "me"); if (mine) { if (!ev.res.ok) mine.fail++; else if (ev.mom === "tackle" || (ev.out === "goal" && (ev.sh === mine.p || ev.as === mine.p))) mine.okmG++; else mine.okm++; } }   // 승부처 성공: 평점엔 똑같이 +0.2, MOM 비교에선 골·도움·수비로 안 이어진 성공은 절반만
   }
   const cards = [];
   for (const i of m.inc || []) {
@@ -502,7 +502,7 @@ function finishMatch(m) {
   const ratings = new Map();
   for (const x of all.values()) {
     const p = x.p, gf = x.side === "home" ? hg : ag, ga = x.side === "home" ? ag : hg;
-    let r = 6.15 + x.g * 1.0 + x.a * .65 + x.sh * .05 + x.kp * .12 + x.blk * .2 + x.sv * .3 + x.okm * .2 - x.fail * .2
+    let r = 6.15 + x.g * 1.0 + x.a * .65 + x.sh * .05 + x.kp * .12 + x.blk * .2 + x.sv * .3 + (x.okmG + x.okm) * .2 - x.fail * .2
       + x.dc * .07 + (x.tc - x.blk) * .1 + x.ic * .07 + x.cl * .03 + (x.pa >= 15 ? (x.pc / x.pa - .79 - PASS_ACC[p.r]) * 1.2 : 0);
     r += gf > ga ? .3 : gf < ga ? -.3 : 0;
     if (p.r === "df" || p.r === "gk") r += ga === 0 ? .5 : -Math.max(0, ga - 1) * .18;
@@ -511,7 +511,9 @@ function finishMatch(m) {
     if (p.id === "me" && typeof F === "function") r += F("rate");
     ratings.set(p, Math.round(clamp(r, 3.5, 10) * 10) / 10);
   }
-  let mom = null; for (const [p, r] of ratings) if (!mom || r > ratings.get(mom)) mom = p;
+  // MOM: 평점에 결과(골 +0.3, 도움 +0.2)를 더하고, 골·도움으로 안 이어진 승부처 성공은 절반(-0.1)만 쳐서 뽑아요
+  const momSc = (p) => { const x = all.get(p); return ratings.get(p) + (x ? x.g * .3 + x.a * .2 - x.okm * .1 : 0); };
+  let mom = null; for (const p of ratings.keys()) if (!mom || momSc(p) > momSc(mom)) mom = p;
   return { hg, ag, goals, ratings, mom, all, cards, team };
 }
 
