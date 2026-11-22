@@ -51,7 +51,8 @@ const HIDE_AD_ON = [];   // 모든 화면에 하단 배너 (미니게임 창이 
 function adBanner(screenId) {
   if (!ADS.on) return;
   let bar = document.getElementById("adbar");
-  if (!bar) { bar = document.createElement("div"); bar.id = "adbar"; document.body.appendChild(bar); }
+  if (!bar) { bar = ADS.bar || document.createElement("div"); bar.id = "adbar"; document.body.appendChild(bar); }
+  ADS.bar = bar;
   const show = !HIDE_AD_ON.includes(screenId);
   bar.style.display = show ? "flex" : "none";
   document.body.classList.toggle("ad-on", show);
@@ -104,7 +105,7 @@ function adChipsSeen(bar, ins, L) {
     if (q.width < 3 || q.height < 3 || q.bottom < r.top + 4 || q.top > r.bottom - 4 || q.right < r.left || q.left > r.right || op(el) < .15) continue;
     const cx = Math.min(Math.max(q.left + q.width / 2, r.left + 1), r.right - 1), cy = Math.min(Math.max(q.top + q.height / 2, r.top + 1), r.bottom - 1);
     const hit = document.elementFromPoint(cx, cy);
-    if (hit && (hit === el || el.contains(hit) || hit.contains(el))) { seen = true; break; }
+    if (hit && hit !== ins && ins.contains(hit) && (hit === el || el.contains(hit) || hit.contains(el))) { seen = true; break; }
   }
   if (L) L.style.pointerEvents = pe;
   return seen;
@@ -136,7 +137,7 @@ adAnchorWatch();
 function adBarGuard() {
   if (!ADS.on) return;
   setInterval(() => {
-    const bar = document.getElementById("adbar");
+    const bar = document.getElementById("adbar") || ADS.bar;
     if (!bar || !document.body.classList.contains("ad-on")) return;
     if (bar.parentNode !== document.body) document.body.appendChild(bar);
     for (const p of ["visibility", "opacity", "transform", "top", "height"]) if (bar.style[p]) bar.style[p] = "";
