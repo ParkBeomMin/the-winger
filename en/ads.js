@@ -103,6 +103,9 @@ function adChipsSeen(bar, ins, L) {
     if (el.children.length || !(el.innerText || "").trim()) continue;
     const q = el.getBoundingClientRect();
     if (q.width < 3 || q.height < 3 || q.bottom < r.top + 4 || q.top > r.bottom - 4 || q.right < r.left || q.left > r.right || op(el) < .15) continue;
+    let vt = q.top, vb = q.bottom;   // 부모가 잘라내면(overflow) 보이는 높이만 남겨요
+    for (let p = el.parentElement; p && p !== bar; p = p.parentElement) { const cs = getComputedStyle(p); if (cs.overflow !== "visible" || cs.overflowY !== "visible") { const pr = p.getBoundingClientRect(); vt = Math.max(vt, pr.top); vb = Math.min(vb, pr.bottom); } }
+    if (vb - vt < 3) continue;
     const cx = Math.min(Math.max(q.left + q.width / 2, r.left + 1), r.right - 1), cy = Math.min(Math.max(q.top + q.height / 2, r.top + 1), r.bottom - 1);
     const hit = document.elementFromPoint(cx, cy);
     if (hit && hit !== ins && ins.contains(hit) && (hit === el || el.contains(hit) || hit.contains(el))) { seen = true; break; }
