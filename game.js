@@ -925,10 +925,14 @@ async function runTournament() {
 /* ---------- 프로 계약 · 이적 ---------- */
 function offerList(score, opts = {}) {
   const out = [];
+  const TOPSTR = Math.max(...LEAGUES.flatMap((l) => l.clubs.map((c) => clubStr(l.id, c[0]))));   // 세계 최강 팀 전력
+  // 보통은 내 점수 -12 ~ +3 팀이 제안해요. 내가 세계 최강 팀보다 훨씬 잘하면 그 범위에 팀이 없으니 최상위 팀들이 제안해요
+  let LO = score - 12, HI = score + 3;
+  if (LO > TOPSTR - 6) { LO = TOPSTR - 6; HI = Infinity; }
   for (const lg of LEAGUES) for (const c of lg.clubs) {
     const str = clubStr(lg.id, c[0]);
     if (opts.exclude && c[0] === opts.exclude) continue;
-    if (str <= score + 3 && str >= score - 12) out.push({ league: lg.id, club: c[0], str, kit: [c[2], c[3]] });
+    if (str <= HI && str >= LO) out.push({ league: lg.id, club: c[0], str, kit: [c[2], c[3]] });
   }
   out.sort((a, b) => b.str - a.str);
   const n = opts.agent ? 4 : 3;
@@ -941,7 +945,11 @@ function offerList(score, opts = {}) {
   }
   return list;
 }
-function starterProb(club) { return !W || !W.c[club] ? .5 : startChance(club, "me", 30); }
+function starterProb(club) {
+  if (!W || !W.c[club]) return .5;
+  const inj = S.injured, ban = S.ban; S.injured = 0; S.ban = 0;   // 오프시즌·다음 시즌 기준으로 계산
+  try { return startChance(club, "me", 30); } finally { S.injured = inj; S.ban = ban; }
+}
 /* 감독 한 줄 + 포메이션 그림 */
 function coachLine(club) { const co = coachOf(club); return `👔 ${esc(co.n)} ${NATIONS[co.nat] ? NATIONS[co.nat].flag : ""} · <b>${co.f}</b> · ${STYLES[co.s].name}`; }
 function formationHTML(club, xi) {
@@ -1392,10 +1400,13 @@ async function worldCup() {
     ${groups.map((g, i) => `<div class="aw-row"><b>${"AB"[i]}조</b> ${g.map((n) => `${NATIONS[n].flag} ${NATIONS[n].name} <small>(${Math.round(sq[n].str)})</small>`).join(" · ")}</div>`).join("")}
     <p class="small">${meIn ? `🇰🇷 대한민국 대표로 <b>${esc(S.name)}</b> 발탁! 직접 뛰어요.` : kr ? `🇰🇷 대한민국 명단에 들지 못했어요. 결과만 지켜봐요.` : "대한민국은 출전하지 못했어요."}</p>`,
     buttons: [{ label: "킥오프", value: 1, cls: "btn-primary" }] });
-  const tableOf = (g) => Object.fromEntries(g.map((n) => [n, { pts: 0, gd: 0, gf: 0 }]));
-  const T = groups.map(tableOf);
+  const tableOf = (g) => Object.fromEntries(g.map((n) => [n, { pts: 0, gd: 0, gf: 0, ga: 0, w: 0, d: 0, l: 0, p: 0 }]));
+  const grpSort = (t) => Object.entries(t).sort((x, y) => y[1].pts - x[1].pts || y[1].gd - x[1].gd || y[1].gf - x[1].gf);
+  const wcTable = (gi, done) => `<div class="wc-tb"><b>${"AB"[gi]}${T("조", " Group")}</b><table class="tbl"><tr><th>#</th><th></th><th>${T("경기", "P")}</th><th>${T("승", "W")}</th><th>${T("무", "D")}</th><th>${T("패", "L")}</th><th>${T("득실", "GD")}</th><th>${T("승점", "Pts")}</th></tr>${grpSort(TB[gi]).map(([n, x], i) => `<tr class="${n === "kr" ? "me" : ""} ${done && i < 2 ? "z-pro" : ""}"><td>${i + 1}</td><td>${NATIONS[n].flag} ${NATIONS[n].name}</td><td>${x.p}</td><td>${x.w}</td><td>${x.d}</td><td>${x.l}</td><td>${x.gd > 0 ? "+" : ""}${x.gd}</td><td><b>${x.pts}</b></td></tr>`).join("")}</table></div>`;
+  const recG = (gi, m) => { const t = TB[gi], A = t[m.a], B = t[m.b]; A.p++; B.p++; A.gf += m.hg; B.gf += m.ag; A.ga += m.ag; B.ga += m.hg; A.gd += m.hg - m.ag; B.gd += m.ag - m.hg; if (m.hg > m.ag) { A.pts += 3; A.w++; B.l++; } else if (m.hg < m.ag) { B.pts += 3; B.w++; A.l++; } else { A.pts++; B.pts++; A.d++; B.d++; } };
+  const TB = groups.map(tableOf);
   const scorer = {};
-  const play = async (a, b, stage, mustWin) => {
+  const play = async (a, b, stage, mustWin, gi) => {
     const A = natTeam(sq, a), B = natTeam(sq, b);
     const mine = (a === "kr" || b === "kr") && meIn;
     let res, r = null, mm = null;
@@ -1417,7 +1428,9 @@ async function worldCup() {
       S.career.wcG = (S.career.wcG || 0) + r.goals;
       const lines = applyMatch(r, { prestige: 3, big: 2 });
       lines.push(win === "kr" ? "🇰🇷 대한민국 승리!" : win ? "💧 패배" : "🤝 무승부");
+      if (gi != null) { recG(gi, { a, b, hg: res.hg, ag: res.ag }); lines.push(wcTable(gi)); }
       await showResult(r, lines, "계속");
+      if (gi != null) return { a, b, hg: res.hg, ag: res.ag, win, pk, counted: true };
     }
     return { a, b, hg: res.hg, ag: res.ag, win, pk };
   };
@@ -1425,14 +1438,14 @@ async function worldCup() {
   for (let gi = 0; gi < 2; gi++) {
     const g = groups[gi];
     for (const [i, j] of [[0, 1], [2, 3], [0, 2], [1, 3], [0, 3], [1, 2]]) {
-      const m = await play(g[i], g[j], `${"AB"[gi]}조`, false);
-      const t = T[gi];
-      t[m.a].gf += m.hg; t[m.b].gf += m.ag; t[m.a].gd += m.hg - m.ag; t[m.b].gd += m.ag - m.hg;
-      if (m.hg > m.ag) t[m.a].pts += 3; else if (m.hg < m.ag) t[m.b].pts += 3; else { t[m.a].pts++; t[m.b].pts++; }
+      const m = await play(g[i], g[j], `${"AB"[gi]}조`, false, gi);
+      if (!m.counted) recG(gi, m);
       log.push(`${"AB"[gi]}조 ${NATIONS[m.a].flag} ${m.hg}:${m.ag} ${NATIONS[m.b].flag}`);
     }
   }
-  const adv = T.map((t) => Object.entries(t).sort((x, y) => y[1].pts - x[1].pts || y[1].gd - x[1].gd || y[1].gf - x[1].gf).slice(0, 2).map((x) => x[0]));
+  const adv = TB.map((t) => grpSort(t).slice(0, 2).map((x) => x[0]));
+  const krOut = field.includes("kr") ? (adv.flat().includes("kr") ? T("🇰🇷 대한민국 4강 진출!", "🇰🇷 Korea reach the semi-finals!") : T("🇰🇷 대한민국 조별리그 탈락", "🇰🇷 Korea out in the group stage")) : "";
+  await modal({ emoji: "🌍", title: T(`${year}시즌 월드컵 조별리그 결과`, `Season ${year} World Cup group stage`), wide: true, html: `${wcTable(0, true)}${wcTable(1, true)}<p class="small">${T("조 1·2위가 4강에 올라가요 (초록 줄)", "Top 2 of each group go to the semis (green)")}${krOut ? " · " + krOut : ""}</p>`, buttons: [{ label: T("4강으로", "To the semis"), value: 1, cls: "btn-primary" }] });
   const sf1 = await play(adv[0][0], adv[1][1], "4강", true), sf2 = await play(adv[1][0], adv[0][1], "4강", true);
   log.push(`4강 ${NATIONS[sf1.a].flag} ${sf1.hg}:${sf1.ag} ${NATIONS[sf1.b].flag}${sf1.pk}`, `4강 ${NATIONS[sf2.a].flag} ${sf2.hg}:${sf2.ag} ${NATIONS[sf2.b].flag}${sf2.pk}`);
   const fin = await play(sf1.win, sf2.win, "결승", true);
