@@ -1230,7 +1230,8 @@ async function quickSeason(skipAsk) {
 const avg = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
 const POS_F = { fw: .8, wg: .9, mf: 1.3, df: 2.6, gk: 2.6 };
 /* 발롱도르 점수 (v1.9.8): 기록과 우승 비중을 키우고 능력치 비중은 줄였어요 */
-const BALLON_W = { ovr: .5, tier: 5, rate: 8, ga: .75, champ: 8, boot: 6, ast: 4, mvp: 5 };
+/* 실제 발롱도르 기준(① 개인 활약 ② 팀 우승 ③ 페어플레이)에 맞춰: 큰 대회 우승·큰 경기 골 비중↑, 퇴장 감점, 능력치 비중↓ (v2.0) */
+const BALLON_W = { ovr: .3, tier: 5, rate: 8, ga: .75, big: .5, champ: 8, boot: 6, ast: 4, mvp: 5, red: 3 };
 /* 발롱도르 계산식 보기: 항목별 점수 (1위와 나) */
 function ballonParts(o) {
   const B = BALLON_W, pf = POS_F[o.pos] || 1;
@@ -1238,10 +1239,11 @@ function ballonParts(o) {
     [T("종합 능력치", "Overall"), `${Math.round(o.ovr)} × ${B.ovr}`, o.ovr * B.ovr],
     [T("리그 수준", "League level"), `${o.tier} × ${B.tier}`, o.tier * B.tier],
     [T("평균 평점", "Avg rating"), `(${o.avg.toFixed(2)} − 6.5) × ${B.rate}`, (o.avg - 6.5) * B.rate],
-    [T("골·도움", "Goals·assists"), `(${o.g} + ${o.a}×0.8) × ${pf} × ${B.ga}`, (o.g + o.a * .8) * pf * B.ga],
+    [T("골·도움 (큰 경기 골 1.5배)", "Goals·assists (big-game goals x1.5)"), `(${o.g}${o.bg ? ` + ${o.bg}×0.5` : ""} + ${o.a}×0.8) × ${pf} × ${B.ga}`, (o.g + (o.bg || 0) * B.big + o.a * .8) * pf * B.ga],
     [T("리그 우승", "League title"), o.champ ? `+${B.champ}` : "-", o.champ ? B.champ : 0],
     [T("득점왕 · 도움왕 · MVP", "Golden Boot · Assists · MVP"), [o.boot && "👟", o.ast && "🎯", o.mvp && "👑"].filter(Boolean).join(" ") || "-", (o.boot ? B.boot : 0) + (o.ast ? B.ast : 0) + (o.mvp ? B.mvp : 0)],
     [T("대륙컵 · 월드컵", "Cups · World Cup"), (o.cup || 0) + (o.wc || 0) ? "+" + ((o.cup || 0) + (o.wc || 0)).toFixed(1) : "-", (o.cup || 0) + (o.wc || 0)],
+    [T("페어플레이 (퇴장)", "Fair play (red cards)"), o.rc ? `${o.rc} × −${B.red}` : "-", -(o.rc || 0) * B.red],
   ];
 }
 function openBallonInfo() {
@@ -1256,7 +1258,7 @@ function openBallonInfo() {
       <tr class="me"><td><b>${T("합계", "Total")}</b></td>${cols.map((c) => `<td><b>${c.sc.toFixed(1)}</b></td>`).join("")}</tr></table></div>`,
     buttons: [{ label: T("닫기", "Close"), value: 1, cls: "btn-primary" }] });
 }
-function ballonScore(o) { const B = BALLON_W; return o.ovr * B.ovr + o.tier * B.tier + (o.avg - 6.5) * B.rate + (o.g + o.a * .8) * (POS_F[o.pos] || 1) * B.ga + (o.champ ? B.champ : 0) + (o.boot ? B.boot : 0) + (o.ast ? B.ast : 0) + (o.mvp ? B.mvp : 0) + (o.cup || 0) + (o.wc || 0); }
+function ballonScore(o) { const B = BALLON_W; return o.ovr * B.ovr + o.tier * B.tier + (o.avg - 6.5) * B.rate + (o.g + (o.bg || 0) * B.big + o.a * .8) * (POS_F[o.pos] || 1) * B.ga + (o.champ ? B.champ : 0) + (o.boot ? B.boot : 0) + (o.ast ? B.ast : 0) + (o.mvp ? B.mvp : 0) + (o.cup || 0) + (o.wc || 0) - (o.rc || 0) * B.red; }
 function leagueAwards(lgId) {
   const ps = leaguePlayers(lgId).filter((p) => p.s.ap >= 9);
   const best = (f) => ps.slice().sort(f)[0];
@@ -1290,10 +1292,11 @@ async function seasonEnd() {
   }
   for (const [k, c] of Object.entries(S.cups)) if (c.winner === rvp.c) rvAwards.push(`${CUPS[k].emoji} ${CUPS[k].name} winner`);
   // 발롱도르 — 6개 리그 전 선수 (리그 9경기 이상)
-  const cupBonus = (club) => Object.entries(S.cups).reduce((s, [k, c]) => s + (c.winner === club ? CUPS[k].weight * 2.5 : c.winner && (c.log[c.log.length - 1] || "").includes(club) ? CUPS[k].weight : 0), 0);
+  const cupBonus = (club) => Object.entries(S.cups).reduce((s, [k, c]) => s + (c.winner === club ? CUPS[k].weight * 5 : c.winner && (c.log[c.log.length - 1] || "").includes(club) ? CUPS[k].weight * 2 : 0), 0);
+  const WCW = S.wcWinner && S.wcWinner.season === P.season ? S.wcWinner : null;
   const cands = Object.values(W.p).filter((p) => p.c && p.s.ap >= 9).map((p) => {
     const l = W.c[p.c].l;
-    return { id: p.id, name: p.n, nat: p.nat, club: p.c, pos: p.r, ovr: pOvr(p), tier: LEAGUES[l].tier, avg: pAvg(p), g: p.s.g + p.cs.g, a: p.s.a + p.cs.a, champ: AW[l].champ === p.c, boot: !!AW[l].boot && AW[l].boot.id === p.id, ast: !!AW[l].ast && AW[l].ast.id === p.id, mvp: !!AW[l].mvp && AW[l].mvp.id === p.id, cup: cupBonus(p.c), wc: S.wcWinner && S.wcWinner.nat === p.nat && S.wcWinner.season === P.season ? 6 : 0 };
+    return { id: p.id, name: p.n, nat: p.nat, club: p.c, pos: p.r, ovr: pOvr(p), tier: LEAGUES[l].tier, avg: pAvg(p), g: p.s.g + p.cs.g + ((WCW && WCW.goals && WCW.goals[p.id]) || 0), bg: p.cs.g + ((WCW && WCW.goals && WCW.goals[p.id]) || 0), rc: p.s.rc || 0, a: p.s.a + p.cs.a, champ: AW[l].champ === p.c, boot: !!AW[l].boot && AW[l].boot.id === p.id, ast: !!AW[l].ast && AW[l].ast.id === p.id, mvp: !!AW[l].mvp && AW[l].mvp.id === p.id, cup: cupBonus(p.c), wc: WCW ? (WCW.nat === p.nat ? 15 : WCW.runner === p.nat ? 6 : 0) : 0 };
   }).map((c) => ({ ...c, sc: ballonScore(c) })).sort((a, b) => b.sc - a.sc);
   const myB = cands.findIndex((c) => c.id === "me") + 1, rvB = cands.findIndex((c) => c.id === "rv") + 1;
   window.__ballon = { top: cands[0], me: myB ? cands[myB - 1] : null, myRank: myB };
@@ -1434,7 +1437,8 @@ async function worldCup() {
   const fin = await play(sf1.win, sf2.win, "Final", true);
   log.push(`Final ${NATIONS[fin.a].flag} ${fin.hg}:${fin.ag} ${NATIONS[fin.b].flag}${fin.pk}`);
   const champ = fin.win;
-  S.wcWinner = { nat: champ, season: year + 1 };
+  const wcGoals = {}; for (const k of Object.keys(scorer)) if (!k.endsWith("_p") && scorer[k] > 0) wcGoals[k] = scorer[k];
+  S.wcWinner = { nat: champ, runner: champ === fin.a ? fin.b : fin.a, season: year + 1, goals: wcGoals };
   const topId = Object.keys(scorer).filter((k) => !k.endsWith("_p")).sort((x, y) => scorer[y] - scorer[x])[0];
   const boot = topId ? scorer[topId + "_p"] : null;
   news(`🌍 World Cup winner: ${NATIONS[champ].flag} ${NATIONS[champ].name}! Golden Boot ${boot ? boot.n + " " + scorer[topId] + " goals" : "-"}`);

@@ -524,12 +524,13 @@ function credit(res, kind, lgId, hName, aName) {
     st.g += x.g; st.a += x.a; st.rs += r; if (res.mom === p && r >= 7.3) st.mom++;
     st.pa = (st.pa || 0) + x.pa; st.pc = (st.pc || 0) + x.pc; st.sh = (st.sh || 0) + x.sh; st.sot = (st.sot || 0) + x.sot; st.xg = (st.xg || 0) + Math.round(x.xg * 100);
     st.kp = (st.kp || 0) + x.kp + x.a; st.da = (st.da || 0) + x.da; st.dc = (st.dc || 0) + x.dc; st.ta = (st.ta || 0) + x.ta; st.tc = (st.tc || 0) + x.tc; st.sv = (st.sv || 0) + x.sv;
+    if (p.id === "me" && x.rc) st.rc = (st.rc || 0) + 1;
     st.ic = (st.ic || 0) + x.ic; st.cl = (st.cl || 0) + x.cl; st.bk = (st.bk || 0) + x.blk;
     if ((p.r === "df" || p.r === "gk") && x.mins >= 60 && (x.side === "home" ? res.ag : res.hg) === 0) st.cs = (st.cs || 0) + 1;
     if (p.id !== "me") {
       const tgt = p.id === "rv" ? S.rival : p;
       if (x.yc && kind === "league") { st.yc = (st.yc || 0) + 1; if (st.yc % 5 === 0) { tgt.ban = 1; tgt.nw = 1; } }
-      if (x.rc) { tgt.ban = x.rc === "rc" ? 2 : 1; tgt.nw = 1; if (pOvr(p) >= 80 || p.id === "rv") news(`🟥 ${p.n}(${shortName(p.c || "")}) sent off, ${tgt.ban}-game suspension`); }
+      if (x.rc) { st.rc = (st.rc || 0) + 1; tgt.ban = x.rc === "rc" ? 2 : 1; tgt.nw = 1; if (pOvr(p) >= 80 || p.id === "rv") news(`🟥 ${p.n}(${shortName(p.c || "")}) sent off, ${tgt.ban}-game suspension`); }
       if (x.inj) {
         const n = randi(1, 5);
         if (p.id === "rv") { S.rival.hurt = Math.max(S.rival.hurt || 0, n); S.rival.nw = 1; news(`🚑 Rival ${p.n} injured in a match, out ${n} games`); if (typeof pushSig === "function") pushSig("rivalhurt", { n }); }
