@@ -279,7 +279,7 @@ function nextScheduleText() {
   return { left: 0, name: opp, text: `📅 R${S.pro.round + 1}/${ROUNDS} 다음 상대 <b>${esc(opp)}</b> (전력 ${Math.round(clubStr(S.pro.league, opp))})${rivalMatch ? ` <em class="rv">⚔️ 라이벌 매치</em>` : ""}` };
 }
 function trainPreview(k) {
-  if (S.stats[k] >= statCap(k) - .05) return mastNeed(k) ? "최대치 · 숙련 ×2" : "모두 완성";
+  if (S.stats[k] >= statCap(k) - .05) { const sp = spillKey(k); return mastNeed(k) ? T(`숙련 ×3${sp ? " · " + STAT_NAME[sp] + "↑" : ""}`, `Mastery x3${sp ? " · " + STAT_NAME[sp] + "↑" : ""}`) : T(`완성 · ${sp ? STAT_NAME[sp] + "↑" : "컨디션↑"}`, `Maxed · ${sp ? STAT_NAME[sp] + "↑" : "Cond↑"}`); }
   const g = trainGain(k, true);
   return `+${g[0].toFixed(1)}~${g[1].toFixed(1)}`;
 }
@@ -305,6 +305,12 @@ function trainGain(k, range = false) {
 }
 
 /* 종합에 가장 많이 보탬이 되는 훈련 — 자동 진행·빠른 시즌이 써요 */
+/* 최대치 능력치를 훈련하면 넘친 훈련량이 가장 낮은 주력 능력치로 가요 (훈련이 헛되지 않게) */
+function spillKey(from) {
+  const ks = Object.entries(POS[S.pos].w).filter(([k, w]) => w > 0 && k !== from && S.stats[k] < statCap(k) - .05).map(([k]) => k);
+  const pool = ks.length ? ks : STAT_KEYS.filter((k) => k !== from && S.stats[k] < statCap(k) - .05);
+  return pool.sort((a, b) => S.stats[a] - S.stats[b])[0] || null;
+}
 function bestTrainKey() {
   let best = null, bv = -1;
   for (const [k, w] of Object.entries(POS[S.pos].w)) {
@@ -429,16 +435,21 @@ function applyAction(a, btn) {
   S.stats[k] = clamp(S.stats[k] + g, 1, statCap(k));
   // 최대치에 닿은 능력치는 숫자 대신 숙련이 2배로 쌓여요 (초월로 최대치를 넓히는 길)
   const mBefore = (S.mast && S.mast[k]) || 0, trBefore = trOf(k), talBefore = S.talent[k];
-  addMast(k, (S.buff > 1 ? 2 : 1) * (atCap ? 2 : 1));
-  S.cond = clamp(S.cond - trainCost(), 0, 100);
+  addMast(k, (S.buff > 1 ? 2 : 1) * (atCap ? 3 : 1));
+  // 최대치 훈련: 가볍게 하니 피로는 절반, 넘친 훈련량은 가장 낮은 주력 능력치로 (숙련이 남았으면 40%, 다 완성했으면 70%)
+  let spill = null;
+  if (atCap) { const sk = spillKey(k); if (sk) { const sb = S.stats[sk]; S.stats[sk] = clamp(sb + trainGain(sk) * (mastNeed(k) ? .4 : .7), 1, statCap(sk)); spill = [sk, S.stats[sk] - sb]; } }
+  S.cond = clamp(S.cond - trainCost() * (atCap ? .5 : 1), 0, 100);
+  if (atCap && !spill) S.cond = clamp(S.cond + 10, 0, 100);
   const used = S.buff > 1 ? ` (🔥×${S.buff})` : "";
   S.buff = 1;
   if (atCap) {
     const lvUp = trOf(k) !== trBefore || S.talent[k] !== talBefore, need = mastNeed(k);
-    const mtxt = lvUp ? "단계 상승!" : need ? `숙련 ${(S.mast[k] || 0)}/${need} (+${(S.mast[k] || 0) - mBefore})` : "완성";
-    addLog(`${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} 최대치 ${statCap(k)} · ${mtxt}${used}`);
-    S.lastAct = { key: k, txt: `${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} 최대치 · ${mtxt}${used}` };
-    floatFx(btn, lvUp ? "🌌 단계 상승" : `숙련 +${(S.mast[k] || 0) - mBefore}`);
+    const mtxt = lvUp ? T("단계 상승!", "Level up!") : need ? T(`숙련 ${(S.mast[k] || 0)}/${need} (+${(S.mast[k] || 0) - mBefore})`, `Mastery ${(S.mast[k] || 0)}/${need} (+${(S.mast[k] || 0) - mBefore})`) : T("완성", "Complete");
+    const stxt = spill ? ` · ${T("넘침", "overflow")} → ${STATS.find((s) => s.key === spill[0]).emoji} ${STAT_NAME[spill[0]]} +${spill[1].toFixed(1)} → ${Math.round(S.stats[spill[0]])}` : T(" · 컨디션 +10", " · Condition +10");
+    addLog(`${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} ${T("최대치", "max")} ${statCap(k)} · ${mtxt}${stxt}${used}`);
+    S.lastAct = { key: spill ? spill[0] : k, txt: `${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} ${T("최대치", "max")} · ${mtxt}${stxt}${used}` };
+    floatFx(btn, lvUp ? T("🌌 단계 상승", "🌌 Level up") : spill ? `${STAT_NAME[spill[0]]} +${spill[1].toFixed(1)}` : T(`숙련 +${(S.mast[k] || 0) - mBefore}`, `Mastery +${(S.mast[k] || 0) - mBefore}`));
   } else {
   addLog(`${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} 훈련 +${(S.stats[k] - before).toFixed(1)} → ${Math.round(S.stats[k])}${used}`);
   S.lastAct = { key: k, txt: `${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} +${(S.stats[k] - before).toFixed(1)} → ${Math.round(S.stats[k])}${used}` };
@@ -1726,7 +1737,7 @@ function openMast(k) {
   modal({ emoji: s.emoji, title: `${s.name} 숙련도`,
     html: `<ul class="tip-list"><li>지금 재능 <b>${talentStr(k)}</b>, 능력치 <b>${Math.round(S.stats[k])}</b> / 최대 <b>${statCap(k)}</b></li>
       <li>숙련도 <b>${need ? `${have} / ${need}` : "완성"}</b>${need ? ` · 다 차면 <b>${next}</b>` : ""}</li>
-      <li>이 능력치를 훈련할수록 숙련도가 쌓여요. 최대치에 닿은 뒤에는 2배로 쌓여요. MOM, 해외 연수, 재능 개발 프로그램으로도 올라요.</li>
+      <li>이 능력치를 훈련할수록 숙련도가 쌓여요. 최대치에 닿은 뒤에는 3배로 쌓이고, 넘친 훈련량은 가장 낮은 주력 능력치로 가요. MOM, 해외 연수, 재능 개발 프로그램으로도 올라요.</li>
       <li>재능 ★이 높을수록 훈련으로 오르는 폭이 커져요. ★5 다음은 초월(Ⅰ~Ⅲ)이고, 단계마다 최대치가 2씩 올라 105까지 가요.</li></ul>`,
     buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }] });
 }
