@@ -1229,7 +1229,9 @@ async function quickSeason(skipAsk) {
 /* ---------- 시즌 결산 ---------- */
 const avg = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
 const POS_F = { fw: .8, wg: .9, mf: 1.3, df: 2.6, gk: 2.6 };
-function ballonScore(o) { return o.ovr + o.tier * 5 + (o.avg - 6.5) * 10 + (o.g + o.a * .8) * (POS_F[o.pos] || 1) * .25 + (o.champ ? 5 : 0) + (o.cup || 0) + (o.wc || 0); }
+/* 발롱도르 점수 (v1.9.8): 기록과 우승 비중을 키우고 능력치 비중은 줄였어요 */
+const BALLON_W = { ovr: .5, tier: 5, rate: 8, ga: .75, champ: 8, boot: 6, ast: 4, mvp: 5 };
+function ballonScore(o) { const B = BALLON_W; return o.ovr * B.ovr + o.tier * B.tier + (o.avg - 6.5) * B.rate + (o.g + o.a * .8) * (POS_F[o.pos] || 1) * B.ga + (o.champ ? B.champ : 0) + (o.boot ? B.boot : 0) + (o.ast ? B.ast : 0) + (o.mvp ? B.mvp : 0) + (o.cup || 0) + (o.wc || 0); }
 function leagueAwards(lgId) {
   const ps = leaguePlayers(lgId).filter((p) => p.s.ap >= 9);
   const best = (f) => ps.slice().sort(f)[0];
@@ -1266,7 +1268,7 @@ async function seasonEnd() {
   const cupBonus = (club) => Object.entries(S.cups).reduce((s, [k, c]) => s + (c.winner === club ? CUPS[k].weight * 2.5 : c.winner && (c.log[c.log.length - 1] || "").includes(club) ? CUPS[k].weight : 0), 0);
   const cands = Object.values(W.p).filter((p) => p.c && p.s.ap >= 9).map((p) => {
     const l = W.c[p.c].l;
-    return { id: p.id, name: p.n, nat: p.nat, club: p.c, pos: p.r, ovr: pOvr(p), tier: LEAGUES[l].tier, avg: pAvg(p), g: p.s.g + p.cs.g, a: p.s.a + p.cs.a, champ: AW[l].champ === p.c, cup: cupBonus(p.c), wc: S.wcWinner && S.wcWinner.nat === p.nat && S.wcWinner.season === P.season ? 6 : 0 };
+    return { id: p.id, name: p.n, nat: p.nat, club: p.c, pos: p.r, ovr: pOvr(p), tier: LEAGUES[l].tier, avg: pAvg(p), g: p.s.g + p.cs.g, a: p.s.a + p.cs.a, champ: AW[l].champ === p.c, boot: !!AW[l].boot && AW[l].boot.id === p.id, ast: !!AW[l].ast && AW[l].ast.id === p.id, mvp: !!AW[l].mvp && AW[l].mvp.id === p.id, cup: cupBonus(p.c), wc: S.wcWinner && S.wcWinner.nat === p.nat && S.wcWinner.season === P.season ? 6 : 0 };
   }).map((c) => ({ ...c, sc: ballonScore(c) })).sort((a, b) => b.sc - a.sc);
   const myB = cands.findIndex((c) => c.id === "me") + 1, rvB = cands.findIndex((c) => c.id === "rv") + 1;
   if (myB === 1) { awards.push({ k: "ballon", name: "🏅 Ballon d'Or", w: 0 }); S.career.ballon++; }
@@ -1319,7 +1321,7 @@ async function seasonEnd() {
     <div class="ss-card"><h4>🏅 Ballon d'Or ranking</h4>
       ${cands.slice(0, 5).map((c, i) => `<div class="bl ${c.id === "me" ? "me" : c.id === "rv" ? "rv" : ""}"><span>${i + 1}</span><b>${NATIONS[c.nat].flag} <a class="pl" data-pid="${c.id}">${esc(c.name)}</a>${c.id === "rv" ? " ⚔️" : ""}</b><small>${esc(shortName(c.club))} ⚽${c.g} 🅰️${c.a}</small><em>${c.sc.toFixed(1)}</em></div>`).join("")}
       ${myB > 5 ? `<div class="bl me"><span>${myB}</span><b>${esc(S.name)}</b><small></small><em>${cands[myB - 1].sc.toFixed(1)}</em></div>` : ""}
-      ${rvB > 5 ? `<div class="bl rv"><span>${rvB}</span><b>${esc(rv.name)} ⚔️</b><small></small><em>${cands[rvB - 1].sc.toFixed(1)}</em></div>` : ""}</div>`;
+      ${rvB > 5 ? `<div class="bl rv"><span>${rvB}</span><b>${esc(rv.name)} ⚔️</b><small></small><em>${cands[rvB - 1].sc.toFixed(1)}</em></div>` : ""}<p class="small">${T("평점·골·도움·우승·개인상(득점왕·도움왕·MVP)으로 매겨요", "Based on rating, goals, assists, trophies and awards (Golden Boot, assists, MVP)")}</p></div>`;
   $("ss-av").appendChild(avatarCanvas(S.look, P.kit, 56, { mood: awards.length ? "joy" : undefined }));
   bindPlayerLinks($("ss-body"));
   if (awards.some((a) => a.k === "ballon")) { Sfx.goal(); if (Sfx.fanfare) Sfx.fanfare(); }
