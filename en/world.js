@@ -719,6 +719,7 @@ function worldOffseason() {
       delete W.p[id];
     }
   }
+  clubMomentum();
   for (const name in W.c) anchorClub(name, .5);
   for (const lg of LEAGUES) {
     const tbl = S.lgs[lg.id] && S.lgs[lg.id].table && Object.values(S.lgs[lg.id].table)[0].p ? sortedTable(lg.id).map((x) => x[0]) : null;
@@ -737,6 +738,39 @@ function worldOffseason() {
   }
   ensureCoaches();
   aiTransfers();
+}
+/* 📈 팀 전력 흐름: 매 시즌 기준 전력(base)이 움직여요
+ *  · 성적: 우승 +, 2~3위 +, 하위권 −, 강등권 − (MOM_W)
+ *  · 원래 전력 쪽으로 조금씩 돌아가요(평균 회귀) → 한 팀이 끝없이 강해지지 않게
+ *  · 투자·리빌딩: 리그마다 랜덤으로 한두 팀이 크게 오르거나 내려가요(뉴스)
+ *  · 원래 전력(data.js) ±BASE_SWING 안에서만 */
+const MOM_W = [.3, .15, -.15, -.3], BASE_REV = .2, BASE_SWING = 7, INV_P = .8, INV_UP = [2.5, 4.5], INV_DN = [2, 4];
+function shiftBase(club, d) {
+  const C = W.c[club]; if (!C) return 0;
+  const o = (CLUB_T[club] || [0, C.base])[1], b0 = C.base;
+  C.base = Math.round(clamp(C.base + d, o - BASE_SWING, o + BASE_SWING) * 10) / 10;
+  return C.base - b0;
+}
+function clubMomentum() {
+  for (const lg of LEAGUES) {
+    const TB = S.lgs && S.lgs[lg.id], row = TB && TB.table && Object.values(TB.table)[0];
+    if (!row || !row.p) continue;
+    const tbl = sortedTable(lg.id).map((x) => x[0]), n = tbl.length;
+    tbl.forEach((club, i) => {
+      const o = (CLUB_T[club] || [0, W.c[club].base])[1];
+      const res = i === 0 ? MOM_W[0] : i < 3 ? MOM_W[1] : i >= n - 2 ? MOM_W[3] : i >= n - 4 ? MOM_W[2] : 0;
+      shiftBase(club, res + (o - W.c[club].base) * BASE_REV);
+    });
+    // 투자(중하위 팀) 한 팀, 리빌딩(상위 절반 팀) 한 팀, 각각 INV_P 확률
+    if (Math.random() < INV_P) {
+      const club = pick(tbl.slice(Math.floor(n / 3))), d = shiftBase(club, rand(INV_UP[0], INV_UP[1]));
+      if (d > .5 && lg.div !== 2) news(T(`📈 ${club}, 대규모 투자로 전력 보강 (전력 +${d.toFixed(1)})`, `📈 ${club} invest big to strengthen the squad (+${d.toFixed(1)})`));
+    }
+    if (Math.random() < INV_P) {
+      const club = pick(tbl.slice(0, Math.ceil(n / 2))), d = shiftBase(club, -rand(INV_DN[0], INV_DN[1]));
+      if (d < -.5 && lg.div !== 2) news(T(`📉 ${club}, 주축 세대교체로 리빌딩 (전력 ${d.toFixed(1)})`, `📉 ${club} rebuild as a generation moves on (${d.toFixed(1)})`));
+    }
+  }
 }
 /* AI 이적시장: 리그보다 잘하는 젊은 선수는 위로, 늙고 떨어진 스타는 아래로 */
 function aiTransfers() {
