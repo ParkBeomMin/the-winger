@@ -88,10 +88,10 @@ function houseLayerWatch(bar, ins) {
   bar.appendChild(L); bar.__layer = L;
   setInterval(() => {
     if (ins.getAttribute("data-ad-status") !== "unfill-optimized" || getComputedStyle(bar).display === "none") { L.classList.remove("on"); return; }
-    const r = bar.getBoundingClientRect(); let seen = false;
-    L.style.visibility = "hidden";
-    for (const fx of [.2, .35, .5, .65, .8]) { const el = document.elementFromPoint(r.left + r.width * fx, r.top + r.height / 2); if (el && ins.contains(el) && el !== ins && (el.textContent || "").trim()) { seen = true; break; } }
-    L.style.visibility = "";
+    // 칩 글자가 실제로 띠 안에 보이는지: 화면에 그려지고(투명 아님) 띠 영역과 겹치는 글자가 하나라도 있으면 보이는 것
+    const r = bar.getBoundingClientRect();
+    const op = (el) => { let o = 1; for (let x = el; x && x !== bar; x = x.parentElement) { const cs = getComputedStyle(x); if (cs.display === "none" || cs.visibility === "hidden") return 0; o *= +cs.opacity; } return o; };
+    const seen = [...ins.querySelectorAll("span,a,div")].some((el) => { if (el.children.length || !(el.innerText || "").trim()) return false; const q = el.getBoundingClientRect(); return q.width > 2 && q.height > 2 && q.bottom > r.top + 4 && q.top < r.bottom - 4 && q.right > r.left && q.left < r.right && op(el) > .15; });
     L.classList.toggle("on", !seen);
   }, 900);
 }
