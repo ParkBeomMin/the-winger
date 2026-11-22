@@ -146,9 +146,10 @@ const HAIR_STYLES = ["Short hair", "Two-block", "Curly", "Long hair", "Mohawk", 
 /* 상점 */
 
 const CAREER_GRADES = [
-  [0, "🌱 A short but shining career"], [260, "🧢 A reliable regular starter"], [460, "💪 One of the league's finest"],
-  [700, "🌟 A star who defined an era"], [1000, "👑 Recognized by the whole world"], [1400, "🐐 A legend for the history books"],
-  [1900, "🌍 The one who rewrote football history"],
+  [0, "🌱 A short but shining career"], [140, "👟 A Dedicated Pro"], [260, "🧢 A reliable regular starter"], [360, "🔑 Key Player"],
+  [460, "💪 One of the league's finest"], [580, "🎖️ League Legend"], [700, "🌟 A star who defined an era"], [850, "🌐 World Class"],
+  [1000, "👑 Recognized by the whole world"], [1200, "🏅 Ballon d'Or Winner"], [1400, "🐐 A legend for the history books"], [1650, "♾️ Immortal Legend"],
+  [1900, "🌍 The one who rewrote football history"], [2400, "✨ The GOAT"],
 ];
 
 /* 받침에 맞는 조사 — josa("마테오", "이/가") → "마테오가" */
