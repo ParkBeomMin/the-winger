@@ -288,7 +288,7 @@ function moveToClub(id, club) {
 /* ================= 경기 엔진 ================= */
 function eff(p, k) {
   let v = sOf(p)[k];
-  if (p.id === "me") v *= (S.cond < 35 ? .93 : 1) * (1 + S.form * .012);
+  if (p.id === "me") v = (v + ((S.sharp && S.sharp[k]) || 0)) * (S.cond < 35 ? .93 : 1) * (1 + S.form * .012);   // 🎯 감각 훈련 버프(다음 경기만)
   else v *= 1 + (p.fm || 0) * .012;
   return v;
 }

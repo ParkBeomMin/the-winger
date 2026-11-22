@@ -279,7 +279,7 @@ function nextScheduleText() {
   return { left: 0, name: opp, text: `📅 R${S.pro.round + 1}/${ROUNDS} 다음 상대 <b>${esc(opp)}</b> (전력 ${Math.round(clubStr(S.pro.league, opp))})${rivalMatch ? ` <em class="rv">⚔️ 라이벌 매치</em>` : ""}` };
 }
 function trainPreview(k) {
-  if (S.stats[k] >= statCap(k) - .05) { const sp = spillKey(k); return mastNeed(k) ? T(`숙련 ×3${sp ? " · " + STAT_NAME[sp] + "↑" : ""}`, `Mastery x3${sp ? " · " + STAT_NAME[sp] + "↑" : ""}`) : T(`완성 · ${sp ? STAT_NAME[sp] + "↑" : "컨디션↑"}`, `Maxed · ${sp ? STAT_NAME[sp] + "↑" : "Cond↑"}`); }
+  if (atCapOf(k)) return trOf(k) < 3 ? T(`🌌 성공 ${transChance(k)}%`, `🌌 ${transChance(k)}% chance`) : T("다음 경기 +5", "+5 next match");
   const g = trainGain(k, true);
   return `+${g[0].toFixed(1)}~${g[1].toFixed(1)}`;
 }
@@ -305,12 +305,8 @@ function trainGain(k, range = false) {
 }
 
 /* 종합에 가장 많이 보탬이 되는 훈련 — 자동 진행·빠른 시즌이 써요 */
-/* 최대치 능력치를 훈련하면 넘친 훈련량이 가장 낮은 주력 능력치로 가요 (훈련이 헛되지 않게) */
-function spillKey(from) {
-  const ks = Object.entries(POS[S.pos].w).filter(([k, w]) => w > 0 && k !== from && S.stats[k] < statCap(k) - .05).map(([k]) => k);
-  const pool = ks.length ? ks : STAT_KEYS.filter((k) => k !== from && S.stats[k] < statCap(k) - .05);
-  return pool.sort((a, b) => S.stats[a] - S.stats[b])[0] || null;
-}
+/* 훈련 버튼 이름: 최대치면 🌌 초월 도전, 초월 III까지 끝났으면 🎯 감각 훈련 */
+function trainName(s) { return atCapOf(s.key) ? (trOf(s.key) < 3 ? T(`${s.name} 초월 도전`, `${s.name} Breakthrough`) : T(`${s.name} 감각 훈련`, `${s.name} Sharpness`)) : T(`${s.name} 훈련`, `${s.name} Training`); }
 function bestTrainKey() {
   let best = null, bv = -1;
   for (const [k, w] of Object.entries(POS[S.pos].w)) {
@@ -318,7 +314,9 @@ function bestTrainKey() {
     const g = trainGain(k, true), v = w * (g[0] + g[1]) / 2;
     if (v > bv) { bv = v; best = k; }
   }
-  return best || mainStatOf(S.pos);
+  if (best) return best;
+  const tk = Object.entries(POS[S.pos].w).filter(([k, w]) => w > 0 && trOf(k) < 3).sort((a, b) => b[1] - a[1])[0];
+  return tk ? tk[0] : mainStatOf(S.pos);
 }
 
 function renderMain() {
@@ -358,14 +356,16 @@ function renderMain() {
   // 능력치
   $("stats").innerHTML = STATS.map((s) => {
     const v = S.stats[s.key], w = POS[S.pos].w[s.key];
-    const need = mastNeed(s.key), mp = need ? Math.round(((S.mast && S.mast[s.key]) || 0) / need * 100) : 100;
-    return `<div class="st ${w >= .2 ? "key" : ""}" title="숙련 ${need ? `${(S.mast && S.mast[s.key]) || 0}/${need} (다음: ${S.talent[s.key] < 5 ? "★" + (S.talent[s.key] + 1) : TRANS_NAME[trOf(s.key) + 1]})` : "초월 III 완성"} · 최대치 ${statCap(s.key)}"><span>${s.emoji} ${s.name}</span><div class="bar"><i style="width:${Math.min(100, v)}%"></i><u style="width:${mp}%"></u></div><b class="${v > 99 ? "over" : ""}">${Math.round(v)}</b><em class="${S.talent[s.key] === 5 ? "t5" : ""}">${talentStr(s.key)}</em></div>`;
+    const need = mastNeed(s.key), tgMode = (!need || atCapOf(s.key)) && trOf(s.key) < 3;
+    const mp = tgMode ? Math.round(tgOf(s.key)) : need ? Math.round(((S.mast && S.mast[s.key]) || 0) / need * 100) : 100;
+    const ttl = tgMode ? T(`초월 게이지 ${mp}% · 성공 ${transChance(s.key)}%`, `Breakthrough gauge ${mp}% · ${transChance(s.key)}% chance`) : need ? T(`숙련 ${(S.mast && S.mast[s.key]) || 0}/${need} (다음: ★${S.talent[s.key] + 1})`, `Mastery ${(S.mast && S.mast[s.key]) || 0}/${need} (next: ★${S.talent[s.key] + 1})`) : T("초월 III 완성", "Transcendence III");
+    return `<div class="st ${w >= .2 ? "key" : ""}${tgMode ? " tgm" : ""}" title="${ttl} · ${T("최대치", "max")} ${statCap(s.key)}"><span>${s.emoji} ${s.name}</span><div class="bar"><i style="width:${Math.min(100, v)}%"></i><u style="width:${mp}%"></u></div><b class="${v > 99 ? "over" : ""}">${Math.round(v)}</b><em class="${S.talent[s.key] === 5 ? "t5" : ""}">${talentStr(s.key)}</em></div>`;
   }).join("");
   $("stats").querySelectorAll(".st").forEach((el, i) => el.onclick = () => openMast(STATS[i].key));
 
   // 행동
   const risk = injuryRisk(), inj = S.injured > 0;
-  let html = STATS.map((s) => `<button class="act" data-train="${s.key}" ${inj ? "disabled" : ""}><span>${s.emoji}</span><b>${s.name} 훈련</b><small>${trainPreview(s.key)}</small>${risk ? `<i class="risk">부상 ${risk}%</i>` : ""}</button>`).join("");
+  let html = STATS.map((s) => `<button class="act" data-train="${s.key}" ${inj ? "disabled" : ""}><span>${s.emoji}</span><b>${trainName(s)}</b><small>${trainPreview(s.key)}</small>${risk ? `<i class="risk">부상 ${risk}%</i>` : ""}</button>`).join("");
   html += `<button class="act rest" data-rest="1"><span>${inj ? "🏥" : "🛌"}</span><b>${inj ? "재활" : "휴식"}</b><small>컨디션 +${32 + S.gear.recovery * 8}</small></button>`;
   if (S.phase === "youth") html += `<button class="act auto" data-auto="1" ${inj ? "disabled" : ""}><span>⏩</span><b>자동 진행</b><small>대회 직전까지</small></button>`;
   else html += `<button class="act auto" data-auto="1"><span>⏩</span><b>자동 진행</b><small>경기 전까지</small></button>`;
@@ -430,30 +430,36 @@ function applyAction(a, btn) {
     return;
   }
   const k = a.key, risk = injuryRisk();
-  const g = trainGain(k);
-  const before = S.stats[k], atCap = before >= statCap(k) - .05;
-  S.stats[k] = clamp(S.stats[k] + g, 1, statCap(k));
-  // 최대치에 닿은 능력치는 숫자 대신 숙련이 2배로 쌓여요 (초월로 최대치를 넓히는 길)
-  const mBefore = (S.mast && S.mast[k]) || 0, trBefore = trOf(k), talBefore = S.talent[k];
-  addMast(k, (S.buff > 1 ? 2 : 1) * (atCap ? 3 : 1));
-  // 최대치 훈련: 가볍게 하니 피로는 절반, 넘친 훈련량은 가장 낮은 주력 능력치로 (숙련이 남았으면 40%, 다 완성했으면 70%)
-  let spill = null;
-  if (atCap) { const sk = spillKey(k); if (sk) { const sb = S.stats[sk]; S.stats[sk] = clamp(sb + trainGain(sk) * (mastNeed(k) ? .4 : .7), 1, statCap(sk)); spill = [sk, S.stats[sk] - sb]; } }
-  S.cond = clamp(S.cond - trainCost() * (atCap ? .5 : 1), 0, 100);
-  if (atCap && !spill) S.cond = clamp(S.cond + 10, 0, 100);
-  const used = S.buff > 1 ? ` (🔥×${S.buff})` : "";
-  S.buff = 1;
-  if (atCap) {
-    const lvUp = trOf(k) !== trBefore || S.talent[k] !== talBefore, need = mastNeed(k);
-    const mtxt = lvUp ? T("단계 상승!", "Level up!") : need ? T(`숙련 ${(S.mast[k] || 0)}/${need} (+${(S.mast[k] || 0) - mBefore})`, `Mastery ${(S.mast[k] || 0)}/${need} (+${(S.mast[k] || 0) - mBefore})`) : T("완성", "Complete");
-    const stxt = spill ? ` · ${T("넘침", "overflow")} → ${STATS.find((s) => s.key === spill[0]).emoji} ${STAT_NAME[spill[0]]} +${spill[1].toFixed(1)} → ${Math.round(S.stats[spill[0]])}` : T(" · 컨디션 +10", " · Condition +10");
-    addLog(`${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} ${T("최대치", "max")} ${statCap(k)} · ${mtxt}${stxt}${used}`);
-    S.lastAct = { key: spill ? spill[0] : k, txt: `${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} ${T("최대치", "max")} · ${mtxt}${stxt}${used}` };
-    floatFx(btn, lvUp ? T("🌌 단계 상승", "🌌 Level up") : spill ? `${STAT_NAME[spill[0]]} +${spill[1].toFixed(1)}` : T(`숙련 +${(S.mast[k] || 0) - mBefore}`, `Mastery +${(S.mast[k] || 0) - mBefore}`));
+  const used = S.buff > 1 ? ` (🔥×${S.buff})` : "", em = STATS.find((s) => s.key === k).emoji;
+  if (atCapOf(k) && trOf(k) < 3) {
+    // 🌌 초월 도전: 실패하면 게이지가 차서 다음 확률이 올라가요 (🔥버프는 게이지 2배, 피버 숙련 보너스도 게이지에)
+    const r = transAttempt(k, S, (S.buff > 1 ? 2 : 1) * (1 + (typeof F === "function" ? F("mast") : 0)));
+    S.cond = clamp(S.cond - trainCost() * .5, 0, 100);
+    S.buff = 1;
+    const txt = r.ok ? T(`🌌 ${STAT_NAME[k]} 초월 성공! (${r.ch}%) ${TRANS_NAME[trOf(k)]} · 최대치 ${statCap(k)}`, `🌌 ${STAT_NAME[k]} breakthrough! (${r.ch}%) ${TRANS_NAME[trOf(k)]} · max ${statCap(k)}`)
+      : T(`${em} ${STAT_NAME[k]} 초월 도전 실패 (${r.ch}%) · 다음 ${r.next}% · 게이지 ${Math.round(tgOf(k))}%`, `${em} ${STAT_NAME[k]} breakthrough failed (${r.ch}%) · next ${r.next}% · gauge ${Math.round(tgOf(k))}%`);
+    if (!r.ok) addLog(txt + used);
+    S.lastAct = { key: k, txt: txt + used };
+    floatFx(btn, r.ok ? T("🌌 초월 성공!", "🌌 Breakthrough!") : T(`아깝다! 다음 ${r.next}%`, `So close! Next ${r.next}%`));
+    if (r.ok && typeof Sfx !== "undefined" && Sfx.goal) Sfx.goal();
+  } else if (atCapOf(k)) {
+    // 🎯 감각 훈련: 초월 III까지 끝난 능력치는 다음 경기에서만 +5
+    S.sharp = S.sharp || {}; S.sharp[k] = 5;
+    S.cond = clamp(S.cond - trainCost() * .5, 0, 100);
+    S.buff = 1;
+    const txt = T(`🎯 ${STAT_NAME[k]} 감각 훈련 · 다음 경기 ${STAT_NAME[k]} +5`, `🎯 ${STAT_NAME[k]} sharpness · +5 ${STAT_NAME[k]} next match`);
+    addLog(txt); S.lastAct = { key: k, txt };
+    floatFx(btn, T("🎯 다음 경기 +5", "🎯 +5 next match"));
   } else {
-  addLog(`${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} 훈련 +${(S.stats[k] - before).toFixed(1)} → ${Math.round(S.stats[k])}${used}`);
-  S.lastAct = { key: k, txt: `${STATS.find((s) => s.key === k).emoji} ${STAT_NAME[k]} +${(S.stats[k] - before).toFixed(1)} → ${Math.round(S.stats[k])}${used}` };
-  floatFx(btn, `${STAT_NAME[k]} +${(S.stats[k] - before).toFixed(1)}`);
+    const g = trainGain(k);
+    const before = S.stats[k];
+    S.stats[k] = clamp(S.stats[k] + g, 1, statCap(k));
+    addMast(k, S.buff > 1 ? 2 : 1);
+    S.cond = clamp(S.cond - trainCost(), 0, 100);
+    S.buff = 1;
+    addLog(`${em} ${STAT_NAME[k]} 훈련 +${(S.stats[k] - before).toFixed(1)} → ${Math.round(S.stats[k])}${used}`);
+    S.lastAct = { key: k, txt: `${em} ${STAT_NAME[k]} +${(S.stats[k] - before).toFixed(1)} → ${Math.round(S.stats[k])}${used}` };
+    floatFx(btn, `${STAT_NAME[k]} +${(S.stats[k] - before).toFixed(1)}`);
   }
   if (risk && Math.random() * 100 < risk * (1 - G("shin") * .2)) {
     S.injured = randi(1, 2);
@@ -471,6 +477,7 @@ function rivalGrow(scale = 1) {
   const keys = Object.entries(POS[rv.pos].w).filter(([, w]) => w > 0).map(([k]) => k);
   for (let i = 0; i < 2; i++) {
     const k = Math.random() < .7 ? pickWeighted(rv.pos) : pick(keys);
+    if (atCapOf(k, rv)) { if (trOf(k, rv) < 3 && Math.random() < .5 * scale) transAttempt(k, rv); continue; }   // 나와 같은 규칙: 최대치면 초월 도전
     const v = rv.stats[k], dim = v >= 92 ? .3 : v >= 85 ? .5 : v >= 75 ? .7 : 1;
     rv.stats[k] = clamp(v + rand(1.6, 3) * talentMul(rv.talent[k]) * rubber * age * dim * scale * .8, 1, statCap(k, rv));
     if (Math.random() < .5 * scale) addMast(k, 1, rv);   // 라이벌도 훈련한 만큼 숙련이 쌓여요
@@ -653,12 +660,13 @@ async function matchFlow(o) {
     await playMatch($("match-root"), {
       home: { name: o.mine.name, kit: o.mine.kit, str: tStr(o.mine) }, away: { name: o.opp.name, kit: oppKit, str: tStr(o.opp) },
       m, mySide: o.mySide, auto: !!SET.auto, diffShot: DIFF[S.diff || "normal"].shot,
-      me: { name: S.name, look: S.look, pos: S.pos, stats: S.stats, starter, subMin: mySubs ? mySubs.min : null },
+      me: { name: S.name, look: S.look, pos: S.pos, stats: S.sharp ? Object.fromEntries(Object.entries(S.stats).map(([k, v]) => [k, v + (S.sharp[k] || 0)])) : S.stats, starter, subMin: mySubs ? mySubs.min : null },
       rival: rvSide ? { name: S.rival.name, pos: S.rival.pos, side: rvSide, number: S.rival.look.number } : null,
       onAutoChange: (v) => { SET.auto = v; saveSet(); },
     });
   } else resolveAuto(m);
   const res = finishMatch(m);
+  if (S.sharp && [...res.all.values()].some((x) => x.p.id === "me")) S.sharp = null;   // 🎯 감각 버프는 뛴 경기 한 번만
   const r = summarize(res, m, o.mySide, rvOpp);
   // 내 경고·퇴장·부상 — 프로에서는 징계가 다음 경기로 이어져요
   for (const i of res.cards.filter((x) => x.p.id === "me")) {
@@ -1733,12 +1741,20 @@ function openCareer() {
 /* 능력치 줄을 누르면: 숙련도와 재능 설명 */
 function openMast(k) {
   const s = STATS.find((x) => x.key === k), have = (S.mast && S.mast[k]) || 0, need = mastNeed(k), star = S.talent[k], tr = trOf(k);
-  const next = !need ? "모두 완성" : star < 5 ? `재능 ★${star + 1}` : TRANS_NAME[tr + 1];
+  const next = star < 5 ? `재능 ★${star + 1}` : TRANS_NAME[tr + 1];
+  if (atCapOf(k) || star >= 5) return modal({ emoji: s.emoji, title: T(`${s.name} 초월`, `${s.name} breakthrough`),
+    html: `<ul class="tip-list"><li>${T("지금 재능", "Talent")} <b>${talentStr(k)}</b>, ${T("능력치", "stat")} <b>${Math.round(S.stats[k])}</b> / ${T("최대", "max")} <b>${statCap(k)}</b></li>
+      ${tr < 3 ? `<li>${T(`🌌 초월 게이지 <b>${Math.round(tgOf(k))}%</b> · 다음 도전 성공 확률 <b>${transChance(k)}%</b>`, `🌌 Gauge <b>${Math.round(tgOf(k))}%</b> · next try <b>${transChance(k)}%</b>`)}</li>
+      <li>${T(`최대치에 닿으면 훈련이 <b>초월 도전</b>이 돼요. 확률 = 기본 ${TR_BASE[tr]}% + 재능 ★ ${star}% + 게이지 × 0.1. 실패할 때마다 게이지가 차고, 꽉 차면 다음 도전은 <b>확정 성공</b>이에요(최대 ${TR_PITY[tr] + 1}번).`, `At max, training becomes a <b>breakthrough try</b>. Chance = base ${TR_BASE[tr]}% + talent ★ ${star}% + gauge × 0.1. Each fail fills the gauge; when full the next try <b>always succeeds</b> (at most ${TR_PITY[tr] + 1} tries).`)}</li>
+      <li>${T("성공하면 초월 단계 +1, 최대치 +2, 능력치 +1~2. 피로는 보통 훈련의 절반이에요. MOM·해외 연수·재능 개발 프로그램도 게이지를 채워요.", "Success: +1 tier, max +2, stat +1~2. Half the usual fatigue. MOM, training camps and the talent program also fill the gauge.")}</li>`
+      : `<li>${T("🎯 초월 III 완성! 이제 이 능력치 훈련은 <b>감각 훈련</b>이에요. 다음 경기에서만 이 능력치가 +5로 계산돼요(피로 절반).", "🎯 Transcendence III complete! Training this stat is now <b>sharpness</b>: +5 to it for your next match only (half fatigue).")}</li>`}
+      <li>${T("초월은 Ⅰ~Ⅲ까지, 단계마다 최대치가 2씩 올라 105까지 가고 나이 들어 떨어지는 폭도 줄어요. 라이벌과 세계의 모든 선수도 같은 확률 규칙이에요.", "Tiers I-III raise the max by 2 each (up to 105) and slow aging decline. Your rival and every player use the same odds.")}</li></ul>`,
+    buttons: [{ label: T("닫기", "Close"), value: 1, cls: "btn-primary" }] });
   modal({ emoji: s.emoji, title: `${s.name} 숙련도`,
     html: `<ul class="tip-list"><li>지금 재능 <b>${talentStr(k)}</b>, 능력치 <b>${Math.round(S.stats[k])}</b> / 최대 <b>${statCap(k)}</b></li>
       <li>숙련도 <b>${need ? `${have} / ${need}` : "완성"}</b>${need ? ` · 다 차면 <b>${next}</b>` : ""}</li>
-      <li>이 능력치를 훈련할수록 숙련도가 쌓여요. 최대치에 닿은 뒤에는 3배로 쌓이고, 넘친 훈련량은 가장 낮은 주력 능력치로 가요. MOM, 해외 연수, 재능 개발 프로그램으로도 올라요.</li>
-      <li>재능 ★이 높을수록 훈련으로 오르는 폭이 커져요. ★5 다음은 초월(Ⅰ~Ⅲ)이고, 단계마다 최대치가 2씩 올라 105까지 가요.</li></ul>`,
+      <li>이 능력치를 훈련할수록 숙련도가 쌓여요. 최대치(99)에 닿으면 훈련이 🌌 초월 도전으로 바뀌어요. MOM, 해외 연수, 재능 개발 프로그램으로도 올라요.</li>
+      <li>재능 ★이 높을수록 훈련으로 오르는 폭이 커지고, 최대치에서 초월 성공 확률도 올라가요. 초월(Ⅰ~Ⅲ)은 단계마다 최대치를 2씩 올려 105까지 가요.</li></ul>`,
     buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }] });
 }
 function shortName(n) { return n.length > 7 ? n.slice(0, 7) + "…" : n; }
@@ -1749,6 +1765,16 @@ function migrateLife() {
   if (S.trust == null) S.trust = 50;
   S.mast = S.mast || {}; S.trans = S.trans || {};
   S.rival.mast = S.rival.mast || {}; S.rival.trans = S.rival.trans || {};
+  // v2.2: ★5 뒤(또는 최대치에서) 쌓아 둔 숙련은 같은 비율만큼 초월 게이지로 옮겨요
+  if (S.trV !== 1) {
+    for (const E of [S, S.rival]) for (const k of STAT_KEYS) {
+      const m = (E.mast && E.mast[k]) || 0, tr = trOf(k, E);
+      if (!m || tr >= 3) continue;
+      if (E.talent[k] >= 5) { addTg(k, Math.min(95, m / [30, 40, 50][tr] * 100), E); E.mast[k] = 0; }
+      else if (atCapOf(k, E)) { addTg(k, Math.min(95, m / MAST_NEED[E.talent[k]] * 100), E); E.mast[k] = 0; }
+    }
+    S.trV = 1;
+  }
 }
 function openHelp() {
   modal({
@@ -1761,7 +1787,7 @@ function openHelp() {
       <p><b>🎉 피버 타임 · 📢 공지 · 🏛️ 세계 명예의 전당</b><br/>운영 이벤트 기간에는 화면 위에 피버 띠가 뜨고 훈련·숙련·명성·수당 보너스가 붙어요. 공지는 타이틀과 📢 버튼에서 봐요. 은퇴하면 커리어가 세계 명예의 전당 랭킹에 올라가요.</p>
       <p><b>🏆 유스 대회</b><br/>8팀이 2개 조 풀리그를 치르고 조 1·2위가 4강, 결승으로 가요. 라이벌 팀과는 조별리그, 4강, 결승 어디서든 만날 수 있어요.</p>
       <p><b>☁️ 저장</b><br/>매 경기 결과가 바로 저장되고, 자동 클라우드 백업이 돼요. ⚙️ → ☁️에서 8자리 이전 코드로 다른 기기에서 이어하거나 구글 계정에 연동할 수 있어요.</p>
-      <p><b>⭐ 재능 · 🧬 각성 · 🌌 초월</b><br/>별 하나에 훈련 성장 +15%(★1 0.85배 ~ ★5 1.45배). 능력치 바 아래 보라 줄이 숙련도예요. 훈련(🔥버프 훈련은 2배), MOM, 해외 연수, 재능 개발 프로그램으로 차고, 다 차면 별 +1. ★5 다음은 초월 I~III: 최대치가 2씩 올라 105까지, 나이 들어 떨어지는 폭도 줄어요. 라이벌과 세계의 모든 선수도 같은 규칙으로 별이 오르고 초월해요(선수 프로필에서 확인).</p>
+      <p><b>⭐ 재능 · 🧬 각성 · 🌌 초월</b><br/>별 하나에 훈련 성장 +15%(★1 0.85배 ~ ★5 1.45배). 능력치 바 아래 보라 줄이 숙련도예요. 훈련(🔥버프 훈련은 2배), MOM, 해외 연수, 재능 개발 프로그램으로 차고, 다 차면 별 +1. 능력치가 최대치(99)에 닿으면 훈련이 🌌 초월 도전으로 바뀌어요: 확률로 초월 I~III(최대치 +2씩, 105까지), 실패할수록 하늘색 게이지가 차서 확률이 오르고 꽉 차면 확정 성공. 초월 III 뒤에는 🎯 감각 훈련(다음 경기만 +5). 라이벌과 세계의 모든 선수도 같은 규칙으로 별이 오르고 초월해요(선수 프로필에서 확인).</p>
       <p><b>⚔️ 라이벌</b><br/>라이벌도 매달 자라요. 대회 결승, 리그 맞대결, 득점왕, 발롱도르에서 계속 부딪혀요. 이벤트 선택으로 관계가 바뀌고 결말이 달라져요.</p>
       <p><b>🔥 승부처 미니게임</b><br/>경기 중 내 선수가 끼는 찬스가 오면 직접 해결해요. 포지션마다 자주 나오는 게 달라요.</p>
       <ul>

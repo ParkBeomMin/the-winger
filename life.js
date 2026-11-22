@@ -85,7 +85,7 @@ function shopBuy(it, key) {
 async function openShop(cat = "gear") {
   const row = (it) => {
     const lv = G(it.id);
-    if (it.id === "talentlab") return `<div class="shop-row tl"><span>${it.emoji}</span><div><b>${it.name} · ${fmtMoney(Math.round(it.cost()))}</b><small>${it.desc}</small><div class="tl-keys">${STATS.map((s) => { const nd = mastNeed(s.key); return `<button class="btn btn-ghost sm" data-buy="talentlab" data-k="${s.key}" ${S.money < it.cost() || !nd ? "disabled" : ""}>${s.emoji}${s.name} ${nd ? `${(S.mast && S.mast[s.key]) || 0}/${nd}` : "완성"}</button>`; }).join("")}</div></div></div>`;
+    if (it.id === "talentlab") return `<div class="shop-row tl"><span>${it.emoji}</span><div><b>${it.name} · ${fmtMoney(Math.round(it.cost()))}</b><small>${it.desc}</small><div class="tl-keys">${STATS.map((s) => { const nd = mastNeed(s.key); return `<button class="btn btn-ghost sm" data-buy="talentlab" data-k="${s.key}" ${S.money < it.cost() || (!nd && trOf(s.key) >= 3) ? "disabled" : ""}>${s.emoji}${s.name} ${nd && !atCapOf(s.key) ? `${(S.mast && S.mast[s.key]) || 0}/${nd}` : trOf(s.key) < 3 ? `🌌${Math.round(tgOf(s.key))}%` : T("완성", "Done")}</button>`; }).join("")}</div></div></div>`;
     if (it.cat === "item") return `<div class="shop-row"><span>${it.emoji}</span><div><b>${it.name}</b><small>${it.desc}</small></div><button class="btn btn-primary sm" data-buy="${it.id}" ${S.money < it.cost() ? "disabled" : ""}>${fmtMoney(Math.round(it.cost()))}</button></div>`;
     const max = it.cat === "give" ? (it.repeat ? 99 : 1) : it.price.length;
     const done = !it.repeat && lv >= max;
@@ -219,30 +219,30 @@ function checkFameUp() {
 }
 
 /* ---------- 🧬 재능 각성 · 🌌 초월 ----------
- * 능력치마다 숙련도가 쌓여요(훈련 1, 🔥버프 훈련 2, MOM 2, 연수·프로그램). 다 차면 재능 별 +1.
- * ★5 다음은 초월 I~III: 최대치 +2씩(99 → 105), 나이 들어 떨어지는 폭 -25%씩. */
-const MAST_NEED = [0, 12, 18, 26, 36, 30, 40, 50];   // [현재 단계] → 다음 단계까지. 단계 = 별(1~5) + 초월(0~3)
+ * 99 전: 능력치마다 숙련도가 쌓여요(훈련 1, 🔥버프 훈련 2, MOM 2, 연수·프로그램). 다 차면 재능 별 +1 (훈련 성장 배율).
+ * 99(최대치)부터: 그 능력치 훈련은 🌌 초월 도전. 성공 확률 = 기본(단계별) + 재능 ★ + 초월 게이지 × 0.1,
+ *   실패할 때마다 게이지가 차고 꽉 차면 다음 도전은 확정 성공(천장). 성공하면 최대치 +2, 능력치 +1~2.
+ *   ★5가 됐거나 최대치에 닿은 능력치의 숙련 보상(MOM·연수·프로그램)은 게이지로 들어가요.
+ * 초월 III(105) 다음은 🎯 감각 훈련: 다음 경기에서만 그 능력치 +5. 라이벌과 AI 선수도 같은 확률 규칙. */
+const MAST_NEED = [0, 12, 18, 26, 36];   // [지금 별] → 다음 별까지
+const TR_BASE = [5, 2, 1], TR_PITY = [16, 24, 32];   // 초월 I·II·III: 기본 확률(%), 천장(실패 횟수)
 const TRANS_NAME = ["", "초월 I", "초월 II", "초월 III"];
 const trOf = (k, E = S) => (E.trans && E.trans[k]) || 0;
 const talentLv = (k, E = S) => E.talent[k] + trOf(k, E);
-function mastNeed(k, E = S) { const lv = talentLv(k, E); return lv >= 8 ? 0 : MAST_NEED[lv]; }
+function mastNeed(k, E = S) { return E.talent[k] < 5 ? MAST_NEED[E.talent[k]] : 0; }
 function statCap(k, E = S) { return 99 + trOf(k, E) * 2; }
+const atCapOf = (k, E = S) => E.stats[k] >= statCap(k, E) - .05;
+const tgOf = (k, E = S) => (E.tg && E.tg[k]) || 0;
+const trStep = (tr) => 100 / TR_PITY[Math.min(2, tr)];
+function addTg(k, pts, E = S) { if (!E.tg) E.tg = {}; E.tg[k] = Math.round(Math.min(100, (E.tg[k] || 0) + pts) * 10) / 10; }
+function transChance(k, E = S) {
+  const tr = trOf(k, E); if (tr >= 3) return 0;
+  const g = tgOf(k, E); return g >= 100 ? 100 : Math.min(100, Math.round(TR_BASE[tr] + E.talent[k] + g * .1));
+}
 function talentStr(k, tal = S.talent[k], tr = trOf(k)) {
   return `${"★".repeat(tal)}${"☆".repeat(5 - tal)}${tr ? `<i class="trs">${"✦".repeat(tr)}</i>` : ""}`;
 }
-function addMast(k, n, E = S) {
-  if (E === S && typeof F === "function" && F("mast")) { const x = n * (1 + F("mast")); n = Math.floor(x) + (Math.random() < x % 1 ? 1 : 0); }
-  if (!E.mast) E.mast = {};
-  if (!E.trans) E.trans = {};
-  const out = [];
-  E.mast[k] = (E.mast[k] || 0) + n;
-  while (mastNeed(k, E) && E.mast[k] >= mastNeed(k, E)) {
-    E.mast[k] -= mastNeed(k, E);
-    const nm = STAT_NAME[k];
-    if (E.talent[k] < 5) { E.talent[k]++; out.push({ k, kind: "awake", msg: `🧬 재능 각성! ${nm} ★${E.talent[k] - 1} → ★${E.talent[k]}` }); }
-    else { E.trans[k] = trOf(k, E) + 1; out.push({ k, kind: "trans", msg: `🌌 초월! ${nm} ${TRANS_NAME[E.trans[k]]} · 최대치 ${statCap(k, E)}` }); }
-  }
-  if (!mastNeed(k, E)) E.mast[k] = 0;
+function awakeNotify(out, k, E) {
   if (E !== S) {   // 라이벌: 뉴스와 내 로그로만
     for (const o of out) if (o.kind === "trans" || E.talent[k] === 5) { news(`${o.kind === "trans" ? "🌌" : "🧬"} 라이벌 ${E.name}, ${STAT_NAME[k]} ${o.kind === "trans" ? TRANS_NAME[E.trans[k]] + " 도달" : "재능 ★5 각성"}`); addLog(`⚔️ 라이벌 ${E.name}: ${o.msg.replace(/^\S+\s/, "")}`); }
     return out;
@@ -250,6 +250,36 @@ function addMast(k, n, E = S) {
   for (const o of out) { addLog(o.msg); if (o.kind === "trans" || S.talent[k] === 5) news(`${o.kind === "trans" ? "🌌" : "🧬"} ${S.name}, ${STAT_NAME[k]} ${o.kind === "trans" ? TRANS_NAME[S.trans[k]] + " 도달" : "재능 ★5 각성"}`); }
   if (out.length) (S.awake = S.awake || []).push(...out);
   return out;
+}
+function addMast(k, n, E = S) {
+  if (E === S && typeof F === "function" && F("mast")) { const x = n * (1 + F("mast")); n = Math.floor(x) + (Math.random() < x % 1 ? 1 : 0); }
+  if (!E.mast) E.mast = {};
+  if (!E.trans) E.trans = {};
+  const out = [];
+  if (E.talent[k] < 5 && !atCapOf(k, E)) {
+    E.mast[k] = (E.mast[k] || 0) + n;
+    while (E.talent[k] < 5 && E.mast[k] >= MAST_NEED[E.talent[k]]) {
+      E.mast[k] -= MAST_NEED[E.talent[k]];
+      E.talent[k]++; out.push({ k, kind: "awake", msg: `🧬 재능 각성! ${STAT_NAME[k]} ★${E.talent[k] - 1} → ★${E.talent[k]}` });
+    }
+    if (E.talent[k] >= 5) { const left = E.mast[k]; E.mast[k] = 0; if (left && trOf(k, E) < 3) addTg(k, left * trStep(trOf(k, E)) / 2, E); }
+  } else if (trOf(k, E) < 3) addTg(k, n * trStep(trOf(k, E)) / 2, E);
+  return awakeNotify(out, k, E);
+}
+/* 🌌 초월 도전 한 번: 성공하면 단계 +1(최대치 +2, 능력치 +1~2), 실패하면 게이지 +천장 한 칸(× mult) */
+function transAttempt(k, E = S, mult = 1) {
+  const tr = trOf(k, E); if (tr >= 3) return null;
+  if (!E.trans) E.trans = {};
+  const ch = transChance(k, E);
+  if (Math.random() * 100 < ch) {
+    E.trans[k] = tr + 1; if (E.tg) E.tg[k] = 0;
+    const up = randi(1, 2), b = E.stats[k];
+    E.stats[k] = Math.min(statCap(k, E), E.stats[k] + up);
+    awakeNotify([{ k, kind: "trans", msg: `🌌 초월! ${STAT_NAME[k]} ${TRANS_NAME[E.trans[k]]} · 최대치 ${statCap(k, E)}` }], k, E);
+    return { ok: true, ch, up: E.stats[k] - b };
+  }
+  addTg(k, trStep(tr) * mult, E);
+  return { ok: false, ch, next: transChance(k, E) };
 }
 
 /* ---------- 세계의 AI 선수도 같은 규칙 ----------
@@ -265,18 +295,23 @@ const aiCap = (p, i) => 99 + aiTr(p, i) * 2;
 function aiTalentStr(p, k) { aiEnsure(p); const i = STAT_KEYS.indexOf(k); return talentStr(k, aiTal(p, i), aiTr(p, i)); }
 function aiAddMast(p, i, n) {
   aiEnsure(p);
-  p.ms[i] += n;
-  const out = [];
-  for (;;) {
-    const lv = aiTal(p, i) + aiTr(p, i);
-    if (lv >= 8 || p.ms[i] < MAST_NEED[lv]) break;
-    p.ms[i] -= MAST_NEED[lv];
-    const set = (s, v) => s.slice(0, i) + v + s.slice(i + 1);
-    if (aiTal(p, i) < 5) { p.tl = set(p.tl, aiTal(p, i) + 1); out.push(aiTal(p, i) === 5 ? "★5" : null); }
-    else { p.tr = set(p.tr, aiTr(p, i) + 1); out.push(TRANS_NAME[aiTr(p, i)]); }
+  const out = [], k = STAT_KEYS[i], set = (s, v) => s.slice(0, i) + v + s.slice(i + 1);
+  const tg = () => { if (!p.tg) p.tg = [0, 0, 0, 0, 0, 0]; return p.tg; };
+  // 옛 저장: ★5 뒤에 쌓아 둔 숙련은 같은 비율만큼 초월 게이지로
+  if (aiTal(p, i) >= 5 && p.ms[i] > 0) { if (aiTr(p, i) < 3) tg()[i] = Math.min(95, Math.round(tg()[i] + p.ms[i] / [30, 40, 50][aiTr(p, i)] * 100)); p.ms[i] = 0; }
+  for (let u = 0; u < n; u++) {
+    const tr = aiTr(p, i), cap = p.st[k] >= aiCap(p, i);
+    if (aiTal(p, i) < 5 && !cap) {
+      if (++p.ms[i] >= MAST_NEED[aiTal(p, i)]) { p.ms[i] = 0; p.tl = set(p.tl, aiTal(p, i) + 1); if (aiTal(p, i) === 5) out.push("★5"); }
+    } else if (tr < 3) {
+      const g = tg();
+      if (!cap) { g[i] = Math.min(100, Math.round((g[i] + trStep(tr) / 2) * 10) / 10); continue; }
+      const ch = g[i] >= 100 ? 100 : TR_BASE[tr] + aiTal(p, i) + g[i] * .1;
+      if (Math.random() * 100 < ch) { p.tr = set(p.tr, tr + 1); g[i] = 0; p.st[k] = Math.min(aiCap(p, i), p.st[k] + randi(1, 2)); out.push(TRANS_NAME[tr + 1]); }
+      else g[i] = Math.min(100, Math.round((g[i] + trStep(tr)) * 10) / 10);
+    }
   }
-  if (aiTal(p, i) + aiTr(p, i) >= 8) p.ms[i] = 0;
-  return out.filter(Boolean);
+  return out;
 }
 /* 한 시즌 동안 쌓인 숙련 — 나와 같은 규칙: 프로 한 시즌 훈련 18번(포지션 가중치대로 고르고 10%는 아무 능력치) + MOM 1회당 주력 +2 */
 function aiSeasonMast(p) {
