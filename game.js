@@ -1346,7 +1346,7 @@ async function seasonEnd() {
   S.career.awards.push(...awards.map((a) => `${P.season}시즌 ${a.name}`));
   S.career.awardScore = (S.career.awardScore || 0) + awards.reduce((x, a) => x + a.w, 0);
   S.career.peakOvr = Math.max(S.career.peakOvr, OVR());
-  S.career.seasons.push({ season: P.season, age: S.age, club: P.club, league: P.league, rank, apps: P.s.apps, starts: P.s.starts, g: P.s.g, a: P.s.a, cup: { ...P.cup }, avg: Math.round(myAvg * 100) / 100, awards: awards.map((a) => a.name), ovr: OVR(), gpm: Math.round(Object.values(S.lgs[P.league].table).reduce((s, t) => s + t.gf, 0) / Math.max(1, Object.values(S.lgs[P.league].table).reduce((s, t) => s + t.p, 0)) * 200) / 100, lgTop: LEAGUES.map((l) => { const t = topBy(l.id, "g", 1)[0]; return t ? t.s.g : 0; }), rv: { club: rvp.c, g: rs.g, a: rs.a, avg: Math.round(rs.avg * 100) / 100, b: rvB }, ballon: myB, pp: passPct(W.p.me.s), kp: W.p.me.s.kp || 0, tc: W.p.me.s.tc || 0, xg: Math.round((W.p.me.s.xg || 0) / 10) / 10 });
+  S.career.seasons.push({ season: P.season, age: S.age, club: P.club, league: P.league, rank, apps: P.s.apps, starts: P.s.starts, g: P.s.g, a: P.s.a, cup: { ...P.cup }, avg: Math.round(myAvg * 100) / 100, awards: awards.map((a) => a.name), ovr: OVR(), gpm: Math.round(Object.values(S.lgs[P.league].table).reduce((s, t) => s + t.gf, 0) / Math.max(1, Object.values(S.lgs[P.league].table).reduce((s, t) => s + t.p, 0)) * 200) / 100, lgTop: LEAGUES.map((l) => { const t = topBy(l.id, "g", 1)[0]; return t ? t.s.g : 0; }), rv: { club: rvp.c, g: rs.g, a: rs.a, avg: Math.round(rs.avg * 100) / 100, b: rvB }, ballon: myB, pp: passPct(W.p.me.s), kp: W.p.me.s.kp || 0, tc: W.p.me.s.tc || 0, ic: W.p.me.s.ic || 0, cl: W.p.me.s.cl || 0, bk: W.p.me.s.bk || 0, cs: W.p.me.s.cs || 0, sv: W.p.me.s.sv || 0, xg: Math.round((W.p.me.s.xg || 0) / 10) / 10 });
   const fameGain = awards.reduce((x, a) => x + Math.round(a.w / 2), 0) + (rank <= 3 ? 6 : 0);
   if (typeof track === "function") track("season_end", { season: P.season, age: S.age, tier: lg.tier, rank, goals: P.s.g, assists: P.s.a, ballon: myB || 0, ovr: OVR() });
   S.fame += fameGain;
@@ -1730,16 +1730,22 @@ function openRival() {
   });
   setTimeout(() => { const el = $("rvm-av"); if (el) el.appendChild(avatarCanvas(rv.look, rivalKit(), 80, { mood: "smug" })); }, 0);
 }
+/* 수비 기록 합계 (시즌 기록에 있는 것만. 옛 시즌은 태클만 있을 수 있어요) */
+function defTotals(seasons) {
+  const t = { tc: 0, ic: 0, cl: 0, cs: 0, sv: 0, n: 0 };
+  for (const s of seasons || []) { if (s.ic != null) t.n++; t.tc += s.tc || 0; t.ic += s.ic || 0; t.cl += s.cl || 0; t.cs += s.cs || 0; t.sv += s.sv || 0; }
+  return t;
+}
 function openCareer() {
-  const c = S.career;
+  const c = S.career, isDef = S.pos === "df" || S.pos === "gk", DT = defTotals(c.seasons);
   const yRows = S.youth.apps ? `<p class="small">유스 ${S.youth.apps}경기 ⚽${S.youth.g} 🅰️${S.youth.a} · 우승 ${S.youth.trophies}회 · 평균 ${avg(S.youth.ratings).toFixed(2)}</p>` : "";
-  const rows = c.seasons.map((s) => `<tr><td>${s.season}</td><td>${esc(shortName(s.club))}</td><td>${s.rank}</td><td>${s.apps}</td><td>${s.g}</td><td>${s.a}</td><td>${s.pp ?? "-"}</td><td>${s.kp ?? "-"}</td><td>${s.avg ? s.avg.toFixed(2) : "-"}</td><td>${s.ballon}</td></tr>`).join("");
+  const rows = c.seasons.map((s) => `<tr><td>${s.season}</td><td>${esc(shortName(s.club))}</td><td>${s.rank}</td><td>${s.apps}</td><td>${s.g}</td><td>${s.a}</td>${isDef ? `<td>${s.tc ?? "-"}</td><td>${s.ic ?? "-"}</td><td>${S.pos === "gk" ? (s.sv ?? "-") : (s.cs ?? "-")}</td>` : `<td>${s.pp ?? "-"}</td><td>${s.kp ?? "-"}</td>`}<td>${s.avg ? s.avg.toFixed(2) : "-"}</td><td>${s.ballon}</td></tr>`).join("");
   modal({
     title: "📊 커리어", wide: true,
-    html: `${yRows}${rows ? `<table class="tbl"><tr><th>시즌</th><th>클럽</th><th>순위</th><th>경기</th><th>⚽</th><th>🅰️</th><th>패스%</th><th>키패스</th><th>평점</th><th>발롱</th></tr>${rows}</table>` : "<p>아직 프로 기록이 없어요.</p>"}
+    html: `${yRows}${rows ? `<table class="tbl"><tr><th>시즌</th><th>클럽</th><th>순위</th><th>경기</th><th>⚽</th><th>🅰️</th>${isDef ? `<th>${T("태클", "Tkl")}</th><th>${T("가로채기", "Int")}</th><th>${S.pos === "gk" ? T("선방", "Saves") : T("무실점", "CS")}</th>` : `<th>패스%</th><th>키패스</th>`}<th>평점</th><th>발롱</th></tr>${rows}</table>` : "<p>아직 프로 기록이 없어요.</p>"}
       ${S.phase === "pro" && W && W.p.me.s.ap ? `<p class="label">이번 시즌 상세 (리그)</p>${seasonStatHTML(W.p.me.s)}` : ""}
       <p class="label">통산 기록 (지난 시즌까지)</p>
-      <div class="mystats"><span><b>${c.apps}</b><small>경기</small></span><span><b>${c.g}</b><small>⚽ 골</small></span><span><b>${c.a}</b><small>🅰️ 도움</small></span><span><b>${c.mom}</b><small>⭐ MOM</small></span><span><b>${c.caps || 0}</b><small>🇰🇷 A매치 · ${(c.ig || 0) + (c.wcG || 0)}골</small></span><span><b class="fm">${fameGrade(S.fame).name}</b><small>명성</small></span></div>
+      <div class="mystats"><span><b>${c.apps}</b><small>경기</small></span><span><b>${c.g}</b><small>⚽ 골</small></span><span><b>${c.a}</b><small>🅰️ 도움</small></span><span><b>${c.mom}</b><small>⭐ MOM</small></span>${isDef ? `<span><b>${DT.tc}</b><small>${T("🛡️ 태클", "🛡️ Tackles")}</small></span><span><b>${DT.ic}</b><small>${T("✂️ 가로채기", "✂️ Interceptions")}</small></span><span><b>${S.pos === "gk" ? DT.sv : DT.cs}</b><small>${S.pos === "gk" ? T("🧤 선방", "🧤 Saves") : T("🧱 무실점", "🧱 Clean sheets")}</small></span>` : ""}<span><b>${c.caps || 0}</b><small>🇰🇷 A매치 · ${(c.ig || 0) + (c.wcG || 0)}골</small></span><span><b class="fm">${fameGrade(S.fame).name}</b><small>명성</small></span></div>
       ${c.wc && c.wc.length ? `<div class="car-wc">${c.wc.map((w) => `<span>🌍 ${esc(w)}</span>`).join("")}</div>` : ""}
       ${c.awards.length ? `<p class="label">우승과 수상</p><div class="aw-list">${c.awards.map((a) => `<span>${a}</span>`).join("")}</div>` : ""}
       ${S.phase === "pro" ? `<div class="car-score"><span>현재 커리어 점수${DF().mult !== 1 ? ` (난이도 ${DF().name} ×${DF().mult})` : ""}</span><b>${careerScore()}</b><em>${gradeOf(careerScore())}</em></div>` : ""}`,
@@ -1819,9 +1825,9 @@ function hofDetailData() {
   const d = {
     adj: 1, ttl: S.title && typeof titleName === "function" ? titleName(S.title) : "", ag: S.age, org: S.origin, mom: c.mom | 0, caps: c.caps | 0, ig: ((c.ig || 0) + (c.wcG || 0)) | 0, fame: cut(fameGrade(S.fame).name, 16),
     y: S.youth ? [S.youth.apps | 0, S.youth.g | 0, S.youth.a | 0, S.youth.trophies | 0] : null,
-    s: c.seasons.slice(-25).map((s) => [s.season | 0, cut(s.club, 16), s.league | 0, s.rank | 0, s.apps | 0, s.g | 0, s.a | 0, Math.round((s.avg || 0) * 100), s.ballon | 0]),
+    s: c.seasons.slice(-25).map((s) => [s.season | 0, cut(s.club, 16), s.league | 0, s.rank | 0, s.apps | 0, s.g | 0, s.a | 0, Math.round((s.avg || 0) * 100), s.ballon | 0, s.tc | 0, s.ic | 0, s.cs | 0, s.sv | 0]),
     tr: c.trophies.slice(-20).map((t) => cut(t, 28)), aw: c.awards.slice(-20).map((t) => cut(t, 28)), wc: (c.wc || []).slice(0, 6).map((t) => cut(t, 20)),
-    rv: [S.h2h.w | 0, S.h2h.d | 0, S.h2h.l | 0], rvs: S.rival.career ? [S.rival.career.g | 0, S.rival.career.a | 0, S.rival.career.ballon | 0] : null,
+    rv: [S.h2h.w | 0, S.h2h.d | 0, S.h2h.l | 0], df: (() => { const t = defTotals(c.seasons); return [t.tc, t.ic, t.cl, t.cs, t.sv]; })(), rvs: S.rival.career ? [S.rival.career.g | 0, S.rival.career.a | 0, S.rival.career.ballon | 0] : null,
   };
   while (JSON.stringify(d).length > 5800 && (d.aw.length || d.s.length > 5)) { if (d.aw.length > 5) d.aw.shift(); else if (d.s.length > 5) d.s.shift(); else d.aw.shift(); }
   return d;
@@ -1836,10 +1842,13 @@ function openHofDetail(e, rank) {
   const head = `<div class="hd-head"><div class="hav" id="hd-av"></div><div><b>${esc(e.name)}</b>${hofTtl(e) ? `<i class="ttl">${esc(hofTtl(e))}</i>` : ""}<small>${POS[e.pos] ? POS[e.pos].name : ""}${ORIGINS[org] ? " · " + ORIGINS[org].flag + " " + ORIGINS[org].name : ""}${d && d.ag ? ` · ${N(d.ag)}세 은퇴` : ""}</small><span>${esc(gradeOf(hofAdj(e)))}</span></div><em>${rank ? rank + "위<br/>" : ""}${hofAdj(e)}점</em></div>`;
   const chips = [["경기", N(e.apps)], ["⚽ 골", N(e.g)], ["🅰️ 도움", N(e.a)], ["최고 능력치", N(e.peak)], ["🏆 우승", N(e.trophies)], ["🏅 발롱도르", N(e.ballon)]];
   if (d) chips.push(["⭐ MOM", N(d.mom)], [`A매치 · ${N(d.ig)}골`, N(d.caps)]);
+  const isDef = e.pos === "df" || e.pos === "gk", dfT = d && A(d.df).length === 5 ? d.df : null;
+  if (isDef && dfT) chips.push([T("🛡️ 태클", "🛡️ Tackles"), N(dfT[0])], [T("✂️ 가로채기", "✂️ Interceptions"), N(dfT[1])], e.pos === "gk" ? [T("🧤 선방", "🧤 Saves"), N(dfT[4])] : [T("🧱 무실점", "🧱 Clean sheets"), N(dfT[3])]);
   let html = head + `<div class="hd-chips">${chips.map(([k, v]) => `<div><b>${v}</b><small>${k}</small></div>`).join("")}</div>`;
   if (d && A(d.s).length) {
-    html += `<p class="label">시즌 기록</p><div class="hd-scroll"><table class="tbl"><tr><th>시즌</th><th>클럽</th><th>순위</th><th>경기</th><th>⚽</th><th>🅰️</th><th>평점</th><th>발롱</th></tr>${A(d.s).map((s) => { s = A(s); const lg = LEAGUES[N(s[2])]; return `<tr><td>${N(s[0])}</td><td>${lg ? lg.flag + " " : ""}${esc(shortName(String(s[1] || "")))}</td><td>${N(s[3]) || "-"}</td><td>${N(s[4])}</td><td>${N(s[5])}</td><td>${N(s[6])}</td><td>${s[7] ? (N(s[7]) / 100).toFixed(2) : "-"}</td><td>${N(s[8]) ? N(s[8]) + "위" : "-"}</td></tr>`; }).join("")}</table></div>`;
+    html += `<p class="label">시즌 기록</p><div class="hd-scroll"><table class="tbl"><tr><th>시즌</th><th>클럽</th><th>순위</th><th>경기</th>${isDef && dfT ? `<th>${T("태클", "Tkl")}</th><th>${T("가로채기", "Int")}</th><th>${e.pos === "gk" ? T("선방", "Sv") : T("무실점", "CS")}</th>` : "<th>⚽</th><th>🅰️</th>"}<th>평점</th><th>발롱</th></tr>${A(d.s).map((s) => { s = A(s); const lg = LEAGUES[N(s[2])]; return `<tr><td>${N(s[0])}</td><td>${lg ? lg.flag + " " : ""}${esc(shortName(String(s[1] || "")))}</td><td>${N(s[3]) || "-"}</td><td>${N(s[4])}</td>${isDef && dfT ? (s.length > 9 ? `<td>${N(s[9])}</td><td>${N(s[10])}</td><td>${N(e.pos === "gk" ? s[12] : s[11])}</td>` : "<td>-</td><td>-</td><td>-</td>") : `<td>${N(s[5])}</td><td>${N(s[6])}</td>`}<td>${s[7] ? (N(s[7]) / 100).toFixed(2) : "-"}</td><td>${N(s[8]) ? N(s[8]) + "위" : "-"}</td></tr>`; }).join("")}</table></div>`;
   } else if (e.club) html += `<p class="small">마지막 클럽: ${esc(e.club)}</p>`;
+  if (isDef && !dfT) html += `<p class="small">${T("수비 기록(태클 · 가로채기 · 무실점)은 v2.4.2 이후 은퇴한 선수부터 보여요", "Defensive stats (tackles, interceptions, clean sheets) show for players retired after v2.4.2")}</p>`;
   const tr = d ? A(d.tr) : [], aw = d ? A(d.aw) : [], wc = d ? A(d.wc) : [];
   if (tr.length || aw.length || wc.length) html += `<p class="label">우승과 수상</p><div class="aw-list">${[...tr.map((t) => "🏆 " + esc(t)), ...wc.map((t) => "🌍 월드컵 " + esc(t)), ...aw.map((t) => esc(t))].map((a) => `<span>${a}</span>`).join("")}</div>`;
   if (e.rival) html += `<p class="label">⚔️ 라이벌 ${esc(e.rival)}</p><p class="small">${h2h ? `맞대결 ${N(h2h[0])}승 ${N(h2h[1])}무 ${N(h2h[2])}패` : ""}${d && A(d.rvs).length === 3 ? ` · 라이벌 통산 ⚽${N(d.rvs[0])} 🅰️${N(d.rvs[1])} 🏅${N(d.rvs[2])}` : ""}</p>`;
