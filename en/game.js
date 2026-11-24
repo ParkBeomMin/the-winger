@@ -1066,6 +1066,16 @@ function joinClub(o) {
   if (!S.career.clubs) S.career.clubs = [];
   if (S.career.clubs[S.career.clubs.length - 1] !== o.club) S.career.clubs.push(o.club);
 }
+/* 지난 시즌 순위: 승강으로 리그가 바뀐 팀도 찾을 수 있게 모든 리그 표에서 찾아요 */
+function prevRankOf(club, lgNow) {
+  for (const [id, L] of Object.entries(S.lgs || {})) {
+    const t = L && L.table && L.table[club];
+    if (!t || !t.p) continue;
+    const r = sortedTable(+id).findIndex((x) => x[0] === club) + 1;
+    if (r > 0) return +id === lgNow ? `#${r}` : `#${r} (${LEAGUES[id].flag} ${LEAGUES[id].name})`;
+  }
+  return "-";
+}
 function offerScreen({ title, hint, offers, stay }) {
   return new Promise((resolve) => {
     show("scr-offers");
@@ -1073,11 +1083,12 @@ function offerScreen({ title, hint, offers, stay }) {
     $("of-title").textContent = title;
     $("of-hint").innerHTML = hint;
     const list = $("of-list");
-    list.innerHTML = offers.map((o, i) => {
+    list.innerHTML = "";   // 지난번 목록이 남지 않게
+    list.innerHTML = offers.map((o, i) => { try {
       const rv = o.club === S.rival.club;
       const p = Math.round(starterProb(o.club) * 100);
       const others = clubPlayers(o.club).filter((x) => x.id !== "me" && x.r === S.pos).sort((a, b) => pOvr(b) - pOvr(a));
-      const prevRank = S.lgs && S.lgs[o.league] && S.lgs[o.league].table[o.club].p ? rankOf(o.club) + "th" : "-";
+      const prevRank = prevRankOf(o.club, o.league);
       const cup = Object.entries(S.cups || {}).find(([, c]) => c.teams.includes(o.club));
       return `<button class="offer" data-i="${i}"><div class="crest-big">${crestHTML(o.club, 54)}</div>
         <div class="of-mid"><b>${esc(o.club)}</b><span>${LEAGUES[o.league].flag} ${LEAGUES[o.league].name} · Strength ${Math.round(o.str)} · Rank ${prevRank}</span>
@@ -1086,6 +1097,7 @@ function offerScreen({ title, hint, offers, stay }) {
         <span class="coach">${coachLine(o.club)}${FORMS[formOf(o.club)].roles.includes(S.pos) ? "" : ` · ⚠️ No ${ROLE_KO[S.pos]} slot`}</span>
         <span class="race">${ROLE_KO[S.pos]} rivals: ${others.slice(0, 3).map((x) => `${esc(x.n)}${x.id === "rv" ? "⚔️" : ""} ${Math.round(pOvr(x))}`).join(" · ")}</span>
         ${rv ? `<span class="rv">⚔️ Rival ${esc(S.rival.name)}'s team${S.rival.pos === S.pos ? " (same position, battle for a start!)" : " (you'd be teammates)"}</span>` : ""}</div></button>`;
+      } catch (e) { console.warn(e); return `<button class="offer" data-i="${i}"><div class="of-mid"><b>${esc(o.club)}</b><span>${LEAGUES[o.league] ? LEAGUES[o.league].flag + " " + LEAGUES[o.league].name : ""} · Strength ${Math.round(o.str)}</span></div></button>`; }
     }).join("") || `<p class="hint">No offers this time.</p>`;
     list.querySelectorAll("[data-i]").forEach((b) => b.onclick = () => { Sfx.good(); resolve(offers[+b.dataset.i]); });
     const st = $("of-stay");
