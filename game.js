@@ -892,9 +892,14 @@ async function runTournament() {
     if (r.mom) { S.money += 20; lines.push("💰 MOM 보너스 +20만"); }
     results.push({ label, opp, gf: r.gf, ga: r.ga, res: r.res, pk, rating: r.rating, rival });
     log.push(`${label} ${myName} ${r.gf}:${r.ga} ${opp}${pk}`);
-    if (!last) lines.push(`📋 ${label} 뒤 조 순위: ${grpRank(groups[myG]).map((n, i) => `${i + 1}.${n === myName ? "<b>" + esc(n) + "</b>" : esc(n)} ${tbl[n].pts}점`).join(" · ")}`);
+    // 조별리그: 내 경기 결과까지 넣은 조 순위 표 (1·2위가 4강)
+    if (!ko) {
+      rec(h, a, mineH ? r.gf : r.ga, mineH ? r.ga : r.gf);
+      const rows = grpRank(groups[myG]).map((n, i) => { const t = tbl[n]; return `<tr class="${n === myName ? "me" : ""}${i < 2 ? " up" : ""}"><td>${i + 1}</td><td class="gt-n">${esc(n)}</td><td>${t.p}</td><td>${t.w}-${t.d}-${t.l}</td><td>${t.gf - t.ga > 0 ? "+" : ""}${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`; }).join("");
+      lines.push(`<div class="gt"><div class="gt-h">📋 ${T(`${label} 후 조 순위`, `Group table after ${label}`)} <small>${T("1·2위 4강", "Top 2 to semis")}</small></div><table class="tbl gt-t"><tr><th>#</th><th>${T("팀", "Team")}</th><th>${T("경기", "P")}</th><th>${T("승-무-패", "W-D-L")}</th><th>${T("득실", "GD")}</th><th>${T("승점", "Pts")}</th></tr>${rows}</table></div>`);
+    }
     await showResult(r, lines, last ? "대회 결과 →" : "다음 경기 →");
-    return { hg: mineH ? r.gf : r.ga, ag: mineH ? r.ga : r.gf, win };
+    return { hg: mineH ? r.gf : r.ga, ag: mineH ? r.ga : r.gf, win, recd: !ko };
   };
   const grpRank = (gp) => [...gp].sort((x, y) => tbl[y].pts - tbl[x].pts || (tbl[y].gf - tbl[y].ga) - (tbl[x].gf - tbl[x].ga) || tbl[y].gf - tbl[x].gf);
   // 조별리그 3라운드 (같은 라운드의 다른 조 경기도 같이)
@@ -904,7 +909,7 @@ async function runTournament() {
       const [i, j, k, l] = RR[md];
       for (const [h, a] of [[gp[i], gp[j]], [gp[k], gp[l]]]) {
         const x = await play(h, a, `${"AB"[groups.indexOf(gp)]}조 ${md + 1}차전`, false, false);
-        rec(h, a, x.hg, x.ag);
+        if (!x.recd) rec(h, a, x.hg, x.ag);   // 내 경기는 결과 화면에서 이미 반영
       }
     }
   }
