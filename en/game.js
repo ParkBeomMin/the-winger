@@ -379,13 +379,20 @@ function renderMain() {
   }
   $("actions").innerHTML = html;
   if (ready) $("b-kick").onclick = (e) => { if (busy) return; e.currentTarget.disabled = true; proRound(); };
+  const yReady = !pro && S.pending === "tournament";
+  if (yReady) {
+    $("actions").innerHTML = `<div class="ready"><div class="ready-done">${T("✅ 이번 달 준비 끝", "✅ Ready for this month")}<small>${(S.lastAct && S.lastAct.txt) || ""} · ${T("컨디션", "Condition")} ${Math.round(S.cond)}</small></div>
+      <button class="btn btn-primary" id="b-tour">${T("🏆 대회장으로", "🏆 To the tournament")}<small>${esc(tourName())}</small></button></div>`;
+    $("b-tour").onclick = (e) => { if (busy) return; e.currentTarget.disabled = true; runTournament(); };
+    if (S.lastAct && S.lastAct.key) { const i = STATS.findIndex((s) => s.key === S.lastAct.key); const row = $("stats").querySelectorAll(".st")[i]; if (row) row.classList.add("up"); }
+  }
   if (ready && S.lastAct && S.lastAct.key) { const i = STATS.findIndex((s) => s.key === S.lastAct.key); const row = $("stats").querySelectorAll(".st")[i]; if (row) row.classList.add("up"); }
   $("actions").querySelectorAll("[data-train]").forEach((b) => b.onclick = () => turn({ kind: "train", key: b.dataset.train }, b));
   $("actions").querySelectorAll("[data-bold]").forEach((b) => b.onclick = () => { S.bold = b.dataset.bold === "1"; if (typeof Sfx !== "undefined") Sfx.tap(); renderMain(); });
   const rs = $("actions").querySelector("[data-rest]"); if (rs) rs.onclick = (e) => turn({ kind: "rest" }, e.currentTarget);
   const au = $("actions").querySelector("[data-auto]"); if (au) au.onclick = openAuto;
   const qk = $("actions").querySelector("[data-quick]"); if (qk) qk.onclick = quickSeason;
-  $("actions-title").textContent = ready ? `Ready for kickoff` : pro ? `Prepare for this round (once before the match)` : `What will you do this month?`;
+  $("actions-title").textContent = ready || yReady ? `Ready for kickoff` : pro ? `Prepare for this round (once before the match)` : `What will you do this month?`;
 
   const hb = [...(pro ? [["league", "🏆", "World"], ["squad", "👥", "Squad"], ["news", "📰", "News"]] : []), ["career", "📊", "Career"], ["rival", "🆚", "Rival"], ...(S.shopOpen ? [["shop", "🛍️", "Shop"]] : []), ["notice", "📢", "Notices"], ["menu", "⚙️", "Menu"]];
   $("hud-btns").style.setProperty("--n", hb.length);
@@ -537,8 +544,9 @@ async function turn(a, btn, fromAuto = false) {
     if (S.phase === "youth") {
       const left = S.month <= 6 ? 6 - S.month : 12 - S.month;
       if (left === 0) {
+        // 대회 달: 바로 대회로 넘어가지 않고 메인에 "대회장으로" 버튼 (프로의 "경기장으로"와 같은 흐름)
         S.pending = "tournament"; save(); busy = false;
-        await runTournament();
+        renderMain(); window.scrollTo({ top: Math.max(0, $("actions").getBoundingClientRect().top + window.scrollY - 220), behavior: "smooth" });
         return "stop";
       }
       nextMonth();
@@ -841,9 +849,10 @@ function scoutHTML() {
     ${s.next ? `<div class="sc-n">About +${s.need} overall and ${s.next.lg.flag} <b>${esc(s.next.club)}</b> (${s.next.lg.name}) will take notice too</div>` : ""}
     <div class="sc-t">${S.year === 3 && S.month === 12 ? "Pro offers will come soon based on this" : "Rises with your rating, fame and tournament results. Pro offers at youth graduation are decided by it"}</div></div>`;
 }
+function tourName() { return S.month === 12 ? (S.year === 3 ? "Youth Championship · Pro scouts are watching" : "Youth Championship") : "Spring Youth League"; }
 async function runTournament() {
   const final = S.month === 12;
-  const name = final ? (S.year === 3 ? "Youth Championship · Pro scouts are watching" : "Youth Championship") : "Spring Youth League";
+  const name = tourName();
   const base = 38 + S.year * 6;
   const me = { id: "me", n: S.name, r: S.pos }, rv = { id: "rv", n: S.rival.name, r: S.rival.pos };
   const myName = ORIGINS[S.origin].team;
@@ -1890,7 +1899,7 @@ async function resume() {
   if (S.phase === "pro") syncTrust();
   show("scr-main"); renderMain();
   if (!S.pending && typeof dailyCheck === "function") setTimeout(dailyCheck, 500);
-  if (S.pending === "tournament") await runTournament();
+  if (S.pending === "tournament") { /* 메인의 '대회장으로' 버튼에서 시작 */ }
   else if (S.pending === "match") { /* 메인의 '경기장으로' 버튼에서 시작 */ }
   else if (S.pending === "cups") await roundTail();
   else if (S.pending === "season") await seasonEnd();
