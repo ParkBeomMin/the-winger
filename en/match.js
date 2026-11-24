@@ -115,20 +115,26 @@ function playMatch(root, cfg) {
     });
     root.querySelector("#m-skip").onclick = () => { skipping = true; auto = true; speed = 40; paintAuto(); };
 
-    /* ================= 2D 경기 연출 엔진 =================
+    /* ================= 2D 경기 연출 엔진 v3 =================
      * 결과(골·선방·카드·교체)는 world.js 엔진이 정해요. 여기서는 그걸 실제 축구처럼 보여줘요.
-     *  · 빌드업(후방 → 중원 → 공격), 짧은 패스·백패스·측면 전환·롱볼·스루패스·크로스, 공 높이(그림자)
-     *  · 압박 1명 + 커버 1명 + 지역 마킹, 수비 라인 유지, 오프사이드 라인, 풀백 오버래핑, 뒷공간 침투, 패스 각 만들어 주기
-     *  · 태클로 흘러나온 공 다툼, 스로인 · 코너킥 · 골킥 · 프리킥
-     *  · 찬스는 엔진이 고른 슈터 · 도움 · 수비 · 키퍼가 직접 움직이는 장면 (키퍼 다이빙, 내 골은 슬로 리플레이) */
+     * 참고: Mat Buckland "Simple Soccer"(팀 상태 · 서포트 스팟 · 패스 안전 검사), 실제 경기 속도 비율.
+     *  · 모든 움직임을 미터 단위로 계산(경기장 105 x 68 m). 선수 3.5~7.5 m/s, 패스 12~20 m/s, 슈팅 28 m/s
+     *    → 화면에선 시간만 VIS배 빠르게(공과 선수 속도 비율은 실제와 같아요)
+     *  · 공 가진 선수는 잠깐 보고(0.6~1.8초) 판단: 안전한 패스(상대가 길목에 먼저 못 오는 패스)만 골라요
+     *  · 받는 선수가 공 쪽으로 마중 나가고, 길목에 들어온 상대는 실제로 공을 끊어요
+     *  · 팀 블록: 수비 땐 좁고 짧게(공 쪽으로 쏠림), 공격 땐 넓고 길게. 서포트 스팟(Buckland)으로 패스 각 만들기
+     *  · 압박 1 + 커버 1 + 지역 마킹, 수비 라인 맞추기(오프사이드 라인), 선수끼리 겹치지 않게 밀어내기
+     *  · 태클로 흘러나온 공 다툼, 스로인 · 코너킥 · 골킥 · 프리킥, 찬스 장면은 playChance */
     const DIR = { home: 1, away: -1 };
     const other = (s) => s === "home" ? "away" : "home";
+    const PW = 105, PH = 68, VIS = 1.9;               // 경기장 크기(m), 화면 시간 배속
+    const SPD = { walk: 2, jog: 4, run: 6, sprint: 7.6 }; // m/s
     function kickPos(side, bx) { return side === "home" ? Math.min(bx * .9, .46) : Math.max(1 - (1 - bx) * .9, .54); }
     function mkTeam(side) {
       const F = FORMS[formOfSide[side]] || FORMS["4-3-3"];
       return roster[side].map((_, i) => F.pos[i] || F.pos[F.pos.length - 1]).map((f, i) => {
         const bx = side === "home" ? f[0] : 1 - f[0], by = side === "home" ? f[1] : 1 - f[1];
-        return { i, side, role: F.roles[i] || "mf", bx, by, x: kickPos(side, bx), y: by, vx: 0, vy: 0, ph: Math.random() * 6, runT: 0, stun: 0, dive: 0, diveY: 0, lunge: 0 };
+        return { i, side, role: F.roles[i] || "mf", fx: f[0], bx, by, x: kickPos(side, bx), y: by, vx: 0, vy: 0, ph: Math.random() * 6, runT: 0, stun: 0, dive: 0, diveY: 0, lunge: 0 };
       });
     }
     const teams = { home: mkTeam("home"), away: mkTeam("away") };
@@ -141,7 +147,7 @@ function playMatch(root, cfg) {
     let carrier = teams.home[9], flight = null, loose = null, decide = .6, director = null, restart = null, tag = null;
     let minute = 0, paused = true, zoom = 1, zoomTarget = 1, focus = null;
     let script = null, trail = [], replayMode = false, banner = null, rec = null, playback = null;
-    let gf = 0, ga = 0;
+    let gf = 0, ga = 0, support = [], supT = 0, tackleT = 0;
     const st = { goals: 0, assists: 0, saves: 0, moments: [], events: [], ge: [] };
     const strOf = (s) => s === "home" ? homeStr : awayStr;
     const isMeP = (p) => p.side === "home" && roster.home[p.i] && roster.home[p.i].id === "me";
@@ -149,146 +155,156 @@ function playMatch(root, cfg) {
     const fwdIdx = (side) => { const t = teams[side]; const f = t.find((p) => p.role === "fw" && active(p)) || t.find((p) => p.role !== "gk" && active(p)); return f || t[t.length - 1]; };
     const numOf = (side, i) => { const p = roster[side][i]; if (!p) return ""; return p.id === "me" ? (me.look && me.look.number) || "" : p.id === "rv" ? (cfg.rival && cfg.rival.number) || "" : p.no || ""; };
     const shortN = (n) => { const s = String(n || ""); return s.includes(" ") ? s.split(" ").slice(-1)[0] : s; };
-    const dist = (a, b) => Math.hypot((a.x - b.x) * 1.6, a.y - b.y);   // 경기장이 가로로 길어서 x를 늘려 재요
+    const dist = (a, b) => Math.hypot((a.x - b.x) * 1.6, a.y - b.y);   // 옛 단위(찬스 장면이 써요)
+    const dm = (a, b) => Math.hypot((a.x - b.x) * PW, (a.y - b.y) * PH); // 미터
     const nearest = (side, pt, excl) => { let best = null, bd = 9; for (const p of teams[side]) { if (!active(p) || p === excl || p.stun > 0) continue; const d = dist(p, pt); if (d < bd) { bd = d; best = p; } } return [best, bd]; };
+    const nearestM = (side, pt, excl) => { let best = null, bd = 999; for (const p of teams[side]) { if (!active(p) || p === excl || p.stun > 0) continue; const d = dm(p, pt); if (d < bd) { bd = d; best = p; } } return [best, bd]; };
     const progOf = (side, x) => side === "home" ? x : 1 - x;   // 0 = 우리 골문, 1 = 상대 골문
     const absX = (side, pr) => side === "home" ? pr : 1 - pr;
     const goalX = (side) => side === "home" ? 1 : 0;           // side가 공격하는 골문
-    const paceOf = (p) => { const pl = roster[p.side][p.i]; let v = 70; try { v = pl ? (pl.id === "me" ? me.stats.spd : eff(pl, "spd")) : 70; } catch { /* 기본값 */ } return .82 + clamp(v, 35, 105) / 300; };
+    const paceOf = (p) => { const pl = roster[p.side][p.i]; let v = 70; try { v = pl ? (pl.id === "me" ? me.stats.spd : eff(pl, "spd")) : 70; } catch { /* 기본값 */ } return .86 + clamp(v, 35, 105) / 420; };
+    const statOf = (p, k) => { const pl = roster[p.side][p.i]; try { return pl ? (pl.id === "me" ? me.stats[k] : eff(pl, k)) : 65; } catch { return 65; } };
     const isFB = (p) => p.role === "df" && Math.abs(p.by - .5) > .28;
     const say = (t) => { tag = { t, until: performance.now() + 1100 }; };
 
     function kickoff(side) {
       for (const s of ["home", "away"]) for (const p of teams[s]) { p.x = kickPos(s, p.bx); p.y = p.by; p.vx = p.vy = 0; p.runT = 0; p.stun = 0; p.dive = 0; }
       possession = side; lastTouch = side; carrier = fwdIdx(side); carrier.x = .5 - DIR[side] * .01; carrier.y = .5;
-      flight = null; loose = null; restart = null; ball = { x: .5, y: .5, z: 0 }; decide = .5;
+      flight = null; loose = null; restart = null; ball = { x: .5, y: .5, z: 0 }; decide = .9;
     }
-    function takeBall(p) { carrier = p; possession = p.side; lastTouch = p.side; flight = null; loose = null; decide = rand(.35, .8); }
+    function takeBall(p) { carrier = p; possession = p.side; lastTouch = p.side; flight = null; loose = null; p.drib = null; decide = rand(.5, 1.1); }
 
-    /* ---- 공 차기: 땅볼/띄운 공, 받는 사람(없으면 흘러나온 공), 끝나면 콜백 ---- */
+    /* ---- 공 차기: 거리/속도(m/s)로 비행 시간 계산. 땅볼은 점점 느려지고, 띄운 공은 포물선 ---- */
     function kick(from, to, o = {}) {
-      const d = dist(from, to);
-      const spd = o.speed || (o.h ? .62 : .78);
-      flight = { from: { x: ball.x, y: ball.y }, to: { x: to.x, y: to.y }, t: 0, dur: clamp(d / spd, .16, 1.7), h: o.h || 0, recv: o.recv || null, onEnd: o.onEnd || null, kind: o.kind || "pass" };
+      const d = dm(ball, to);
+      let v = o.mps || (o.speed ? o.speed * 20 : o.kind === "shot" ? 28 : o.h ? 19 : 14);
+      flight = { from: { x: ball.x, y: ball.y }, to: { x: to.x, y: to.y }, t: 0, dur: clamp(d / v, .25, 3.2), h: o.h || 0, recv: o.recv || null, onEnd: o.onEnd || null, kind: o.kind || "pass", owner: from && from.side };
       if (from && from.side) lastTouch = from.side;
+      if (carrier) carrier.drib = null;
       carrier = null; loose = null;
-      if (Sfx.kick && (d > .22 || o.kind === "shot")) Sfx.kick();
+      if (Sfx.kick && (d > 18 || o.kind === "shot")) Sfx.kick();
     }
     const flyDone = () => new Promise((res) => { if (flight) flight.onEnd = res; else res(); });
 
-    /* 패스: 길목 차단 · 부정확한 패스(밖으로 나가면 스로인 등) */
-    function passTo(from, to, o = {}) {
-      const lead = o.lead || .03;
-      const tgt = { x: to.x + DIR[to.side] * lead, y: to.y };
-      const len = dist(from, tgt), opp = other(from.side);
-      const [, pd] = nearest(opp, from);
-      let err = .05 + (len > .35 ? .07 : 0) + (o.h ? .07 : 0) + (pd < .05 ? .08 : 0);
-      if (director && director.side === opp && director.min - minute < 3) err += .12;   // 곧 상대 찬스: 공을 잃기 쉬워요
-      if (Math.random() < err) { tgt.x += rand(-.12, .12); tgt.y += rand(-.14, .14); return kick(from, tgt, { h: o.h, kind: "miss" }); }
-      if (!o.h) {   // 땅볼: 길목에 있는 상대가 끊어요
-        const mid = { x: (from.x + tgt.x) / 2, y: (from.y + tgt.y) / 2 };
-        const [cut, cd] = nearest(opp, mid);
-        const cutP = clamp(.42 - cd * 8, 0, .4) * Math.exp((strOf(opp) - strOf(from.side)) / 30);
-        if (cut && Math.random() < cutP) return kick(from, { x: cut.x, y: cut.y }, { recv: cut });
+    /* Buckland: 패스 길목 안전 검사. 상대가 공보다 먼저 길목에 닿으면 위험(0), 여유 있으면 1 */
+    function passSafety(from, to, v) {
+      const ax = from.x * PW, ay = from.y * PH, bx = to.x * PW, by = to.y * PH, L = Math.hypot(bx - ax, by - ay) || 1;
+      let worst = 1;
+      for (const o of teams[other(from.side || possession)]) {
+        if (!active(o)) continue;
+        const ox = o.x * PW, oy = o.y * PH;
+        const tproj = clamp(((ox - ax) * (bx - ax) + (oy - ay) * (by - ay)) / (L * L), 0, 1);
+        const px = ax + (bx - ax) * tproj, py = ay + (by - ay) * tproj;
+        const tb = (L * tproj) / v, to_ = Math.max(0, Math.hypot(ox - px, oy - py) - 1.2) / (SPD.sprint * paceOf(o)) + .25;
+        worst = Math.min(worst, clamp((to_ - tb) / .8 + .5, 0, 1));
       }
-      kick(from, tgt, { h: o.h, recv: to, speed: o.speed });
+      return worst;
+    }
+    function passTo(from, to, o = {}) {
+      const v = o.h ? 19 : 14;
+      const lead = o.lead != null ? o.lead : 2.5;                  // 받는 사람 앞쪽(m)
+      const tgt = { x: clamp(to.x + DIR[to.side] * lead / PW, .01, .99), y: to.y };
+      const [, pd] = nearestM(other(from.side), from);
+      let err = .05 + (dm(from, tgt) > 30 ? .08 : 0) + (o.h ? .06 : 0) + (pd < 3 ? .07 : 0) + Math.max(0, (70 - statOf(from, "pas")) / 400);
+      if (director && director.side === other(from.side) && director.min - minute < 3) err += .1;   // 곧 상대 찬스
+      if (Math.random() < err) { tgt.x += rand(-8, 8) / PW; tgt.y += rand(-7, 7) / PH; kick(from, tgt, { h: o.h, mps: v, kind: "miss" }); return; }
+      kick(from, tgt, { h: o.h, recv: to, mps: v });
     }
     /* 띄운 공 착지: 근처에서 공중볼 다툼 (수비가 이기면 걷어내기) */
     function aerial(pt, atkSide) {
       const near = [];
-      for (const s of ["home", "away"]) for (const p of teams[s]) if (active(p) && p.i !== 0 && dist(p, pt) < .09) near.push(p);
+      for (const s of ["home", "away"]) for (const p of teams[s]) if (active(p) && p.i !== 0 && dm(p, pt) < 5) near.push(p);
       const gk = teams[other(atkSide)][0];
       if (active(gk) && Math.abs(progOf(atkSide, pt.x) - 1) < .13 && Math.abs(pt.y - .5) < .25 && Math.random() < .55) { takeBall(gk); say(T("키퍼 캐치", "Keeper claims")); return; }
-      if (!near.length) { loose = { vx: rand(-.15, .15), vy: rand(-.15, .15) }; return; }
+      if (!near.length) { loose = { vx: rand(-3, 3), vy: rand(-3, 3) }; return; }
       const w = near.map((p) => (p.side === atkSide ? 1 : 1.5) * Math.exp((strOf(p.side) - strOf(other(p.side))) / 40) * Math.random());
       const win = near[w.indexOf(Math.max(...w))];
+      lastTouch = win.side;
       if (win.side !== atkSide && progOf(win.side, pt.x) < .35) {   // 자기 진영 수비: 머리로 걷어내기
-        lastTouch = win.side;
-        const away = { x: absX(win.side, clamp(progOf(win.side, pt.x) + rand(.25, .45), 0, 1.05)), y: clamp(pt.y + rand(-.35, .35), -.05, 1.05) };
-        kick(win, away, { h: .7, kind: "clear" });
-      } else { lastTouch = win.side; const mates = teams[win.side].filter((m) => m !== win && active(m) && m.i !== 0); const m = mates.sort((a, b) => dist(a, win) - dist(b, win))[Math.floor(Math.random() * 2)]; if (m) passTo(win, m, { lead: .01 }); else takeBall(win); }
+        kick(win, { x: absX(win.side, clamp(progOf(win.side, pt.x) + rand(.22, .4), 0, 1.05)), y: clamp(pt.y + rand(-.35, .35), -.05, 1.05) }, { h: .7, mps: 20, kind: "clear" });
+      } else { const m = teams[win.side].filter((q) => q !== win && active(q) && q.i !== 0).sort((a, b) => dm(a, win) - dm(b, win))[Math.floor(Math.random() * 2)]; if (m) passTo(win, m, { lead: .5 }); else takeBall(win); }
     }
-
-    /* 태클: 공이 흘러나와요 */
+    /* 태클: 공이 흘러나오거나 깔끔하게 뺏어요 */
     function tackle(by, victim) {
-      by.lunge = .35; victim.stun = .45; lastTouch = by.side;
+      by.lunge = .35; victim.stun = .5; lastTouch = by.side;
+      if (Math.random() < .5) { takeBall(by); return; }
       const a = Math.random() * Math.PI * 2;
       carrier = null; flight = null;
-      loose = { vx: Math.cos(a) * rand(.12, .3), vy: Math.sin(a) * rand(.12, .3) };
-      if (Math.random() < .55) { takeBall(by); }   // 깔끔하게 뺏기도
+      loose = { vx: Math.cos(a) * rand(3, 7), vy: Math.sin(a) * rand(3, 7) };
+    }
+
+    /* ---- 서포트 스팟(Buckland): 공 가진 선수 앞쪽 격자에서 패스 안전 + 전진 + 공간 + 거리로 점수 ---- */
+    function supportSpots(c) {
+      const s = c.side, cp = progOf(s, c.x), out = [];
+      for (let i = 0; i < 6; i++) for (let j = 0; j < 5; j++) {
+        const pr = clamp(cp - .06 + i * .07, .05, .92), y = .1 + j * .2;
+        const pt = { x: absX(s, pr), y }, d = dm(c, pt);
+        if (d < 9 || d > 34) continue;
+        const [, sp] = nearestM(other(s), pt);
+        const sc = passSafety(c, pt, 14) * 2 + (pr - cp) * 3 + Math.min(sp, 10) / 10 - Math.abs(d - 18) / 30;
+        out.push({ pt, sc });
+      }
+      return out.sort((a, b) => b.sc - a.sc);
     }
 
     /* ---- 공 가진 선수의 판단 ---- */
     function carrierDecide() {
       const c = carrier, s = c.side, d = DIR[s], opp = other(s), prog = progOf(s, c.x);
-      const [presser, pd] = nearest(opp, c);
+      const [, pdm] = nearestM(opp, c);
       const want = director && director.min - minute < 3 ? director.side : null;
-      let loseP = pd < .045 ? .22 * Math.exp((strOf(opp) - strOf(s)) / 25) : 0;
-      if (want === opp) loseP = Math.max(loseP, pd < .08 ? .45 : 0);
-      if (want === s) loseP *= .3;
-      if (presser && Math.random() < loseP) { tackle(presser, c); return; }
       const mates = teams[s].filter((p) => p !== c && active(p) && p.i !== 0 && p.stun <= 0);
       if (!mates.length) { decide = .5; return; }
-      // 골키퍼: 짧게 수비수에게, 가끔 길게
+      // 골키퍼: 짧게 수비수에게, 압박이 있으면 길게
       if (c.i === 0) {
-        if (Math.random() < .4) { const t = pick(mates.filter((m) => m.role === "fw" || m.role === "wg")) || pick(mates); passTo(c, t, { h: .9 }); }
-        else passTo(c, pick(mates.filter((m) => m.role === "df")) || pick(mates));
-        decide = rand(.6, 1); return;
+        const dfs = mates.filter((m) => m.role === "df").map((m) => [m, passSafety(c, m, 14)]).sort((a, b) => b[1] - a[1]);
+        if (dfs.length && dfs[0][1] > .6 && Math.random() < .65) passTo(c, dfs[0][0], { lead: 1 });
+        else { const f = pick(mates.filter((m) => m.role === "fw" || m.role === "wg" || m.role === "mf")) || pick(mates); const pt = { x: f.x, y: f.y }; kick(c, pt, { h: .9, mps: 22, kind: "long", onEnd: () => aerial(pt, s) }); }
+        decide = rand(.8, 1.4); return;
       }
-      // 자기 진영에서 압박받는 수비: 걷어내기
-      if (c.role === "df" && prog < .22 && pd < .05 && Math.random() < .5) {
-        kick(c, { x: absX(s, prog + rand(.3, .5)), y: clamp(c.y + rand(-.45, .45), -.05, 1.05) }, { h: .8, kind: "clear" });
+      // 자기 진영 깊은 곳에서 강하게 압박받는 수비: 걷어내기
+      if (c.role === "df" && prog < .2 && pdm < 2.5 && Math.random() < .55) {
+        kick(c, { x: absX(s, prog + rand(.3, .5)), y: clamp(c.y + rand(-.45, .45), -.05, 1.05) }, { h: .8, mps: 22, kind: "clear" });
         decide = 1; return;
       }
       const wide = Math.abs(c.y - .5) > .27;
-      // 측면 깊은 곳: 크로스 (수비가 머리로 걷어내기 쉬워요)
-      if (prog > .76 && wide && Math.random() < (want === s ? .25 : .5)) {
-        const pt = { x: absX(s, rand(.86, .93)), y: rand(.38, .62) };
-        kick(c, pt, { h: 1, kind: "cross", onEnd: () => aerial(pt, s) }); say(T("크로스", "Cross"));
+      // 측면 깊은 곳: 크로스
+      if (prog > .78 && wide && Math.random() < (want === s ? .3 : .55)) {
+        const pt = { x: absX(s, rand(.87, .93)), y: rand(.38, .62) };
+        kick(c, pt, { h: 1, mps: 19, kind: "cross", onEnd: () => aerial(pt, s) }); say(T("크로스", "Cross"));
         decide = 1; return;
       }
-      // 스루패스: 뒷공간으로 뛰는 동료
-      const runner = mates.find((m) => m.runT > 0 && progOf(s, m.x) > prog);
-      if (runner && prog > .4 && Math.random() < .45) {
-        const tgt = { x: clamp(runner.x + d * .12, .02, .98), y: runner.y };
-        const [def, dd] = nearest(opp, tgt);
-        if (def && dd < .07 && Math.random() < .5) kick(c, tgt, { recv: def, speed: .9 });
-        else { const gk = teams[opp][0]; kick(c, tgt, { recv: Math.abs(progOf(s, tgt.x) - 1) < .1 ? gk : runner, speed: .9 }); }
-        say(T("스루패스", "Through ball")); runner.runT = 0; decide = rand(.5, .9); return;
-      }
-      // 측면 전환 (반대편 측면이 비었을 때)
-      if (prog > .25 && prog < .7 && Math.random() < .1) {
-        const far = mates.filter((m) => Math.abs(m.y - c.y) > .45).sort((a, b) => nearest(opp, b)[1] - nearest(opp, a)[1])[0];
-        if (far) { passTo(c, far, { h: .75, lead: .05 }); say(T("측면 전환", "Switch")); decide = rand(.5, .9); return; }
-      }
-      // 롱볼 (수비 → 최전방)
-      if (c.role === "df" && prog < .4 && Math.random() < .1) {
-        const t = mates.filter((m) => m.role === "fw" || m.role === "wg").sort(() => Math.random() - .5)[0];
-        if (t) { const pt = { x: t.x + d * .04, y: t.y }; kick(c, pt, { h: .9, kind: "long", onEnd: () => aerial(pt, s) }); decide = 1; return; }
-      }
-      // 드리블: 앞쪽이 비었으면 빈 공간 쪽으로
-      const ahead = { x: c.x + d * .08, y: c.y };
-      const [, ad] = nearest(opp, ahead);
-      const dribP = (c.role === "wg" ? .5 : c.role === "fw" ? .4 : c.role === "mf" ? .28 : .18) * (want === s ? 1.3 : 1);
-      if (ad > .085 && Math.random() < dribP && !(want === s && prog > .72)) {
-        let best = null, bs = -9;
-        for (const ang of [-.7, -.35, 0, .35, .7]) { const pt = { x: c.x + d * Math.cos(ang) * .1, y: c.y + Math.sin(ang) * .1 }; if (pt.y < .04 || pt.y > .96) continue; const sc = nearest(opp, pt)[1] + Math.cos(ang) * .03; if (sc > bs) { bs = sc; best = ang; } }
-        c.drib = { ang: best || 0, t: rand(.5, 1.1) };
-        decide = c.drib.t; return;
-      }
-      // 패스: 앞으로 · 빈 곳 · 길목이 열린 곳. 압박받으면 백패스도
-      let best = null, bs = -9;
-      const kF = prog < .33 ? .8 : prog < .66 ? 1.6 : 1.1;
+      // 패스 후보 점수: 안전 × (전진 + 받는 사람 주변 공간) - 거리 부담
+      let best = null, bs = -9, bestSafe = 0;
+      const kF = prog < .33 ? .7 : prog < .66 ? 1.4 : 1;
       for (const m of mates) {
-        const fwd = d * (m.x - c.x), len = dist(c, m), [, open] = nearest(opp, m);
-        const mid = { x: (c.x + m.x) / 2, y: (c.y + m.y) / 2 }, [, lane] = nearest(opp, mid);
-        let sc = fwd * kF * (want === s ? 1.6 : 1) + Math.min(open, .15) * 4 + Math.min(lane, .1) * 3 - Math.abs(len - .2) * 1.2 + rand(-.3, .3);
-        if (fwd < 0 && pd < .07) sc += .35;
-        if (want === s && prog > .72) sc -= 1.5;
-        if (sc > bs) { bs = sc; best = m; }
+        const len = dm(c, m); if (len < 5 || len > 45) continue;
+        const safe = passSafety(c, m, len > 30 ? 19 : 14), fwd = (progOf(s, m.x) - prog) * PW;
+        const [, open] = nearestM(opp, m);
+        let sc = safe * 2.2 + fwd / 20 * kF * (want === s ? 1.5 : 1) + Math.min(open, 8) / 8 - Math.abs(len - 16) / 40 + rand(-.3, .3);
+        if (m.runT > 0 && fwd > 5) sc += .5;                     // 뒷공간으로 뛰는 동료
+        if (support.includes(m)) sc += .35;                      // 패스 각을 만든 동료
+        if (want === s && prog > .72) sc -= 1;
+        if (sc > bs) { bs = sc; best = m; bestSafe = safe; }
       }
-      if (best) passTo(c, best);
-      decide = rand(.5, 1.1);
+      // 앞이 비었으면 몰고 가기(드리블), 아니면 안전한 패스, 막혔으면 공 지키며 방향 전환
+      const ahead = { x: c.x + d * 8 / PW, y: c.y };
+      const [, ad] = nearestM(opp, ahead);
+      const dribP = (c.role === "wg" ? .55 : c.role === "fw" ? .45 : c.role === "mf" ? .3 : .2) * (want === s ? 1.3 : 1);
+      if (ad > 7 && Math.random() < dribP && !(want === s && prog > .72)) {
+        let ba = 0, bsc = -9;
+        for (const ang of [-.8, -.4, 0, .4, .8]) { const pt = { x: c.x + d * Math.cos(ang) * 10 / PW, y: c.y + Math.sin(ang) * 10 / PH }; if (pt.y < .05 || pt.y > .95) continue; const sc = nearestM(opp, pt)[1] + Math.cos(ang) * 3; if (sc > bsc) { bsc = sc; ba = ang; } }
+        c.drib = { ang: ba, t: rand(.8, 1.6) }; decide = c.drib.t; return;
+      }
+      if (best && (bestSafe > .45 || pdm < 3)) {
+        const isThrough = best.runT > 0 && (progOf(s, best.x) - prog) * PW > 12 && (best.role === "fw" || best.role === "wg");
+        passTo(c, best, { lead: isThrough ? 7 : 2.5 });
+        if (isThrough) { say(T("스루패스", "Through ball")); best.runT = 0; }
+        else if (Math.abs(best.y - c.y) > .5 && dm(c, best) > 30) say(T("측면 전환", "Switch"));
+        decide = rand(.7, 1.3); return;
+      }
+      // 마땅한 패스가 없으면: 공 지키며 옆/뒤로
+      c.drib = { ang: (Math.random() < .5 ? 1 : -1) * rand(1.3, 2.2), t: rand(.5, .9) };
+      decide = c.drib.t;
     }
 
     /* ---- 공이 밖으로: 스로인 · 코너킥 · 골킥 ---- */
@@ -306,102 +322,124 @@ function playMatch(root, cfg) {
     function setRestart(kind, side, at) {
       flight = null; loose = null; carrier = null; possession = side;
       ball = { x: at.x, y: at.y, z: 0 };
-      const taker = kind === "goalkick" ? teams[side][0] : nearest(side, at)[0] || teams[side][5];
-      restart = { kind, side, at, taker, wait: kind === "corner" ? 1.3 : kind === "free" ? 1 : .7 };
+      const taker = kind === "goalkick" ? teams[side][0] : nearestM(side, at)[0] || teams[side][5];
+      restart = { kind, side, at, taker, wait: kind === "corner" ? 1.6 : kind === "free" ? 1.2 : .9 };
       say(kind === "throw" ? T("스로인", "Throw-in") : kind === "corner" ? T("코너킥", "Corner") : kind === "goalkick" ? T("골킥", "Goal kick") : T("프리킥", "Free kick"));
     }
     function runRestart(sdt) {
       const r = restart, t = r.taker;
-      if (!active(t)) { r.taker = nearest(r.side, r.at)[0]; return; }
+      if (!active(t)) { r.taker = nearestM(r.side, r.at)[0]; return; }
       r.wait -= sdt;
-      if (dist(t, r.at) > .02 || r.wait > 0) return;
+      if (dm(t, r.at) > 1.2 || r.wait > 0) return;
       restart = null; lastTouch = r.side;
       const mates = teams[r.side].filter((m) => m !== t && active(m) && m.i !== 0);
-      if (r.kind === "corner") { const pt = { x: absX(r.side, rand(.86, .93)), y: rand(.36, .64) }; kick(t, pt, { h: 1, kind: "cross", onEnd: () => aerial(pt, r.side) }); return; }
-      if (r.kind === "goalkick" && Math.random() < .5) { const f = pick(mates.filter((m) => m.role !== "df")) || pick(mates); const pt = { x: f.x, y: f.y }; kick(t, pt, { h: .9, kind: "long", onEnd: () => aerial(pt, r.side) }); return; }
-      const near = mates.sort((a, b) => dist(a, t) - dist(b, t)).slice(0, 3);
-      const to = pick(near); if (to) passTo(t, to, { h: r.kind === "throw" ? .25 : 0 }); else takeBall(t);
+      if (r.kind === "corner") { const pt = { x: absX(r.side, rand(.87, .93)), y: rand(.36, .64) }; kick(t, pt, { h: 1, mps: 19, kind: "cross", onEnd: () => aerial(pt, r.side) }); return; }
+      if (r.kind === "goalkick" && Math.random() < .5) { const f = pick(mates.filter((m) => m.role !== "df")) || pick(mates); const pt = { x: f.x, y: f.y }; kick(t, pt, { h: .9, mps: 22, kind: "long", onEnd: () => aerial(pt, r.side) }); return; }
+      const near = mates.map((m) => [m, passSafety(t, m, 14) - dm(t, m) / 40]).sort((a, b) => b[1] - a[1]).slice(0, 2).map((x) => x[0]);
+      const to = pick(near); if (to) passTo(t, to, { h: r.kind === "throw" ? .25 : 0, lead: 1 }); else takeBall(t);
     }
 
-    /* ---- 공 없는 선수의 자리 ---- */
-    function lineOf(side) {   // 이 팀 수비 라인(진행도). 상대 공격수의 오프사이드 기준
-      const dfs = teams[side].filter((p) => active(p) && p.i !== 0).map((p) => progOf(side, p.x)).sort((a, b) => a - b);
-      return dfs.length ? dfs[0] : .2;
+    /* ---- 공 없는 선수의 자리: 팀 블록(수비 땐 좁고 짧게, 공격 땐 넓고 길게) ---- */
+    function lineOf(side) {   // 이 팀 마지막 수비수(골키퍼 제외)의 진행도 = 상대 오프사이드 기준
+      let m = 1; for (const p of teams[side]) if (active(p) && p.i !== 0) m = Math.min(m, progOf(side, p.x)); return m;
+    }
+    function homeOf(p) {
+      const s = p.side, has = possession === s, prog = progOf(s, ball.x);
+      const back = has ? clamp(prog - .34, .12, .52) : clamp(prog - .24, .07, .4);   // 수비 라인 높이
+      const span = has ? .5 : .34;                                                   // 수비 ~ 최전방 길이
+      const depth = clamp((p.fx - .2) / .48, 0, 1.1);
+      let pr = back + depth * span;
+      const wide = has ? 1.05 : .66;
+      let y = .5 + (p.by - .5) * wide + (ball.y - .5) * (has ? .12 : .4);
+      if (has) {
+        if (p.role === "wg") y = .5 + (p.by - .5) * 1.3;                             // 윙어는 터치라인 쪽
+        if (isFB(p) && Math.sign(ball.y - .5) === Math.sign(p.by - .5) && prog > .5) { pr += .22; y = p.by < .5 ? .08 : .92; }   // 오버래핑
+        if (p.runT > 0) pr = Math.max(pr, 1 - lineOf(other(s)) + .08);              // 뒷공간 침투
+        else if (p.role !== "df") pr = Math.min(pr, 1 - lineOf(other(s)) - .006);    // 오프사이드 라인
+      } else {
+        if (p.role === "fw") pr = Math.max(pr, .44); else if (p.role === "wg") pr = Math.max(pr, .34);   // 역습 대비
+      }
+      return { x: clamp(absX(s, pr), .03, .97), y: clamp(y, .05, .95) };
     }
     function targetOf(p) {
       const s = p.side, d = DIR[s], has = possession === s, prog = progOf(s, ball.x), opp = other(s);
-      if (p.i === 0) {   // 골키퍼: 골문 앞에서 공 쪽으로, 우리 공격 땐 조금 앞으로
-        const gx = s === "home" ? .03 : .97;
-        return { x: gx + d * (.01 + prog * (has ? .08 : .04)), y: .5 + (ball.y - .5) * .3 };
+      if (p.i === 0) {   // 골키퍼: 공과 골문 중앙을 잇는 선 위에서 골라인 가까이
+        const gx = s === "home" ? .02 : .98, out = has ? .1 : clamp((.5 - prog) * .12, .01, .07);
+        return { x: gx + d * out, y: .5 + (ball.y - .5) * .25 };
       }
-      // 팀 블록: 수비 라인 높이를 공 위치에 맞추고, 대형을 그 라인에서 펼쳐요
-      const line = has ? clamp(prog - .38, .14, .5) : clamp(prog - .26, .07, .42);
-      const fx = s === "home" ? p.bx : 1 - p.bx;          // 대형 안에서의 깊이(0 우리 골 ~ 1 상대 골)
-      let pr = line + (fx - .2) * (has ? 1.12 : .78);
-      const wide = has ? 1.08 : .72;
-      let y = .5 + (p.by - .5) * wide + (ball.y - .5) * (has ? .15 : .34);
-      if (has) {
-        // 풀백 오버래핑: 공이 같은 쪽 측면이고 상대 진영이면 높이 올라가요
-        if (isFB(p) && Math.sign(ball.y - .5) === Math.sign(p.by - .5) && prog > .45) { pr += .24; y = p.by < .5 ? .07 : .93; }
-        // 윙어는 터치라인 쪽으로 넓게
-        if (p.role === "wg") y = .5 + (p.by - .5) * 1.25;
-        // 뒷공간 침투
-        if (p.runT > 0) { pr = Math.max(pr, 1 - lineOf(opp) + .07); y += (.5 - y) * .25; }
-        // 오프사이드 라인: 침투 중이 아니면 상대 마지막 수비 라인을 넘지 않게
-        else if (p.role === "fw" || p.role === "wg" || p.role === "mf") pr = Math.min(pr, 1 - lineOf(opp) - .005);
-        // 패스 각 만들어 주기: 공 가진 선수 근처 두 명
-        if (carrier && carrier.side === s && p !== carrier && p.sup) { const a = p.sup; pr = pr * .4 + (progOf(s, carrier.x) + a[0]) * .6; y = y * .4 + (carrier.y + a[1]) * .6; }
-      } else {
-        // 지역 마킹: 내 구역의 상대 공격수 골문 쪽에 서요
-        const zone = { x: absX(s, pr), y };
-        const [mk, md] = nearest(opp, zone);
-        if (mk && md < .16 && mk !== carrier && (p.role === "df" || p.role === "mf")) { pr = pr * .4 + (progOf(s, mk.x) - .03) * .6; y = y * .4 + mk.y * .6; }
-        if (p.role === "df") pr = Math.min(pr, .62);
-        if (p.role === "fw") pr = Math.max(pr, .46); else if (p.role === "wg") pr = Math.max(pr, .36);   // 공격수는 역습 대비 높이 남아요
+      let t = homeOf(p);
+      if (!has && p.role !== "fw") {   // 지역 마킹: 내 구역의 상대 골문 쪽에 2 m
+        const [mk, md] = nearestM(opp, t);
+        if (mk && md < 11 && mk !== carrier) t = { x: mk.x - d * 2 / PW, y: mk.y + (.5 - mk.y) * .05 };
       }
-      y += Math.sin(performance.now() / 1300 + p.ph) * .015;
-      return { x: clamp(absX(s, pr), .03, .97), y: clamp(y, .04, .96) };
+      t.y += Math.sin(performance.now() / 1500 + p.ph) * .008;
+      return t;
     }
-    function stepPlayers(sdt) {
+    function steer(p, t, vmax, sdt) {   // 도착(arrive) 조향 + 가속 한계 (키퍼 다이빙은 순간 가속)
+      const dxm = (t.x - p.x) * PW, dym = (t.y - p.y) * PH, dd = Math.hypot(dxm, dym) || 1e-6;
+      const want = Math.min(vmax, dd * 1.4);
+      const tvx = dxm / dd * want, tvy = dym / dd * want;
+      const cvx = p.vx * PW, cvy = p.vy * PH, ax = tvx - cvx, ay = tvy - cvy, am = Math.hypot(ax, ay), lim = (p.dive > 0 ? 60 : 9) * sdt;
+      const k = am > lim ? lim / am : 1;
+      p.vx = (cvx + ax * k) / PW; p.vy = (cvy + ay * k) / PH;
+    }
+    function stepPlayers(dt) {
+      if (playback) return;
+      const sdt = dt * VIS;
       const defSide = other(possession);
       const ref = carrier || (flight ? flight.to : ball);
-      const order = teams[defSide].filter((p) => active(p) && p.i !== 0 && p.stun <= 0).sort((a, b) => dist(a, ref) - dist(b, ref));
+      const order = teams[defSide].filter((p) => active(p) && p.i !== 0 && p.stun <= 0).sort((a, b) => dm(a, ref) - dm(b, ref));
       const presser = order[0], cover = order[1];
-      // 패스 각 만들어 줄 두 명 (공 가진 팀, 가까운 순)
-      for (const s of ["home", "away"]) for (const p of teams[s]) p.sup = null;
-      if (carrier) {
-        const s = carrier.side, d = DIR[s];
-        const near = teams[s].filter((p) => p !== carrier && active(p) && p.i !== 0).sort((a, b) => dist(a, carrier) - dist(b, carrier)).slice(0, 2);
-        near.forEach((p, k) => { p.sup = [k ? -.06 : .07, (p.y < carrier.y ? -1 : 1) * (k ? .12 : .16)]; });
-        // 공격 3선은 가끔 뒷공간으로 뛰어요
-        if (progOf(s, carrier.x) > .35) for (const p of teams[s]) if ((p.role === "fw" || p.role === "wg") && p.runT <= 0 && Math.random() < sdt * .35) p.runT = rand(1, 1.8);
+      // 서포트(패스 각): 공 가진 선수 주변 두 명 (0.6초마다 다시 계산)
+      supT -= sdt;
+      if (carrier && !restart && supT <= 0) {
+        supT = .6; support = [];
+        const spots = supportSpots(carrier).slice(0, 4), used = new Set();
+        const cand = teams[carrier.side].filter((p) => p !== carrier && active(p) && p.i !== 0 && p.role !== "df");
+        for (const sp of spots) { if (support.length >= 2) break; const q = cand.filter((p) => !used.has(p)).sort((a, b) => dm(a, sp.pt) - dm(b, sp.pt))[0]; if (q && dm(q, sp.pt) < 22) { used.add(q); support.push(q); q.supPt = sp.pt; } }
+        // 공격수는 가끔 뒷공간으로
+        if (progOf(carrier.side, carrier.x) > .35) for (const p of teams[carrier.side]) if ((p.role === "fw" || p.role === "wg") && p.runT <= 0 && Math.random() < .12) p.runT = rand(1.4, 2.4);
       }
-      // 흘러나온 공: 양 팀 가장 가까운 한 명씩 달려가요
-      const chasers = loose ? [nearest("home", ball)[0], nearest("away", ball)[0]] : [];
+      if (!carrier) support = [];
+      const chasers = loose ? [nearestM("home", ball)[0], nearestM("away", ball)[0]] : [];
       for (const s of ["home", "away"]) for (const p of teams[s]) {
         if (!active(p)) continue;
         p.runT = Math.max(0, p.runT - sdt); p.stun = Math.max(0, p.stun - sdt); p.lunge = Math.max(0, p.lunge - sdt); p.dive = Math.max(0, p.dive - sdt);
-        if (p.stun > 0) { p.vx *= .9; p.vy *= .9; continue; }
-        let t, maxV = .15;
+        if (p.stun > 0) { p.vx *= .85; p.vy *= .85; p.x = clamp(p.x + p.vx * sdt, .005, .995); p.y = clamp(p.y + p.vy * sdt, .01, .99); continue; }
+        const pace = paceOf(p);
+        let t, v = SPD.jog;
         const sc = script && script.targets.get(p);
-        if (playback) continue;
-        if (sc) { t = sc; maxV = script.fast && script.fast.has(p) ? .24 : .19; }
-        else if (restart) { t = p === restart.taker ? restart.at : restartSpot(p); maxV = p === restart.taker ? .22 : .14; }
+        if (sc) { t = sc; v = script.fast && script.fast.has(p) ? SPD.sprint : SPD.run; }
+        else if (restart) { t = p === restart.taker ? restart.at : restartSpot(p); v = p === restart.taker ? SPD.run : SPD.jog; }
         else if (p === carrier) {
           const d = DIR[s], ang = p.drib ? p.drib.ang : 0;
-          t = { x: p.x + d * Math.cos(ang) * .1, y: p.y + Math.sin(ang) * .1 + (.5 - p.y) * .05 }; maxV = .13;
-        } else if (flight && p === flight.recv) { t = flight.to; maxV = .21; }
-        else if (loose && chasers.includes(p)) { t = { x: ball.x, y: ball.y }; maxV = .22; }
-        else if (p === presser && !restart) { t = { x: ref.x, y: ref.y }; maxV = .19; }
-        else if (p === cover && !restart) { const g = defSide === "home" ? .04 : .96; t = { x: ref.x + (g - ref.x) * .3, y: ref.y + (.5 - ref.y) * .3 }; maxV = .17; }
-        else t = targetOf(p);
-        maxV *= paceOf(p);
-        if (p.dive > 0) { t = { x: p.x, y: p.diveY }; maxV = .5; }
-        const dx = (t.x - p.x) * 1.6, dy = t.y - p.y, dd = Math.hypot(dx, dy) || 1e-6;
-        const want = Math.min(maxV, dd * 2.2);
-        p.vx += ((dx / dd) * want / 1.6 - p.vx) * Math.min(1, sdt * 5);
-        p.vy += ((dy / dd) * want - p.vy) * Math.min(1, sdt * 5);
-        p.x = clamp(p.x + p.vx * sdt, .005, .995); p.y = clamp(p.y + p.vy * sdt, .01, .99);
+          t = { x: p.x + d * Math.cos(ang) * 6 / PW, y: clamp(p.y + Math.sin(ang) * 6 / PH, .04, .96) };
+          v = p.drib ? SPD.run * .9 : SPD.walk * 1.2;   // 몰고 갈 땐 달리고, 고민할 땐 천천히
+        } else if (flight && p === flight.recv) { t = flight.to; v = SPD.run; }
+        else if (loose && chasers.includes(p)) { t = { x: ball.x, y: ball.y }; v = SPD.sprint; }
+        else if (p === presser && !restart) { const g = { x: defSide === "home" ? 0 : 1, y: .5 }; t = { x: ref.x + (g.x - ref.x) * .02, y: ref.y + (g.y - ref.y) * .02 }; v = SPD.sprint * .95; }
+        else if (p === cover && !restart) { const g = defSide === "home" ? .03 : .97; t = { x: ref.x + (g - ref.x) * .25, y: ref.y + (.5 - ref.y) * .3 }; v = SPD.run; }
+        else if (support.includes(p) && p.supPt) { t = p.supPt; v = SPD.run; }
+        else { t = targetOf(p); const far = dm(p, t); v = far > 12 ? SPD.run : far > 4 ? SPD.jog : SPD.walk; if (p.runT > 0) v = SPD.sprint; }
+        if (p.dive > 0) { t = { x: p.x, y: p.diveY }; v = 14; }
+        steer(p, t, v * pace, sdt);
+      }
+      // 겹치지 않게 밀어내기(2 m)
+      const all = [...teams.home, ...teams.away].filter(active);
+      for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) {
+        const a = all[i], b = all[j]; if (a === carrier || b === carrier) continue;
+        const dx = (b.x - a.x) * PW, dy = (b.y - a.y) * PH, d = Math.hypot(dx, dy);
+        if (d > 0 && d < 2) { const push = (2 - d) / 2 * .5; a.x -= dx / d * push / PW; a.y -= dy / d * push / PH; b.x += dx / d * push / PW; b.y += dy / d * push / PH; }
+      }
+      for (const p of all) { p.x = clamp(p.x + p.vx * sdt, .005, .995); p.y = clamp(p.y + p.vy * sdt, .01, .99); }
+      // 압박 수비가 붙으면 태클 시도 (0.35초마다)
+      tackleT -= sdt;
+      if (carrier && presser && !script && !restart && tackleT <= 0 && dm(presser, carrier) < 1.8) {
+        tackleT = .35;
+        const want = director && director.min - minute < 3 ? director.side : null;
+        let p = .2 * Math.exp((statOf(presser, "def") - statOf(carrier, "dri")) / 30) * Math.exp((strOf(presser.side) - strOf(carrier.side)) / 30);
+        if (want === presser.side) p = Math.max(p, .5); if (want === carrier.side) p *= .3;
+        if (Math.random() < p) tackle(presser, carrier);
       }
     }
     /* 세트피스 자리: 코너킥이면 박스에 모이고, 스로인·프리킥이면 대형 그대로 */
@@ -415,31 +453,41 @@ function playMatch(root, cfg) {
       }
       return targetOf(p);
     }
-    function stepBall(sdt) {
+    function stepBall(dt) {
+      const sdt = dt * VIS;
       if (restart) { runRestart(sdt); ball.z = 0; return; }
       if (flight) {
         flight.t += sdt;
-        const k = clamp(flight.t / flight.dur, 0, 1), e = flight.h ? k : 1 - (1 - k) * (1 - k);
-        ball.x = flight.from.x + (flight.to.x - flight.from.x) * e; ball.y = flight.from.y + (flight.to.y - flight.from.y) * e;
+        const k = clamp(flight.t / flight.dur, 0, 1);
+        const ek = flight.h ? k : (k * (2 - k) * .6 + k * .4);   // 땅볼: 처음 빠르고 점점 느려져요
+        ball.x = flight.from.x + (flight.to.x - flight.from.x) * ek; ball.y = flight.from.y + (flight.to.y - flight.from.y) * ek;
         ball.z = flight.h * 4 * k * (1 - k);
+        // 땅볼은 길목에 들어온 상대가 실제로 끊어요
+        if (!script && !flight.h && flight.kind !== "shot" && k > .12) {
+          for (const o of teams[other(flight.owner || possession)]) {
+            if (!active(o) || o.stun > 0) continue;
+            if (dm(o, ball) < 1.3 && Math.random() < .55) { lastTouch = o.side; takeBall(o); return; }
+          }
+        }
         if (k >= 1) {
           const f = flight; flight = null; ball.z = 0;
           if (f.onEnd) { f.onEnd(); return; }
           if (!script && (ball.x < 0 || ball.x > 1 || ball.y < 0 || ball.y > 1)) return outOfPlay();
-          if (f.recv && active(f.recv) && dist(f.recv, ball) < .06) takeBall(f.recv);
-          else loose = { vx: (f.to.x - f.from.x) * .25, vy: (f.to.y - f.from.y) * .25 };
+          if (f.recv && active(f.recv) && dm(f.recv, ball) < 3.5) takeBall(f.recv);
+          else { const sp = Math.min(6, dm(f.from, f.to) / f.dur * .4); const dx = (f.to.x - f.from.x) * PW, dy = (f.to.y - f.from.y) * PH, L = Math.hypot(dx, dy) || 1; loose = { vx: dx / L * sp, vy: dy / L * sp }; }
         }
       } else if (loose) {
-        ball.x += loose.vx * sdt; ball.y += loose.vy * sdt; loose.vx *= Math.pow(.35, sdt); loose.vy *= Math.pow(.35, sdt);
+        ball.x += loose.vx / PW * sdt; ball.y += loose.vy / PH * sdt;
+        const f = Math.pow(.25, sdt); loose.vx *= f; loose.vy *= f;
         if (!script && (ball.x < 0 || ball.x > 1 || ball.y < 0 || ball.y > 1)) return outOfPlay();
-        let got = null, gd = .025;
-        for (const s of ["home", "away"]) for (const p of teams[s]) if (active(p) && p.stun <= 0) { const dd = dist(p, ball); if (dd < gd) { gd = dd; got = p; } }
+        let got = null, gd = 1.2;
+        for (const s of ["home", "away"]) for (const p of teams[s]) if (active(p) && p.stun <= 0) { const dd = dm(p, ball); if (dd < gd) { gd = dd; got = p; } }
         if (got && !script) takeBall(got);
       } else if (carrier) {
         if (!active(carrier)) { carrier = teams[possession].find((p) => active(p) && p.role === "mf") || teams[possession].find(active); }
         const d = DIR[carrier.side], ang = carrier.drib ? carrier.drib.ang : 0;
-        ball.x += (carrier.x + d * Math.cos(ang) * .014 - ball.x) * Math.min(1, sdt * 12);
-        ball.y += (carrier.y + Math.sin(ang) * .014 + .006 - ball.y) * Math.min(1, sdt * 12);
+        ball.x += (carrier.x + d * Math.cos(ang) * .9 / PW - ball.x) * Math.min(1, sdt * 10);
+        ball.y += (carrier.y + Math.sin(ang) * .9 / PH + .004 - ball.y) * Math.min(1, sdt * 10);
         ball.z = 0;
         if (script) return;
         decide -= sdt;
