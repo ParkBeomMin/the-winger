@@ -875,7 +875,7 @@ async function runTournament() {
       let win = res.hg > res.ag ? h : res.ag > res.hg ? a : null, pk = "";
       if (!win && ko) { const so = shootoutAuto(onAt90(res.m.H), onAt90(res.m.A)); win = so.aWin ? h : a; pk = ` (PK ${so.a}:${so.b})`; }
       log.push(`${label} ${h} ${res.hg}:${res.ag} ${a}${pk}`);
-      return { hg: res.hg, ag: res.ag, win };
+      return { hg: res.hg, ag: res.ag, win, pk };
     }
     const opp = mineH ? a : h, rival = opp === rvName;
     if (rival) metRival++;
@@ -899,7 +899,7 @@ async function runTournament() {
       lines.push(`<div class="gt"><div class="gt-h">📋 ${T(`${label} 후 조 순위`, `Group table after ${label}`)} <small>${T("1·2위 4강", "Top 2 to semis")}</small></div><table class="tbl gt-t"><tr><th>#</th><th>${T("팀", "Team")}</th><th>${T("경기", "P")}</th><th>${T("승-무-패", "W-D-L")}</th><th>${T("득실", "GD")}</th><th>${T("승점", "Pts")}</th></tr>${rows}</table></div>`);
     }
     await showResult(r, lines, last ? "대회 결과 →" : "다음 경기 →");
-    return { hg: mineH ? r.gf : r.ga, ag: mineH ? r.ga : r.gf, win, recd: !ko };
+    return { hg: mineH ? r.gf : r.ga, ag: mineH ? r.ga : r.gf, win, recd: !ko, pk };
   };
   const grpRank = (gp) => [...gp].sort((x, y) => tbl[y].pts - tbl[x].pts || (tbl[y].gf - tbl[y].ga) - (tbl[x].gf - tbl[x].ga) || tbl[y].gf - tbl[x].gf);
   // 조별리그 3라운드 (같은 라운드의 다른 조 경기도 같이)
@@ -917,8 +917,10 @@ async function runTournament() {
   const imIn = [A[0], A[1], B[0], B[1]].includes(myName);
   // 4강 → 결승 (내가 떨어져도 끝까지 시뮬)
   const sf = [[A[0], B[1]], [B[0], A[1]]], fin = [];
-  for (const [h, a] of sf) fin.push((await play(h, a, "4강", true, false)).win);
+  const koRes = [];
+  for (const [h, a] of sf) { const x = await play(h, a, "4강", true, false); koRes.push({ k: "sf", h, a, ...x }); fin.push(x.win); }
   const fx = await play(fin[0], fin[1], "🏆 결승", true, true);
+  koRes.push({ k: "f", h: fin[0], a: fin[1], ...fx });
   const champ = fx.win, runner = champ === fin[0] ? fin[1] : fin[0];
   // 내가 떨어져 결과 화면이 아직 안 나왔으면
   let title, prize, fame;
@@ -931,13 +933,13 @@ async function runTournament() {
   S.youth.deep = (S.youth.deep || 0) + (runner === myName ? 1 : imIn && champ !== myName ? .5 : 0);
   const rvRes = champ === rvName ? "우승" : runner === rvName ? "준우승" : fin.includes(rvName) || sf.flat().includes(rvName) ? "4강" : "조별리그 탈락";
   addLog(`${name} ${title} (💰+${prize}만, 명성 +${fame}) · 라이벌 팀 ${rvRes}${metRival ? ` · 맞대결 ${metRival}번` : " · 맞대결 없음"}`);
-  const gtab = (gp, k) => `<div class="aw-row"><b>${k}조</b> ${grpRank(gp).map((n, i) => `${i + 1}. ${n === myName ? "<b>" + esc(n) + "</b>" : n === rvName ? esc(n) + " ⚔️" : esc(n)} <small>${tbl[n].pts}점 ${tbl[n].gf}:${tbl[n].ga}</small>`).join(" · ")}</div>`;
+  const gtab = (gp, k) => `<div class="gt"><div class="gt-h"><b>${T(`${k}조`, `Group ${k}`)}</b></div><table class="tbl gt-t"><tr><th>#</th><th>${T("팀", "Team")}</th><th>${T("승-무-패", "W-D-L")}</th><th>${T("득실", "GD")}</th><th>${T("승점", "Pts")}</th></tr>${grpRank(gp).map((n, i) => { const t = tbl[n]; return `<tr class="${n === myName ? "me" : ""}${i < 2 ? " up" : ""}"><td>${i + 1}</td><td class="gt-n">${esc(n)}${n === rvName ? " ⚔️" : ""}</td><td>${t.w}-${t.d}-${t.l}</td><td>${t.gf - t.ga > 0 ? "+" : ""}${t.gf - t.ga} <small>(${t.gf}:${t.ga})</small></td><td><b>${t.pts}</b></td></tr>`; }).join("")}</table></div>`;
+  const koRow = (x) => `<div class="ko-row${x.h === myName || x.a === myName ? " me" : ""}"><span class="${x.win === x.h ? "w" : ""}">${esc(x.h)}${x.h === rvName ? " ⚔️" : ""}</span><b>${x.hg}:${x.ag}${x.pk ? `<small>${esc(x.pk.trim())}</small>` : ""}</b><span class="${x.win === x.a ? "w" : ""}">${esc(x.a)}${x.a === rvName ? " ⚔️" : ""}</span></div>`;
   await modal({
     emoji: title.split(" ")[0], title: `${name} ${title.replace(/^\S+\s/, "")}`, wide: true,
     html: `<div class="tour-sum">${results.map((x) => `<div><span>${x.label}${x.rival ? " ⚔️" : ""}</span><b>${esc(x.opp)}</b><em class="${x.res}">${x.gf}:${x.ga}${x.pk}</em><i>${x.rating ? x.rating.toFixed(1) : "-"}</i></div>`).join("")}</div>
       ${gtab(groups[0], "A")}${gtab(groups[1], "B")}
-      <div class="aw-row"><b>4강</b> ${esc(sf[0][0])} vs ${esc(sf[0][1])} · ${esc(sf[1][0])} vs ${esc(sf[1][1])}</div>
-      <div class="aw-row"><b>🏆 우승</b> ${esc(champ)}${champ === rvName ? " ⚔️" : ""} · 준우승 ${esc(runner)}</div>
+      <div class="gt"><div class="gt-h"><b>${T("4강", "Semi-finals")}</b></div>${koRes.filter((x) => x.k === "sf").map(koRow).join("")}<div class="gt-h" style="margin-top:8px"><b>${T("🏆 결승", "🏆 Final")}</b></div>${koRes.filter((x) => x.k === "f").map(koRow).join("")}<p class="ko-champ">🏆 ${esc(champ)}${champ === rvName ? " ⚔️" : ""} <small>· ${T("준우승", "Runner-up")} ${esc(runner)}</small></p></div>
       <p class="small">⚔️ 라이벌 팀(${esc(rvName)}) ${rvRes}${metRival ? ` · 이번 대회 맞대결 ${metRival}번` : " · 이번엔 만나지 않았어요"}</p>
       <p>💰 +${prize}만 · ⭐ 명성 +${fame}</p>
       ${scoutHTML()}`,
