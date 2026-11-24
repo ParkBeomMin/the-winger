@@ -85,7 +85,7 @@ function shopBuy(it, key) {
 async function openShop(cat = "gear") {
   const row = (it) => {
     const lv = G(it.id);
-    if (it.id === "talentlab") return `<div class="shop-row tl"><span>${it.emoji}</span><div><b>${it.name} · ${fmtMoney(Math.round(it.cost()))}</b><small>${it.desc}</small><div class="tl-keys">${STATS.map((s) => { const nd = mastNeed(s.key); return `<button class="btn btn-ghost sm" data-buy="talentlab" data-k="${s.key}" ${S.money < it.cost() || (!nd && trOf(s.key) >= 3) ? "disabled" : ""}>${s.emoji}${s.name} ${nd && !atCapOf(s.key) ? `${(S.mast && S.mast[s.key]) || 0}/${nd}` : trOf(s.key) < 3 ? `🌌${Math.round(tgOf(s.key))}%` : T("완성", "Done")}</button>`; }).join("")}</div></div></div>`;
+    if (it.id === "talentlab") return `<div class="shop-row tl"><span>${it.emoji}</span><div><b>${it.name} · ${fmtMoney(Math.round(it.cost()))}</b><small>${it.desc}</small><div class="tl-keys">${STATS.map((s) => { const nd = mastNeed(s.key); return `<button class="btn btn-ghost sm" data-buy="talentlab" data-k="${s.key}" ${S.money < it.cost() || (!nd && trOf(s.key) >= 3) ? "disabled" : ""}>${s.emoji}${s.name} ${nd ? `${(S.mast && S.mast[s.key]) || 0}/${nd}` : trOf(s.key) < 3 ? `🌌${Math.round(tgOf(s.key))}%` : T("완성", "Done")}</button>`; }).join("")}</div></div></div>`;
     if (it.cat === "item") return `<div class="shop-row"><span>${it.emoji}</span><div><b>${it.name}</b><small>${it.desc}</small></div><button class="btn btn-primary sm" data-buy="${it.id}" ${S.money < it.cost() ? "disabled" : ""}>${fmtMoney(Math.round(it.cost()))}</button></div>`;
     const max = it.cat === "give" ? (it.repeat ? 99 : 1) : it.price.length;
     const done = !it.repeat && lv >= max;
@@ -256,7 +256,7 @@ function addMast(k, n, E = S) {
   if (!E.mast) E.mast = {};
   if (!E.trans) E.trans = {};
   const out = [];
-  if (E.talent[k] < 5 && !atCapOf(k, E)) {
+  if (E.talent[k] < 5) {   // ★5 전에는 최대치여도 숙련은 별(재능)로
     E.mast[k] = (E.mast[k] || 0) + n;
     while (E.talent[k] < 5 && E.mast[k] >= MAST_NEED[E.talent[k]]) {
       E.mast[k] -= MAST_NEED[E.talent[k]];
@@ -270,7 +270,7 @@ function addMast(k, n, E = S) {
  * 🔥 모험 도전(bold): 성공 확률 2배, 대신 실패하면 그 능력치 -1 (다시 훈련으로 채워야 도전 가능) */
 const boldCh = (ch) => Math.min(100, ch * 2);
 function transAttempt(k, E = S, mult = 1, bold = false) {
-  const tr = trOf(k, E); if (tr >= 3) return null;
+  const tr = trOf(k, E); if (tr >= 3 || E.talent[k] < 5) return null;   // 초월은 ★5부터
   if (!E.trans) E.trans = {};
   const ch = bold ? boldCh(transChance(k, E)) : transChance(k, E);
   if (Math.random() * 100 < ch) {
@@ -304,7 +304,7 @@ function aiAddMast(p, i, n) {
   if (aiTal(p, i) >= 5 && p.ms[i] > 0) { if (aiTr(p, i) < 3) tg()[i] = Math.min(95, Math.round(tg()[i] + p.ms[i] / [30, 40, 50][aiTr(p, i)] * 100)); p.ms[i] = 0; }
   for (let u = 0; u < n; u++) {
     const tr = aiTr(p, i), cap = p.st[k] >= aiCap(p, i);
-    if (aiTal(p, i) < 5 && !cap) {
+    if (aiTal(p, i) < 5) {
       if (++p.ms[i] >= MAST_NEED[aiTal(p, i)]) { p.ms[i] = 0; p.tl = set(p.tl, aiTal(p, i) + 1); if (aiTal(p, i) === 5) out.push("★5"); }
     } else if (tr < 3) {
       const g = tg();

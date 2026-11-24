@@ -279,6 +279,7 @@ function nextScheduleText() {
   return { left: 0, name: opp, text: `📅 R${S.pro.round + 1}/${ROUNDS} Next: <b>${esc(opp)}</b> (Str ${Math.round(clubStr(S.pro.league, opp))})${rivalMatch ? ` <em class="rv">⚔️ Rival Match</em>` : ""}` };
 }
 function trainPreview(k) {
+  if (atCapOf(k) && S.talent[k] < 5) return T(`🧬 숙련 ×2 → ★${S.talent[k] + 1}`, `🧬 Mastery x2 → ★${S.talent[k] + 1}`);
   if (atCapOf(k)) return trOf(k) < 3 ? (S.bold ? T(`🔥 ${boldCh(transChance(k))}% · 실패 −1`, `🔥 ${boldCh(transChance(k))}% · fail −1`) : T(`🌌 성공 ${transChance(k)}%`, `🌌 ${transChance(k)}% chance`)) : T("다음 경기 +5", "+5 next match");
   const g = trainGain(k, true);
   return `+${g[0].toFixed(1)}~${g[1].toFixed(1)}`;
@@ -306,7 +307,7 @@ function trainGain(k, range = false) {
 
 /* 종합에 가장 많이 보탬이 되는 훈련 — 자동 진행·빠른 시즌이 써요 */
 /* 훈련 버튼 이름: 최대치면 🌌 초월 도전, 초월 III까지 끝났으면 🎯 감각 훈련 */
-function trainName(s) { return atCapOf(s.key) ? (trOf(s.key) < 3 ? T(`${s.name} 초월 도전`, `${s.name} Breakthrough`) : T(`${s.name} 감각 훈련`, `${s.name} Sharpness`)) : T(`${s.name} 훈련`, `${s.name} Training`); }
+function trainName(s) { return atCapOf(s.key) ? (S.talent[s.key] < 5 ? T(`${s.name} 각성 훈련`, `${s.name} Awakening`) : trOf(s.key) < 3 ? T(`${s.name} 초월 도전`, `${s.name} Breakthrough`) : T(`${s.name} 감각 훈련`, `${s.name} Sharpness`)) : T(`${s.name} 훈련`, `${s.name} Training`); }
 function bestTrainKey() {
   let best = null, bv = -1;
   for (const [k, w] of Object.entries(POS[S.pos].w)) {
@@ -356,7 +357,7 @@ function renderMain() {
   // 능력치
   $("stats").innerHTML = STATS.map((s) => {
     const v = S.stats[s.key], w = POS[S.pos].w[s.key];
-    const need = mastNeed(s.key), tgMode = (!need || atCapOf(s.key)) && trOf(s.key) < 3;
+    const need = mastNeed(s.key), tgMode = !need && trOf(s.key) < 3;   // ★5부터 초월 게이지
     const mp = tgMode ? Math.round(tgOf(s.key)) : need ? Math.round(((S.mast && S.mast[s.key]) || 0) / need * 100) : 100;
     const ttl = tgMode ? T(`초월 게이지 ${mp}% · 성공 ${transChance(s.key)}%`, `Breakthrough gauge ${mp}% · ${transChance(s.key)}% chance`) : need ? T(`숙련 ${(S.mast && S.mast[s.key]) || 0}/${need} (다음: ★${S.talent[s.key] + 1})`, `Mastery ${(S.mast && S.mast[s.key]) || 0}/${need} (next: ★${S.talent[s.key] + 1})`) : T("초월 III 완성", "Transcendence III");
     return `<div class="st ${w >= .2 ? "key" : ""}${tgMode ? " tgm" : ""}" title="${ttl} · ${T("최대치", "max")} ${statCap(s.key)}"><span>${s.emoji} ${s.name}</span><div class="bar"><i style="width:${Math.min(100, v)}%"></i><u style="width:${mp}%"></u></div><b class="${v > 99 ? "over" : ""}">${Math.round(v)}</b><em class="${S.talent[s.key] === 5 ? "t5" : ""}">${talentStr(s.key)}</em></div>`;
@@ -369,7 +370,7 @@ function renderMain() {
   html += `<button class="act rest" data-rest="1"><span>${inj ? "🏥" : "🛌"}</span><b>${inj ? "Rehab" : "Rest"}</b><small>Condition +${32 + S.gear.recovery * 8}</small></button>`;
   if (S.phase === "youth") html += `<button class="act auto" data-auto="1" ${inj ? "disabled" : ""}><span>⏩</span><b>Auto-play</b><small>Until next tournament</small></button>`;
   else html += `<button class="act auto" data-auto="1"><span>⏩</span><b>Auto-play</b><small>Until the match</small></button>`;
-  const canTr = !inj && STATS.some((s) => atCapOf(s.key) && trOf(s.key) < 3);
+  const canTr = !inj && STATS.some((s) => atCapOf(s.key) && S.talent[s.key] >= 5 && trOf(s.key) < 3);
   if (canTr) html = `<div class="bold-tg"><span>${T("초월 도전 방식", "Breakthrough mode")}</span><button data-bold="0" class="${S.bold ? "" : "on"}">🌌 ${T("안전", "Safe")}<small>${T("실패해도 손해 없음", "no loss on fail")}</small></button><button data-bold="1" class="${S.bold ? "on bold" : ""}">🔥 ${T("모험", "Bold")}<small>${T("확률 2배 · 실패 시 −1", "2x odds · −1 on fail")}</small></button></div>` + html;
   const ready = pro && S.pending === "match";
   if (ready) {
@@ -441,7 +442,7 @@ function applyAction(a, btn) {
   }
   const k = a.key, risk = injuryRisk();
   const used = S.buff > 1 ? ` (🔥×${S.buff})` : "", em = STATS.find((s) => s.key === k).emoji;
-  if (atCapOf(k) && trOf(k) < 3) {
+  if (atCapOf(k) && S.talent[k] >= 5 && trOf(k) < 3) {
     // 🌌 초월 도전: 실패하면 게이지가 차서 다음 확률이 올라가요 (🔥버프는 게이지 2배, 피버 숙련 보너스도 게이지에)
     const bold = !!S.bold, r = transAttempt(k, S, (S.buff > 1 ? 2 : 1) * (1 + (typeof F === "function" ? F("mast") : 0)), bold);
     S.cond = clamp(S.cond - trainCost() * .5, 0, 100);
@@ -453,6 +454,18 @@ function applyAction(a, btn) {
     S.lastAct = { key: k, txt: txt + used };
     floatFx(btn, r.ok ? T("🌌 초월 성공!", "🌌 Breakthrough!") : bold ? T(`🔥 실패! ${STAT_NAME[k]} −1`, `🔥 Failed! ${STAT_NAME[k]} −1`) : T(`아깝다! 다음 ${r.next}%`, `So close! Next ${r.next}%`));
     if (r.ok && typeof Sfx !== "undefined" && Sfx.goal) Sfx.goal();
+  } else if (atCapOf(k) && S.talent[k] < 5) {
+    // 🧬 각성 훈련: ★5 전에 최대치에 닿은 능력치는 숙련이 2배로 쌓여 별부터 채워요 (피로 절반)
+    const m0 = (S.mast && S.mast[k]) || 0, t0 = S.talent[k];
+    addMast(k, (S.buff > 1 ? 2 : 1) * 2);
+    S.cond = clamp(S.cond - trainCost() * .5, 0, 100);
+    S.buff = 1;
+    const need = mastNeed(k), up = S.talent[k] > t0;
+    const txt = up ? T(`🧬 ${STAT_NAME[k]} 재능 각성! ★${S.talent[k]}`, `🧬 ${STAT_NAME[k]} talent awakened! ★${S.talent[k]}`)
+      : T(`🧬 ${STAT_NAME[k]} 각성 훈련 · 숙련 ${(S.mast[k] || 0)}/${need} (+${(S.mast[k] || 0) - m0})`, `🧬 ${STAT_NAME[k]} awakening · mastery ${(S.mast[k] || 0)}/${need} (+${(S.mast[k] || 0) - m0})`);
+    if (!up) addLog(txt + used);
+    S.lastAct = { key: k, txt: txt + used };
+    floatFx(btn, up ? T("🧬 각성!", "🧬 Awakened!") : T(`숙련 +${(S.mast[k] || 0) - m0}`, `Mastery +${(S.mast[k] || 0) - m0}`));
   } else if (atCapOf(k)) {
     // 🎯 감각 훈련: 초월 III까지 끝난 능력치는 다음 경기에서만 +5
     S.sharp = S.sharp || {}; S.sharp[k] = 5;
@@ -488,7 +501,7 @@ function rivalGrow(scale = 1) {
   const keys = Object.entries(POS[rv.pos].w).filter(([, w]) => w > 0).map(([k]) => k);
   for (let i = 0; i < 2; i++) {
     const k = Math.random() < .7 ? pickWeighted(rv.pos) : pick(keys);
-    if (atCapOf(k, rv)) { if (trOf(k, rv) < 3 && Math.random() < .5 * scale) transAttempt(k, rv); continue; }   // 나와 같은 규칙: 최대치면 초월 도전
+    if (atCapOf(k, rv)) { if (rv.talent[k] < 5) { if (Math.random() < .5 * scale) addMast(k, 2, rv); } else if (trOf(k, rv) < 3 && Math.random() < .5 * scale) transAttempt(k, rv); continue; }   // 나와 같은 규칙: ★5 전엔 각성, ★5면 초월 도전
     const v = rv.stats[k], dim = v >= 92 ? .3 : v >= 85 ? .5 : v >= 75 ? .7 : 1;
     rv.stats[k] = clamp(v + rand(1.6, 3) * talentMul(rv.talent[k]) * rubber * age * dim * scale * .8, 1, statCap(k, rv));
     if (Math.random() < .5 * scale) addMast(k, 1, rv);   // 라이벌도 훈련한 만큼 숙련이 쌓여요
@@ -1784,10 +1797,10 @@ function openCareer() {
 function openMast(k) {
   const s = STATS.find((x) => x.key === k), have = (S.mast && S.mast[k]) || 0, need = mastNeed(k), star = S.talent[k], tr = trOf(k);
   const next = star < 5 ? `Talent ★${star + 1}` : TRANS_NAME[tr + 1];
-  if (atCapOf(k) || star >= 5) return modal({ emoji: s.emoji, title: T(`${s.name} 초월`, `${s.name} breakthrough`),
+  if (star >= 5) return modal({ emoji: s.emoji, title: T(`${s.name} 초월`, `${s.name} breakthrough`),
     html: `<ul class="tip-list"><li>${T("지금 재능", "Talent")} <b>${talentStr(k)}</b>, ${T("능력치", "stat")} <b>${Math.round(S.stats[k])}</b> / ${T("최대", "max")} <b>${statCap(k)}</b></li>
       ${tr < 3 ? `<li>${T(`🌌 초월 게이지 <b>${Math.round(tgOf(k))}%</b> · 다음 도전 성공 확률 <b>${transChance(k)}%</b>`, `🌌 Gauge <b>${Math.round(tgOf(k))}%</b> · next try <b>${transChance(k)}%</b>`)}</li>
-      <li>${T(`최대치에 닿으면 훈련이 <b>초월 도전</b>이 돼요. 확률 = 기본 ${TR_BASE[tr]}% + 재능 ★ ${star}% + 게이지 × 0.1. 실패할 때마다 게이지가 차고, 꽉 차면 다음 도전은 <b>확정 성공</b>이에요(최대 ${TR_PITY[tr] + 1}번).`, `At max, training becomes a <b>breakthrough try</b>. Chance = base ${TR_BASE[tr]}% + talent ★ ${star}% + gauge × 0.1. Each fail fills the gauge; when full the next try <b>always succeeds</b> (at most ${TR_PITY[tr] + 1} tries).`)}</li>
+      <li>${T(`재능 ★5에서 최대치에 닿으면 훈련이 <b>초월 도전</b>이 돼요. 확률 = 기본 ${TR_BASE[tr]}% + 재능 ★ ${star}% + 게이지 × 0.1. 실패할 때마다 게이지가 차고, 꽉 차면 다음 도전은 <b>확정 성공</b>이에요(최대 ${TR_PITY[tr] + 1}번).`, `With talent ★5 at max, training becomes a <b>breakthrough try</b>. Chance = base ${TR_BASE[tr]}% + talent ★ ${star}% + gauge × 0.1. Each fail fills the gauge; when full the next try <b>always succeeds</b> (at most ${TR_PITY[tr] + 1} tries).`)}</li>
       <li>${T("성공하면 초월 단계 +1, 최대치 +2, 능력치 +1~2. 피로는 보통 훈련의 절반이에요. MOM·해외 연수·재능 개발 프로그램도 게이지를 채워요.", "Success: +1 tier, max +2, stat +1~2. Half the usual fatigue. MOM, training camps and the talent program also fill the gauge.")}</li>
       <li>${T(`🔥 <b>모험 도전</b>을 고르면 성공 확률이 2배(지금 ${boldCh(transChance(k))}%)지만, 실패하면 능력치가 1 떨어져서 훈련으로 다시 최대치를 채워야 해요. 게이지는 똑같이 차요. 도전 방식은 훈련 버튼 위에서 바꿔요.`, `🔥 A <b>bold try</b> doubles the odds (now ${boldCh(transChance(k))}%), but a fail drops the stat by 1, so you must train it back to max first. The gauge still fills. Switch modes above the training buttons.`)}</li>`
       : `<li>${T("🎯 초월 III 완성! 이제 이 능력치 훈련은 <b>감각 훈련</b>이에요. 다음 경기에서만 이 능력치가 +5로 계산돼요(피로 절반).", "🎯 Transcendence III complete! Training this stat is now <b>sharpness</b>: +5 to it for your next match only (half fatigue).")}</li>`}
@@ -1796,7 +1809,7 @@ function openMast(k) {
   modal({ emoji: s.emoji, title: `${s.name} mastery`,
     html: `<ul class="tip-list"><li>Talent <b>${talentStr(k)}</b>, rating <b>${Math.round(S.stats[k])}</b> / max <b>${statCap(k)}</b></li>
       <li>Mastery <b>${need ? `${have} / ${need}` : "Complete"}</b>${need ? ` · when full: <b>${next}</b>` : ""}</li>
-      <li>Training this stat builds mastery. At max (99), training becomes a 🌌 breakthrough try. MOM awards, overseas training and the talent program also add to it.</li>
+      <li>Training this stat builds mastery. With talent ★5 at max (99), training becomes a 🌌 breakthrough try; before ★5 it's awakening training with double mastery. MOM awards, overseas training and the talent program also add to it.</li>
       <li>Higher talent ★ means bigger training gains and better breakthrough odds at max. Transcendence (I to III) raises the max by 2 each, up to 105.</li></ul>`,
     buttons: [{ label: "Close", value: 1, cls: "btn-primary" }] });
 }
@@ -1830,7 +1843,7 @@ function openHelp() {
       <p><b>🎉 Fever Time · 📢 Notices · 🏛️ World Hall of Fame</b><br/>During live events a Fever banner appears at the top, with bonuses to Training, Mastery, Fame and match fees. Read Notices from the title screen and the 📢 button. When you retire, your Career joins the World Hall of Fame ranking.</p>
       <p><b>🏆 Youth tournament</b><br/>8 teams play a round robin in 2 groups, and the top 2 of each group go to the Semi-final, then the Final. You can meet your Rival's team in the Group stage, Semi-final or Final.</p>
       <p><b>☁️ Saving</b><br/>Every match result is saved right away, with automatic cloud backup. In ⚙️ → ☁️ you can continue on another device with an 8-character transfer code, or link a Google account.</p>
-      <p><b>⭐ Talent · 🧬 Awakening · 🌌 Transcend</b><br/>Each star gives +15% training growth (★1 x0.85 to ★5 x1.45). The purple line under each stat bar is Mastery. It fills through Training (🔥 buffed training counts double), MOTM, overseas camps and talent programs, and when full you get +1 star. Once a stat hits its max (99), training becomes a 🌌 breakthrough try: a chance at Transcend I–III (max +2 each, up to 105). Each fail fills the sky-blue gauge and raises the odds; a full gauge guarantees success. After Transcend III it becomes 🎯 sharpness training (+5 for the next match only). Your Rival and every player in the world gain stars and Transcend by the same rules (check player profiles).</p>
+      <p><b>⭐ Talent · 🧬 Awakening · 🌌 Transcend</b><br/>Each star gives +15% training growth (★1 x0.85 to ★5 x1.45). The purple line under each stat bar is Mastery. It fills through Training (🔥 buffed training counts double), MOTM, overseas camps and talent programs, and when full you get +1 star. Once a ★5 stat hits its max (99), training becomes a 🌌 breakthrough try: a chance at Transcend I–III (max +2 each, up to 105). Each fail fills the sky-blue gauge and raises the odds; a full gauge guarantees success. After Transcend III it becomes 🎯 sharpness training (+5 for the next match only). Your Rival and every player in the world gain stars and Transcend by the same rules (check player profiles).</p>
       <p><b>⚔️ Rival</b><br/>Your Rival grows every month too. You keep clashing in cup finals, league head-to-heads, the Golden Boot and the Ballon d'Or. Event choices change your relationship and the ending.</p>
       <p><b>🔥 Key moment minigames</b><br/>When a chance involving you comes up in a match, you play it yourself. Each position gets different ones more often.</p>
       <ul>
