@@ -8,6 +8,8 @@
 "use strict";
 
 const MG = (() => {
+  /* 화면 주사율(60·120Hz)과 상관없이 실제 흐른 시간만큼 움직여요 */
+  const ticker = () => { let last = performance.now(); return () => { const now = performance.now(), d = Math.min(.05, Math.max(0, (now - last) / 1000)); last = now; return d; }; };
   function frame(host, title, hint, limit, onTimeout) {
     host.innerHTML = `<div class="mg"><div class="mg-h"><b>${title}</b><span>${hint}</span></div><div class="mg-body"></div><div class="mg-timer"><i></i></div></div>`;
     const body = host.querySelector(".mg-body"), bar = host.querySelector(".mg-timer i");
@@ -46,8 +48,8 @@ const MG = (() => {
         if (zone !== null || fr.done) return;
         Sfx.tap(); zone = +b.dataset.z; b.classList.add("pick");
         pw.hidden = false; tap.hidden = false;
-        let t = 0; const speed = 1.25 - clamp((o.sho - 50) / 120, 0, .45);
-        const loop = () => { t += .016 * speed; const q = (Math.sin(t * Math.PI * 1.6 - Math.PI / 2) * .5 + .5) * 100; mk.style.left = q + "%"; mk.dataset.q = q; raf = requestAnimationFrame(loop); };
+        let t = 0; const speed = (1.25 - clamp((o.sho - 50) / 120, 0, .45)) * .88, dt = ticker();
+        const loop = () => { t += dt() * speed; const q = (Math.sin(t * Math.PI * 1.6 - Math.PI / 2) * .5 + .5) * 100; mk.style.left = q + "%"; mk.dataset.q = q; raf = requestAnimationFrame(loop); };
         loop();
       });
       tap.onclick = () => {
@@ -96,10 +98,11 @@ const MG = (() => {
       const D = marks.map((k) => ({ x: R[k].x + rand(-10, 10), y: LINE - 4, k }));
       const lag = clamp(.05 - (o.pas - o.def) / 2000, .02, .07), tol = clamp((o.pas - 50) / 12, 0, 4);
       let t = 0, raf = 0, switched = false;
+      const dtP = ticker();
       const loop = () => {
-        t += .016;
+        const d = dtP(); t += d;
         if (!switched && t > rand(1.2, 1.8)) { switched = true; const free = [0, 1, 2].find((k) => !marks.includes(k)); D[0].k = free; marks = D.map((d) => d.k); }
-        R.forEach((r, k) => { if (t > r.delay) r.y -= r.v * .016 * 3.2; runs[k].style.left = r.x + "%"; runs[k].style.top = r.y + "%"; runs[k].classList.toggle("off", r.y < LINE - tol); });
+        R.forEach((r, k) => { if (t > r.delay) r.y -= r.v * d * 3.2; runs[k].style.left = r.x + "%"; runs[k].style.top = r.y + "%"; runs[k].classList.toggle("off", r.y < LINE - tol); });
         D.forEach((d, i) => { d.x += (R[d.k].x - d.x) * lag * 3; d.y += (Math.max(R[d.k].y - 6, LINE - 8) - d.y) * lag * 2; dfs[i].style.left = d.x + "%"; dfs[i].style.top = d.y + "%"; });
         if (!fr.done) raf = requestAnimationFrame(loop);
       };
@@ -131,8 +134,9 @@ const MG = (() => {
       const df = fr.body.querySelector(".dfn-big"), ar = df.querySelector(".arrow");
       const win = clamp(.32 + (o.dri - o.def) / 250, .2, .55);   // 쏠림이 유지되는 시간(초)
       let state = "mid", raf = 0, t = 0, next = rand(.5, .9), until = 0;
+      const dtD = ticker();
       const loop = () => {
-        t += .016;
+        t += dtD();
         if (state === "mid" && t > next) { state = Math.random() < .5 ? "L" : "R"; until = t + win; df.className = "dfn-big lean-" + state; ar.textContent = state === "L" ? "⬅" : "➡"; }
         else if (state !== "mid" && t > until) { state = "mid"; next = t + rand(.35, .8); df.className = "dfn-big"; ar.textContent = ""; }
         if (!fr.done) raf = requestAnimationFrame(loop);
@@ -166,7 +170,8 @@ const MG = (() => {
       zone.style.left = (88 - zw) + "%"; zone.style.width = zw + "%";
       let t = 0, raf = 0, q = 20;
       const sp = 1.1 + o.dri / 140;
-      const loop = () => { t += .016 * sp; q = 18 + (Math.abs(Math.sin(t * Math.PI * .9)) ** 1.6) * 70; ballEl.style.left = q + "%"; if (!fr.done) raf = requestAnimationFrame(loop); };
+      const dtT = ticker();
+      const loop = () => { t += dtT() * sp; q = 18 + (Math.abs(Math.sin(t * Math.PI * .9)) ** 1.6) * 70; ballEl.style.left = q + "%"; if (!fr.done) raf = requestAnimationFrame(loop); };
       loop();
       fr.body.querySelector(".mg-tap").onclick = () => {
         if (fr.done) return;
