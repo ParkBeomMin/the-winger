@@ -520,7 +520,7 @@ async function maybeEvent() {
   let ev, d = {};
   if (sig) { ev = { id: sig.k, ...SIG_EVENTS[sig.k] }; d = sig.d || {}; S.ev["sig_" + sig.k] = S.turn; }
   else {
-    if (Math.random() > (S.phase === "youth" ? .22 : .13)) return false;
+    if (Math.random() > (S.phase === "youth" ? .22 : .17)) return false;
     ev = pickEvent(S);
     if (!ev) return false;
     S.ev[ev.id] = S.turn;
