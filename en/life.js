@@ -202,7 +202,9 @@ function takeSig() {
   S.sig = S.sig.filter((x) => S.turn - x.t <= 4 && SIG_EVENTS[x.k]);
   while (S.sig.length) {
     const s = S.sig.shift();
-    if (S.ev["sig_" + s.k] != null && S.turn - S.ev["sig_" + s.k] < 3) continue;
+    // 같은 종류는 너무 자주 안 뜨게 (예: 평점 극찬·A매치 소집·연승은 한동안 쉬어요)
+    const SIG_CD = { superb: 8, national: 12, winning4: 12, losing3: 8, titlerace: 6, awful: 6, rivalhattrick: 8, rivalmate: 30, contractlast: 30, matchinjury: 4 };
+    if (S.ev["sig_" + s.k] != null && S.turn - S.ev["sig_" + s.k] < (SIG_CD[s.k] || 3)) continue;
     return s;
   }
   return null;

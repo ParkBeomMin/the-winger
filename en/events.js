@@ -12,11 +12,14 @@ const addCond = (S, v) => { S.cond = clamp(S.cond + v, 0, 100); return `Conditio
 const addForm = (S, v) => { S.form = clamp(S.form + v, -3, 3); return `Form ${v > 0 ? "▲" : "▼"}`; };
 const addMoney = (S, v) => { S.money = Math.max(0, S.money + v); return `💰 ${v > 0 ? "+" : ""}${fmtMoney(v)}`; };
 const isPro = (S) => S.phase === "pro";
+/* 상황 도우미: 해외에서 뛰는 중인지 · 지금 팀에서 끝낸 시즌 수 */
+const abroadNow = (S) => isPro(S) && LEAGUES[S.pro.league] && ORIGINS[S.origin] && LEAGUES[S.pro.league].nat !== ORIGINS[S.origin].nat;
+const clubSeasons = (S) => { let n = 0; const ss = (S.career && S.career.seasons) || []; for (let i = ss.length - 1; i >= 0 && ss[i].club === S.pro.club; i--) n++; return n; };
 
 const abroadCost = (S) => Math.round(Math.max(200, (S.contract && S.phase === "pro" ? S.contract.sal : 30) * 10));
 const EVENTS = [
   { id: "abroad", emoji: "✈️", title: "Short Training Abroad", cd: 22,
-    when: (S) => S.turn > 8 && S.money >= abroadCost(S),
+    when: (S) => S.turn > 8 && S.money >= abroadCost(S) && (S.phase === "youth" || S.age <= 24),
     text: (S) => `A top European academy offered you a special 2-week camp. It costs ${fmtMoney(abroadCost(S))}. It might wake up a hidden talent.`,
     choices: [
       { label: "🧬 Focus on main stat", hint: "💰 · Main Mastery +12", fx: (S) => { S.money -= abroadCost(S); return mastLine(mainStat(S), 12); } },
@@ -25,7 +28,10 @@ const EVENTS = [
     ] },
   { id: "taunt", emoji: "📱", title: "Rival's Taunt", cd: 10,
     when: (S) => S.turn > 2,
-    text: (S) => `${josa(R(S), "\uc774/\uac00")} posted on social media.\n"${S.name}? Still miles away from my level lol"`,
+    text: (S) => { const gap = (typeof OVR === "function" && typeof ROVR === "function") ? OVR() - ROVR() : 0, mate = isPro(S) && S.rival.club === S.pro.club;
+      if (mate) return T(`${josa(R(S), "이/가")} 단체 사진에 혼자 가운데 서서 글을 올렸어요.\n"이 팀 에이스는 누구? ㅋ"`, `${R(S)} posted a team photo, standing alone in the middle.\n"Guess who the ace is? lol"`);
+      if (gap >= 4) return T(`${josa(R(S), "이/가")} SNS에 글을 올렸어요.\n"요즘 좀 한다고? 한 시즌 반짝이겠지 ㅋ"`, `${R(S)} posted on social.\n"Doing well lately? Just a one-season wonder lol"`);
+      return `${josa(R(S), "\uc774/\uac00")} posted on social media.\n"${S.name}? Still miles away from my level lol"`; },
     choices: [
       { label: "🔥 Fire back", hint: "Fame↑ Form↑ Relation↓", fx: (S) => [addFame(S, 6), addForm(S, 1), addRel(S, -15)].join(" · ") },
       { label: "🤐 Let my play talk", hint: "Next training x1.6", fx: (S) => { S.buff = 1.6; return "Next training efficiency x1.6"; } },
@@ -128,7 +134,7 @@ const EVENTS = [
     ] },
   { id: "interview", emoji: "🎤", title: "Post-match Interview", cd: 6,
     when: (S) => isPro(S) && S.pro.round > 0,
-    text: (S) => `Reporter: "You're often compared with ${R(S)}. Any comment?"`,
+    text: (S) => { const st = (S.pro && S.pro.streak) || 0; if (st >= 3) return T(`기자: "${st}연승 중인데요, 비결이 뭔가요? ${R(S)} 선수와의 비교도 한 말씀 해주시죠."`, `Reporter: "${st} wins in a row. What's the secret? And a word on comparisons with ${R(S)}?"`); if (st <= -2) return T(`기자: "팀이 ${-st}연패인데요, 분위기 어떤가요? ${R(S)} 선수는 잘나가던데요."`, `Reporter: "${-st} straight defeats. How's the mood? ${R(S)} seems to be flying."`); return `Reporter: "You're often compared with ${R(S)}. Any comment?"`; },
     choices: [
       { label: "🙇 Stay humble", hint: "Fame↑ Relation↑", fx: (S) => [addFame(S, 3), addRel(S, 6)].join(" · ") },
       { label: "😎 Be confident", hint: "Fame↑ Form↑", fx: (S) => [addFame(S, 6), addForm(S, 1)].join(" · ") },
@@ -171,6 +177,138 @@ const EVENTS = [
       { label: "📹 Video reply", hint: "Fame↑ Form↑", fx: (S) => [addFame(S, 4), addForm(S, 1)].join(" · ") },
       { label: "✍️ Send signed ball", hint: "Form↑", fx: (S) => addForm(S, 1) },
     ] },
+  /* ---------- 상황 맞춤 이벤트 (v2.5): 나이 · 해외 생활 · 팀 순위 · 폼 · 감독 신뢰 · 다음 상대 · 돈 ---------- */
+  { id: "homesick", emoji: "🏠", title: T("해외 생활 향수병", "Homesick abroad"), cd: 16,
+    when: (S) => abroadNow(S) && clubSeasons(S) <= 1 && S.pro.round >= 3 && S.flags.hsClub !== S.pro.club,   // 팀마다 한 번
+    text: (S) => (S.flags.hsClub = S.pro.club, T(`${LEAGUES[S.pro.league].flag} 타지 생활 몇 주째. 밤마다 고향 음식이 생각나고, 혼자 먹는 저녁이 길게 느껴져요.`, `A few weeks into life in ${LEAGUES[S.pro.league].flag}. You miss food from home, and dinners alone feel long.`)),
+    choices: [
+      { label: T("✈️ 가족을 초대한다", "✈️ Fly the family over"), hint: T("💰 · 컨디션↑ 폼↑", "💰 · Cond↑ Form↑"), fx: (S) => [addMoney(S, -Math.max(80, Math.round((S.contract ? S.contract.sal : 50) * 2))), addCond(S, 14), addForm(S, 1)].join(" · ") },
+      { label: T("🍜 동네 한식당 단골 되기", "🍜 Find a local spot from home"), hint: T("컨디션↑", "Cond↑"), fx: (S) => addCond(S, 8) },
+      { label: T("📘 현지어 공부를 시작한다", "📘 Start learning the language"), hint: T("감독 신뢰↑", "Coach trust↑"), fx: (S) => tr(S, 6) },
+    ] },
+  { id: "language", emoji: "🗣️", title: T("통역 없는 전술 미팅", "Tactics meeting, no interpreter"), cd: 40,
+    when: (S) => abroadNow(S) && clubSeasons(S) === 0 && S.pro.round >= 1 && S.pro.round <= 8 && S.flags.lgClub !== S.pro.club,
+    text: (S) => (S.flags.lgClub = S.pro.club, T("감독이 빠르게 전술판을 짚어 가며 설명해요. 절반은 알아듣고 절반은 감으로…", "The coach races through the tactics board. You catch half of it and guess the rest…")),
+    choices: [
+      { label: T("🙋 끝나고 따로 물어본다", "🙋 Ask afterwards"), hint: T("감독 신뢰↑", "Coach trust↑"), fx: (S) => tr(S, 5) },
+      { label: T("👀 동료 움직임을 보고 따라 한다", "👀 Copy your teammates"), hint: T("폼↑", "Form↑"), fx: (S) => addForm(S, 1) },
+      { label: T("😅 대충 고개만 끄덕인다", "😅 Just nod along"), hint: T("감독 신뢰↓", "Coach trust↓"), fx: (S) => tr(S, -4) },
+    ] },
+  { id: "captain", emoji: "©️", title: T("주장 완장 제안", "The captain's armband"), once: true,
+    when: (S) => isPro(S) && S.age >= 26 && (S.trust || 0) >= 75 && S.fame >= 120 && clubSeasons(S) >= 2,
+    text: (S) => T(`${S.pro.club} 감독이 불렀어요. "이번 시즌부터 주장을 맡아 줬으면 한다."`, `The ${S.pro.club} coach calls you in. "I want you to be captain from this season."`),
+    choices: [
+      { label: T("©️ 영광입니다", "©️ It's an honour"), hint: T("명성 크게↑ 감독 신뢰↑", "Fame↑↑ Trust↑"), fx: (S) => [addFame(S, 25), tr(S, 8)].join(" · ") },
+      { label: T("🙏 아직은 실력에 집중할게요", "🙏 I'd rather focus on my game"), hint: T("다음 훈련 1.6배", "Next training x1.6"), fx: (S) => { S.buff = 1.6; return T("다음 훈련 효율 1.6배", "Next training x1.6"); } },
+    ] },
+  { id: "veteran", emoji: "🧓", title: T("은퇴 시기를 묻는 기자", "When will you retire?"), cd: 20,
+    when: (S) => isPro(S) && S.age >= 32,
+    text: (S) => T(`기자: "${S.age}세인데요, 은퇴 시기를 생각해 보셨나요?"`, `Reporter: "You're ${S.age} now. Have you thought about retiring?"`),
+    choices: [
+      { label: T("🔥 아직 보여줄 게 많아요", "🔥 I've got plenty left"), hint: T("폼↑ 명성↑", "Form↑ Fame↑"), fx: (S) => [addForm(S, 1), addFame(S, 5)].join(" · ") },
+      { label: T("🙂 몸이 허락할 때까지", "🙂 As long as my body allows"), hint: T("컨디션↑", "Cond↑"), fx: (S) => addCond(S, 10) },
+      { label: T("🌱 후배들에게 길을 열어 줘야죠", "🌱 Time to make way for the kids"), hint: T("감독 신뢰↑ 명성↑", "Trust↑ Fame↑"), fx: (S) => [tr(S, 5), addFame(S, 4)].join(" · ") },
+    ] },
+  { id: "rookie", emoji: "🐣", title: T("신인 후배의 부탁", "A rookie asks for help"), cd: 18,
+    when: (S) => isPro(S) && S.age >= 27,
+    text: (S) => T(`팀에 새로 온 열여덟 살 신인이 다가와요. "선배님처럼 ${STAT_NAME[mainStat(S)]} 잘하고 싶어요. 훈련 끝나고 봐 주실 수 있나요?"`, `An 18-year-old rookie comes over. "I want to be as good at ${STAT_NAME[mainStat(S)]} as you. Could you help me after training?"`),
+    choices: [
+      { label: T("🤝 같이 남아서 훈련", "🤝 Stay and train together"), hint: T("감독 신뢰↑ 명성↑ 컨디션↓", "Trust↑ Fame↑ Cond↓"), fx: (S) => [tr(S, 5), addFame(S, 4), addCond(S, -8)].join(" · ") },
+      { label: T("🗒️ 요점만 짧게 알려 준다", "🗒️ Give a few quick tips"), hint: T("감독 신뢰↑", "Trust↑"), fx: (S) => tr(S, 2) },
+      { label: T("🙅 내 훈련도 바빠", "🙅 I'm busy with my own"), hint: T("다음 훈련 1.3배", "Next training x1.3"), fx: (S) => { S.buff = 1.3; return T("다음 훈련 효율 1.3배", "Next training x1.3"); } },
+    ] },
+  { id: "relegation", emoji: "😰", title: T("강등권 위기", "Relegation scrap"), cd: 6,
+    when: (S) => isPro(S) && S.pro.round >= 8 && myRank() >= sortedTable().length - 2,
+    text: (S) => T(`${S.pro.club}는 리그 ${myRank()}위. 라커룸 공기가 무거워요. 남은 경기에 팀의 운명이 걸렸어요.`, `${S.pro.club} sit ${myRank()}th. The dressing room is tense. The club's fate rides on the remaining games.`),
+    choices: [
+      { label: T("📣 동료들을 모아 다독인다", "📣 Rally the squad"), hint: T("감독 신뢰↑ 폼↑", "Trust↑ Form↑"), fx: (S) => [tr(S, 6), addForm(S, 1)].join(" · ") },
+      { label: T("💪 말보다 훈련으로", "💪 Let training do the talking"), hint: T("다음 훈련 1.6배", "Next training x1.6"), fx: (S) => { S.buff = 1.6; return T("다음 훈련 효율 1.6배", "Next training x1.6"); } },
+      { label: T("📞 에이전트에게 이적 문의", "📞 Ask your agent about a move"), hint: T("감독 신뢰↓ 이적 의향", "Trust↓ Wants a move"), fx: (S) => { S.flags.wantMove = 1; return [tr(S, -8), T("이적 시장에서 제안이 조금 더 와요", "A few more offers next window")].join(" · "); } },
+    ] },
+  { id: "derbyeve", emoji: "⚔️", title: T("라이벌 팀과의 맞대결 전야", "Eve of the rival showdown"), cd: 5,
+    when: (S) => isPro(S) && S.rival.club !== S.pro.club && S.pro.schedule && S.pro.schedule[S.pro.round] === S.rival.club,
+    text: (S) => T(`다음 경기 상대는 ${S.rival.club}. ${josa(R(S), "이/가")} 기자회견에서 "이번엔 확실히 이긴다"고 했대요.`, `Next up: ${S.rival.club}. ${R(S)} told the press, "This time we win for sure."`),
+    choices: [
+      { label: T("🎯 상대 영상을 분석한다", "🎯 Study their tapes"), hint: T("폼↑ 감독 신뢰↑", "Form↑ Trust↑"), fx: (S) => [addForm(S, 1), tr(S, 3)].join(" · ") },
+      { label: T("🔥 SNS로 맞받아친다", "🔥 Fire back on social"), hint: T("명성↑ 관계↓", "Fame↑ Rivalry↓"), fx: (S) => [addFame(S, 8), addRel(S, -12)].join(" · ") },
+      { label: T("😴 평소처럼 푹 잔다", "😴 Sleep like usual"), hint: T("컨디션↑", "Cond↑"), fx: (S) => addCond(S, 12) },
+    ] },
+  { id: "slump", emoji: "📉", title: T("슬럼프", "In a slump"), cd: 8,
+    when: (S) => S.form <= -2 && S.turn > 4,
+    text: () => T("최근 경기가 잘 안 풀려요. 공이 발에 안 붙고, 자꾸 생각이 많아져요.", "Nothing's clicking lately. The ball won't stick, and you're overthinking everything."),
+    choices: [
+      { label: T("🎬 내 경기 영상을 돌려 본다", "🎬 Rewatch your games"), hint: T("폼↑", "Form↑"), fx: (S) => addForm(S, 1) },
+      { label: T("🧘 하루 푹 쉬며 머리를 비운다", "🧘 Take a full day off"), hint: T("컨디션↑ 폼↑", "Cond↑ Form↑"), fx: (S) => [addCond(S, 15), addForm(S, 1)].join(" · ") },
+      { label: T("🏃 기본기 훈련을 두 배로", "🏃 Double the basics"), hint: T("주력 스탯↑ 컨디션↓", "Main stat↑ Cond↓"), fx: (S) => [addStat(S, mainStat(S), 2), addCond(S, -12)].join(" · ") },
+    ] },
+  { id: "rumor", emoji: "📰", title: T("빅클럽 이적설", "Big-club transfer rumours"), cd: 14,
+    when: (S) => isPro(S) && S.form >= 2 && OVR() >= clubStr(S.pro.league, S.pro.club) + 6,
+    text: (S) => T(`"${S.name}, 빅클럽들이 주목" 기사가 떴어요. ${S.pro.club} 팬들이 술렁여요.`, `"${S.name} on big clubs' radar," says the headline. ${S.pro.club} fans are restless.`),
+    choices: [
+      { label: T("🏟️ \"지금 팀에 집중할게요\"", "🏟️ \"I'm focused on this club\""), hint: T("감독 신뢰↑ 명성↑", "Trust↑ Fame↑"), fx: (S) => [tr(S, 6), addFame(S, 4)].join(" · ") },
+      { label: T("😏 \"제안이 오면 생각해 보죠\"", "😏 \"We'll see if offers come\""), hint: T("이적 의향 · 감독 신뢰↓", "Wants a move · Trust↓"), fx: (S) => { S.flags.wantMove = 1; return [tr(S, -5), T("이적 시장에서 제안이 조금 더 와요", "A few more offers next window")].join(" · "); } },
+      { label: T("🤐 노코멘트", "🤐 No comment"), hint: T("변화 없음", "No change"), fx: () => T("기사는 금방 잠잠해졌어요", "The story soon died down") },
+    ] },
+  { id: "lowtrust", emoji: "😶", title: T("감독과의 거리", "Distance from the coach"), cd: 8,
+    when: (S) => isPro(S) && (S.trust || 50) < 35,
+    text: (S) => T(`요즘 ${S.pro.club} 감독이 눈을 잘 안 마주쳐요. 훈련에서도 지시가 짧아졌어요.`, `The ${S.pro.club} coach barely looks at you lately. Instructions in training are short.`),
+    choices: [
+      { label: T("🚪 면담을 신청한다", "🚪 Ask for a meeting"), hint: T("감독 신뢰↑", "Trust↑"), fx: (S) => tr(S, 8) },
+      { label: T("💪 훈련장에 제일 먼저 나온다", "💪 Be first at training"), hint: T("감독 신뢰↑ 컨디션↓", "Trust↑ Cond↓"), fx: (S) => [tr(S, 5), addCond(S, -8)].join(" · ") },
+      { label: T("🙄 신경 쓰지 않는다", "🙄 Ignore it"), hint: T("컨디션↑", "Cond↑"), fx: (S) => addCond(S, 6) },
+    ] },
+  { id: "fanboo", emoji: "📣", title: T("홈 팬들의 야유", "Booed at home"), cd: 8,
+    when: (S) => isPro(S) && (S.pro.streak || 0) <= -2,
+    text: (S) => T(`연패 중인 ${S.pro.club}. 홈 경기장에 야유가 쏟아졌어요.`, `${S.pro.club} keep losing, and the home crowd lets them hear it.`),
+    choices: [
+      { label: T("🙇 경기 뒤 팬들에게 사과한다", "🙇 Apologise to the fans"), hint: T("명성↑", "Fame↑"), fx: (S) => addFame(S, 6) },
+      { label: T("🔥 다음 경기로 보여준다", "🔥 Answer on the pitch"), hint: T("폼↑ 컨디션↓", "Form↑ Cond↓"), fx: (S) => [addForm(S, 1), addCond(S, -6)].join(" · ") },
+      { label: T("🎧 귀를 막고 집중", "🎧 Tune it out"), hint: T("컨디션↑", "Cond↑"), fx: (S) => addCond(S, 8) },
+    ] },
+  { id: "teammate", emoji: "😠", title: T("동료와의 언쟁", "A row with a teammate"), cd: 16,
+    when: (S) => isPro(S) && S.pro.round >= 2,
+    text: () => T("훈련 중 거친 태클에 동료와 말다툼이 붙었어요. 다들 쳐다보고 있어요.", "A rough tackle in training sparks a shouting match. Everyone's watching."),
+    choices: [
+      { label: T("🤝 먼저 손을 내민다", "🤝 Offer a handshake"), hint: T("감독 신뢰↑", "Trust↑"), fx: (S) => tr(S, 5) },
+      { label: T("😤 물러서지 않는다", "😤 Stand your ground"), hint: T("폼↑ 감독 신뢰↓", "Form↑ Trust↓"), fx: (S) => [addForm(S, 1), tr(S, -5)].join(" · ") },
+    ] },
+  { id: "charity", emoji: "💝", title: T("자선 행사 초대", "Charity invitation"), cd: 20,
+    when: (S) => S.money >= 3000 && S.fame >= 100,
+    text: () => T("소아 병동 아이들을 위한 자선 경기와 기부 행사에 초대받았어요.", "You're invited to a charity match and fundraiser for a children's ward."),
+    choices: [
+      { label: T("💝 크게 기부하고 참석", "💝 Donate big and attend"), hint: T("💰 · 명성 크게↑", "💰 · Fame↑↑"), fx: (S) => [addMoney(S, -Math.round(S.money * .1)), addFame(S, 30)].join(" · ") },
+      { label: T("⚽ 경기만 뛰어 준다", "⚽ Just play the match"), hint: T("명성↑ 컨디션↓", "Fame↑ Cond↓"), fx: (S) => [addFame(S, 10), addCond(S, -6)].join(" · ") },
+      { label: T("🙏 이번엔 사양", "🙏 Not this time"), hint: T("변화 없음", "No change"), fx: () => T("다음 기회를 약속했어요", "You promised to come next time") },
+    ] },
+  { id: "invest", emoji: "💸", title: T("친구의 투자 제안", "A friend's investment pitch"), cd: 25,
+    when: (S) => S.money >= 5000,
+    text: () => T("어릴 적 친구가 카페 창업에 투자해 달래요. 잘되면 크게 남지만, 장담은 못 한대요.", "A childhood friend wants you to back his cafe. Big upside, no guarantees."),
+    choices: [
+      { label: T("💸 투자한다", "💸 Invest"), hint: T("💰 운에 맡기기", "💰 Roll the dice"), fx: (S) => { const bet = Math.round(S.money * .15); if (Math.random() < .45) return addMoney(S, Math.round(bet * 1.8)) + T(" (대박!)", " (it paid off!)"); return addMoney(S, -bet) + T(" (가게가 문을 닫았어요)", " (the cafe closed)"); } },
+      { label: T("🙅 정중히 거절", "🙅 Politely decline"), hint: T("변화 없음", "No change"), fx: () => T("친구는 아쉬워했지만 이해했어요", "Your friend understood") },
+    ] },
+  { id: "exam", emoji: "📚", title: T("유스팀 학업 시험", "Academy school exams"), cd: 10,
+    when: (S) => S.phase === "youth" && (S.month === 5 || S.month === 11),
+    text: () => T("다음 주가 기말고사예요. 유스팀은 성적이 너무 낮으면 출전을 제한해요.", "Exams are next week. The academy limits match time for very low grades."),
+    choices: [
+      { label: T("📖 밤새 공부한다", "📖 Pull an all-nighter"), hint: T("명성↑ 컨디션↓", "Fame↑ Cond↓"), fx: (S) => [addFame(S, 3), addCond(S, -10)].join(" · ") },
+      { label: T("⚖️ 공부와 훈련을 반반", "⚖️ Split study and training"), hint: T("컨디션↓ 조금", "Cond↓ a bit"), fx: (S) => addCond(S, -4) },
+      { label: T("⚽ 축구만 한다", "⚽ Only football"), hint: T("다음 훈련 1.4배 · 폼↓", "Next training x1.4 · Form↓"), fx: (S) => { S.buff = 1.4; return [T("다음 훈련 효율 1.4배", "Next training x1.4"), addForm(S, -1)].join(" · "); } },
+    ] },
+  { id: "youthcap", emoji: "🎖️", title: T("유스팀 주장 선임", "Academy captain"), once: true,
+    when: (S) => S.phase === "youth" && S.year >= 2 && S.fame >= 10,
+    text: () => T("유스팀 코치가 이번 시즌 주장을 맡아 보래요. 동기들도 고개를 끄덕여요.", "The academy coach wants you as captain this season. Your teammates nod along."),
+    choices: [
+      { label: T("🎖️ 맡을게요", "🎖️ I'll do it"), hint: T("명성↑ 컨디션↓", "Fame↑ Cond↓"), fx: (S) => [addFame(S, 8), addCond(S, -5)].join(" · ") },
+      { label: T("🙏 아직은 부담돼요", "🙏 Not ready yet"), hint: T("컨디션↑", "Cond↑"), fx: (S) => addCond(S, 6) },
+    ] },
+  { id: "hometown", emoji: "🏫", title: T("모교 축구교실 방문", "Visiting your old school"), cd: 30,
+    when: (S) => isPro(S) && S.fame >= 60,
+    text: () => T("처음 축구를 시작한 동네 축구교실에서 아이들 앞에 서 달래요.", "Your first football school asks you to come talk to the kids."),
+    choices: [
+      { label: T("⚽ 같이 공을 찬다", "⚽ Play with the kids"), hint: T("명성↑ 폼↑", "Fame↑ Form↑"), fx: (S) => [addFame(S, 8), addForm(S, 1)].join(" · ") },
+      { label: T("🎁 축구공을 선물한다", "🎁 Gift footballs"), hint: T("💰 · 명성↑", "💰 · Fame↑"), fx: (S) => [addMoney(S, -50), addFame(S, 12)].join(" · ") },
+    ] },
 ];
 
 function mainStatOf(pos) { return Object.entries(POS[pos].w).sort((a, b) => b[1] - a[1])[0][0]; }
@@ -182,6 +320,10 @@ function pickEvent(S) {
     if (seen != null && S.turn - seen < (e.cd || 8)) return false;
     try { return e.when(S); } catch { return false; }
   });
+  // 지금 상황에 딱 맞는 이벤트(라이벌 팀전 전야, 강등권, 야유, 슬럼프, 해외 적응 등)가 있으면 절반 확률로 먼저
+  const PRI = ["derbyeve", "relegation", "fanboo", "slump", "homesick", "language", "captain", "lowtrust", "rumor", "veteran", "exam"];
+  const pri = ok.filter((e) => PRI.includes(e.id));
+  if (pri.length && Math.random() < .5) return pick(pri);
   return ok.length ? pick(ok) : null;
 }
 
