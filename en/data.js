@@ -1,3 +1,5 @@
+/* 번역 도우미는 share.js가 정의하지만, 먼저 불리는 파일(events.js 등)에서도 쓸 수 있게 미리 만들어 둬요 */
+if (typeof window.T !== "function") window.T = (ko, en) => (window.W2_LANG === "en" ? en : ko);
 /* 더 윙어 2 : 라이벌 - 데이터 */
 "use strict";
 

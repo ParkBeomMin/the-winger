@@ -552,7 +552,8 @@ async function turn(a, btn, fromAuto = false) {
     if (S.money >= 150 && !S.shopOpen) { S.shopOpen = true; addLog("🛍️ The Shop is open!"); }
     renderMain();
     if (!fromAuto) await sleepMs(250);
-    const hadEvent = await maybeEvent();
+    let hadEvent = false;
+    try { hadEvent = await maybeEvent(); } catch (e) { console.warn("event", e); }   // 이벤트에 문제가 있어도 진행은 막히지 않게
     const newInjury = !wasInjured && S.injured > 0;
     if (S.phase === "youth") {
       const left = S.month <= 6 ? 6 - S.month : 12 - S.month;
