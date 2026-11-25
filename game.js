@@ -1334,13 +1334,19 @@ function openBallonInfo() {
     buttons: [{ label: T("닫기", "Close"), value: 1, cls: "btn-primary" }] });
 }
 function ballonScore(o) { const B = BALLON_W; return o.ovr * B.ovr + o.tier * B.tier + (o.avg - 6.5) * B.rate + (o.g + (o.bg || 0) * B.big + o.a * .8) * (POS_F[o.pos] || 1) * B.ga + (o.champ ? B.champ : 0) + (o.boot ? B.boot : 0) + (o.ast ? B.ast : 0) + (o.mvp ? B.mvp : 0) + (o.cup || 0) + (o.wc || 0) - (o.rc || 0) * B.red; }
+/* 리그 MVP 점수: 평균 평점 + 공격 포인트(경기당) + 팀 성적. 꼴찌 팀에서 평점만 높은 선수가 받기 어렵게 (실제 MVP처럼 우승 경쟁 팀 · 결과 중심) */
+function mvpScore(p, lgId) {
+  const n = Object.keys(S.lgs[lgId].table).length, r = rankOf(p.c), ap = Math.max(1, p.s.ap);
+  const teamAdj = r === 1 ? .35 : r <= 3 ? .2 : r <= n / 2 ? .05 : r > n - 2 ? -.3 : -.1;
+  return pAvg(p) + (p.s.g + p.s.a * .7) * (POS_F[p.r] || 1) / ap * .45 + teamAdj;   // 포지션 배율: 수비·미드의 공격 포인트는 더 크게
+}
 function leagueAwards(lgId) {
   const ps = leaguePlayers(lgId).filter((p) => p.s.ap >= 9);
   const best = (f) => ps.slice().sort(f)[0];
   return {
     boot: best((a, b) => b.s.g - a.s.g || b.s.a - a.s.a || pAvg(b) - pAvg(a)),
     ast: best((a, b) => b.s.a - a.s.a || b.s.g - a.s.g || pAvg(b) - pAvg(a)),
-    mvp: best((a, b) => (pAvg(b) + (rankOf(b.c) <= 3 ? .2 : 0)) - (pAvg(a) + (rankOf(a.c) <= 3 ? .2 : 0))),
+    mvp: best((a, b) => mvpScore(b, lgId) - mvpScore(a, lgId)),
     young: ps.filter((p) => ageOf(p) <= 22).sort((a, b) => pAvg(b) - pAvg(a))[0],
     champ: sortedTable(lgId)[0][0],
   };
