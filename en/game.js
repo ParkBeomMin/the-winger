@@ -768,6 +768,19 @@ async function showResult(r, lines, btnLabel = "Continue") {
   if (r.mom) Sfx.good();
   await new Promise((res) => ($("b-res").onclick = res));
 }
+/* ⭐ 경기 명성: 지금 명성 등급에 걸맞은 활약을 해야 올라요.
+ * 기대 평점 = 6.3 + 등급×0.07 (+ 리그 수준보다 높은 등급이면 등급마다 0.4씩 더 엄격하게)
+ * 그보다 못하면 명성이 깎이고, 팀이 지면 조금 더 깎여요. 유명할수록 비판도 커요. */
+const FAME_RES = { W: 1, D: 0, L: -1.5 };
+function fameCapG(prestige) { return Math.round(3 + prestige * 2.7); }   // K리그1 6(국가대표급) · 네덜란드·포르투갈 8(월드스타) · 스페인·프리미어 11
+function fameDelta(r, prestige) {
+  const gi = fameGrade(S.fame).i, cap = fameCapG(prestige), ov = Math.max(0, gi - cap);
+  const bar = 6.3 + gi * .07 + ov * .4;
+  let d = (r.rating - bar) * 3 + r.goals * 2 + r.assists * 1.5 + (r.mom ? 3 : 0) + (S.phase === "pro" ? FAME_RES[r.res] || 0 : 0);
+  if (d < 0) d *= 1 + gi * .06;                        // 유명할수록 부진에 대한 비판이 커요
+  else d *= Math.pow(.5, Math.max(0, gi - cap + 1));    // 리그 수준에 닿으면 더 오르기 어려워요
+  return d - ov * 3;                                    // 리그 수준보다 높은 명성은 서서히 내려와요
+}
 function applyMatch(r, opts = {}) {
   const lines = [];
   if (opts.rival) {
@@ -776,9 +789,14 @@ function applyMatch(r, opts = {}) {
     if (r.rivalGoal) lines.push(`😤 ${esc(S.rival.name)} scored against you`);
   }
   lines.push(...(r.cards || []));
-  if (!r.played) return lines;
   const prestige = opts.prestige || 1;
-  const f = Math.round(((r.rating - 6.3) * 3 + r.goals * 2 + r.assists * 1.5 + (r.mom ? 3 : 0)) * ORIGINS[S.origin].fame * (S.phase === "youth" ? .6 : .6 + prestige * .2) * (opts.big || 1));
+  if (!r.played) {
+    /* 유명한 선수가 계속 못 뛰면 조금씩 잊혀요 (리그의 얼굴 이상) */
+    const gi = fameGrade(S.fame).i;
+    if (S.phase === "pro" && gi >= 7 && !opts.big) { const d = Math.round(gi * .4); S.fame = Math.max(0, S.fame - d); lines.push(`⭐ Fame -${d} (didn't play)`); }
+    return lines;
+  }
+  const f = Math.round(fameDelta(r, prestige) * ORIGINS[S.origin].fame * (S.phase === "youth" ? .6 : .6 + prestige * .2) * (opts.big || 1));
   const fb = typeof F === "function" ? F("fame") : 0;
   const f2 = f > 0 && fb ? Math.round(f * (1 + fb)) : f;
   S.fame = Math.max(0, S.fame + f2);
@@ -1846,7 +1864,7 @@ function openHelp() {
       <p><b>🏋️ Training & Condition</b><br/>Training raises stats and lowers Condition. Below 50 Condition, training gets less effective, and training that drops you under 30 risks injury. Buttons show the risk level.</p>
       <p><b>👔 Coach trust · ✍️ Contract</b><br/>Coach trust goes up and down with your match ratings and choices, and it affects the fight for a starting spot. If the coach changes or you transfer, you build it up again. Pro contracts have a length, match fee and release clause, and a transfer during a contract needs the club's OK. When a contract ends, you can sign a renewal or leave on a free.</p>
       <p><b>📡 Just happened</b><br/>Real things from matches and the world, like hat-tricks, losing streaks, coach changes, reaching a final, a rival's injury or an international call-up, turn into next turn's events.</p>
-      <p><b>🛍️ Shop · ⭐ Fame grades</b><br/>Gear is permanent, Staff has a cost each season, and Consumables are used right away. Giving raises Fame. Fame shows as grades from Unknown → Prospect → … → Football Icon.</p>
+      <p><b>🛍️ Shop · ⭐ Fame grades</b><br/>Gear is permanent, Staff has a cost each season, and Consumables are used right away. Giving raises Fame. Fame shows as grades from Unknown → Prospect → … → Football Icon. Higher grades come with higher expectations: poor games and defeats cost Fame, and a grade above your league's level is hard to keep.</p>
       <p><b>🎉 Fever Time · 📢 Notices · 🏛️ World Hall of Fame</b><br/>During live events a Fever banner appears at the top, with bonuses to Training, Mastery, Fame and match fees. Read Notices from the title screen and the 📢 button. When you retire, your Career joins the World Hall of Fame ranking.</p>
       <p><b>🏆 Youth tournament</b><br/>8 teams play a round robin in 2 groups, and the top 2 of each group go to the Semi-final, then the Final. You can meet your Rival's team in the Group stage, Semi-final or Final.</p>
       <p><b>☁️ Saving</b><br/>Every match result is saved right away, with automatic cloud backup. In ⚙️ → ☁️ you can continue on another device with an 8-character transfer code, or link a Google account.</p>
