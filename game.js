@@ -325,7 +325,7 @@ function renderMain() {
   const hud = $("hud");
   hud.innerHTML = `
     <div class="hud-av" id="hud-av"></div>
-    <div class="hud-id"><b>${esc(S.name)} ${typeof titleTag === "function" ? titleTag() : ""}<small>${POS[S.pos].short}${S.pos === "mf" && S.phase === "pro" && W && W.p.me && W.p.me.sr ? "·" + SUB_SHORT[W.p.me.sr] : ""} · ${S.age}세</small></b>
+    <div class="hud-id"><b>${esc(S.name)} ${typeof titleTag === "function" ? titleTag() : ""}<small>${POS[S.pos].short}${S.phase === "pro" && W && W.p.me && subOk(W.p.me) ? "·" + SUB_SHORT[W.p.me.sr] : ""} · ${S.age}세</small></b>
       <span>${pro ? `${crestHTML(S.pro.club, 15)} ${esc(S.pro.club)}` : `${ORIGINS[S.origin].flag} ${ORIGINS[S.origin].team}`} · 종합 <em>${OVR()}</em></span></div>
     <div class="hud-r"><b>${pro ? `${S.pro.season}시즌` : `${S.year}년차 ${S.month}월`}</b><span>💰 ${fmtMoney(S.money)}</span></div>`;
   $("hud-av").appendChild(avatarCanvas(S.look, myKit(), 48));
@@ -1367,14 +1367,17 @@ const CONTRIB = {
   pp: { e: "🧭", n: "패스 성공률", v: (s) => (s.pa || 0) >= s.ap * 20 ? passPct(s) : 0, f: (x) => x + "%" },
   df: { e: "🛡️", n: "수비 기여", v: defAct },
   ic: { e: "✋", n: "가로채기", v: (s) => s.ic || 0 },
+  cl: { e: "🧹", n: "걷어내기", v: (s) => s.cl || 0 },
   cs: { e: "🧱", n: "무실점", v: (s) => s.cs || 0, only: ["df", "gk"] },
   sv: { e: "🧤", n: "선방", v: (s) => s.sv || 0, only: ["gk"] },
 };
-const POS_CONTRIB = { fw: ["g", "sot", "xg"], wg: ["ga", "dc", "kp"], mf: ["kp", "pp", "df"], df: ["df", "ic", "cs"], gk: ["sv", "cs", "pp"], am: ["ga", "kp", "dc"], cm: ["kp", "pp", "df"], dm: ["df", "ic", "pp"] };
+const POS_CONTRIB = { fw: ["g", "sot", "xg"], wg: ["ga", "dc", "kp"], mf: ["kp", "pp", "df"], df: ["df", "ic", "cs"], gk: ["sv", "cs", "pp"], am: ["ga", "kp", "dc"], cm: ["kp", "pp", "df"], dm: ["df", "ic", "pp"],
+  tg: ["g", "sot", "xg"], ss: ["ga", "kp", "dc"], if: ["g", "ga", "dc"], tw: ["ga", "kp", "dc"], cb: ["df", "cl", "cs"], fb: ["df", "kp", "dc"], wb: ["df", "kp", "dc"] };
 /* 미드필더 세부 역할 이름 (포메이션 자리 + 능력치로 정해져요) */
-const SUB_NAME = { am: "공격형 미드필더", cm: "중앙 미드필더", dm: "수비형 미드필더" }, SUB_SHORT = { am: "공미", cm: "중미", dm: "수미" };
-const roleName = (p) => p.r === "mf" && p.sr ? SUB_NAME[p.sr] : ROLE_KO[p.r];
-const contribKeys = (p) => (p.r === "mf" && p.sr ? POS_CONTRIB[p.sr] : POS_CONTRIB[p.r]) || POS_CONTRIB.mf;
+const SUB_NAME = { am: "공격형 미드필더", cm: "중앙 미드필더", dm: "수비형 미드필더", tg: "타깃형 스트라이커", ss: "세컨드 스트라이커", if: "인사이드 포워드", tw: "정통 윙어", cb: "센터백", fb: "풀백", wb: "윙백" },
+  SUB_SHORT = { am: "공미", cm: "중미", dm: "수미", tg: "타깃형", ss: "세컨드", if: "인사이드", tw: "정통", cb: "센터백", fb: "풀백", wb: "윙백" };
+const roleName = (p) => subOk(p) ? SUB_NAME[p.sr] : ROLE_KO[p.r];
+const contribKeys = (p) => (subOk(p) ? POS_CONTRIB[p.sr] : POS_CONTRIB[p.r]) || POS_CONTRIB.mf;
 function contribRank(p, k) {
   const C = CONTRIB[k], minAp = Math.max(1, Math.min(9, Math.floor(p.s.ap * .6)));
   const ps = leaguePlayers(p.l).filter((q) => q.s.ap >= minAp && (!C.only || C.only.includes(q.r)));
@@ -1389,7 +1392,8 @@ function contribHTML(p) {
 /* 시즌 활약 점수: 평점 + 포지션 배율을 곱한 공격 포인트 + 도움이 안 된 키패스·수비 기여·무실점 (경기당) */
 function seasonImpact(p) {
   const s = p.s, ap = Math.max(1, s.ap);
-  return pAvg(p) + (s.g + s.a * .7) * (POS_F[p.r] || 1) / ap * .45 + (Math.max(0, (s.kp || 0) - s.a) * .12 + defAct(s) * .02 + (p.r === "gk" ? (s.cs || 0) * .3 : 0)) / ap;
+  const pf = subOk(p) && (p.sr === "fb" || p.sr === "wb") ? 1.6 : (POS_F[p.r] || 1);   // 풀백·윙백은 도움이 원래 많은 자리라 배율을 낮춰요
+  return pAvg(p) + (s.g + s.a * .7) * pf / ap * .45 + (Math.max(0, (s.kp || 0) - s.a) * .12 + defAct(s) * .02 + (p.r === "gk" ? (s.cs || 0) * .3 : 0)) / ap;
 }
 function topByF(lgId, fn, n, only) {
   return leaguePlayers(lgId).filter((p) => p.s.ap >= Math.max(3, Math.floor((S.pro.round || ROUNDS) * .55)) && (!only || only.includes(p.r))).sort((a, b) => fn(b.s) - fn(a.s) || pAvg(b) - pAvg(a)).slice(0, n);
@@ -1743,7 +1747,7 @@ function openSquad(club = S.pro.club) {
     title: `${crestHTML(club, 30)} ${esc(club)}`, wide: true,
     html: `<p class="small coach">${coachLine(club)}</p>${formationHTML(club, xi)}${race ? `<p class="small">${race.slots ? `${ROLE_KO[S.pos]} ${race.slots}자리` : `⚠️ ${race.form}엔 ${ROLE_KO[S.pos]} 자리가 없어요`} · 선발 가능성 <b>${Math.round(race.p * 100)}%</b>${race.kth ? ` · 넘어야 할 상대 <b>${esc(race.kth.n)} ${Math.round(pOvr(race.kth))}</b>` : ""}</p>` : `<p class="small">${LEAGUES[W.c[club].l].flag} ${LEAGUES[W.c[club].l].name} ${rankOf(club)}위</p>`}
       <table class="tbl"><tr><th>자리</th><th>선수</th><th>나이</th><th>능력</th><th>경기</th><th>⚽</th><th>🅰️</th><th>평점</th></tr>${ps.map((p) =>
-        `<tr class="${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}"><td>${ROLE_KO[p.r]}${xi.includes(p) ? (xi.roles[xi.indexOf(p)] !== p.r ? `→${ROLE_KO[xi.roles[xi.indexOf(p)]]}` : p.r === "mf" && p.sr ? `<small>·${SUB_SHORT[p.sr]}</small>` : "") : " <small>후보</small>"}</td><td><small>${p.id === "me" ? S.look.number : p.id === "rv" ? S.rival.look.number : p.no || ""}</small> ${NATIONS[p.nat].flag}<a class="pl" data-pid="${p.id}">${esc(p.n)}</a>${p.inj > 0 ? " 🚑" : ""}</td><td>${ageOf(p)}</td><td><b>${Math.round(pOvr(p))}</b></td><td>${p.s.ap}</td><td>${p.s.g}</td><td>${p.s.a}</td><td>${p.s.ap ? pAvg(p).toFixed(1) : "-"}</td></tr>`).join("")}</table>`,
+        `<tr class="${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}"><td>${ROLE_KO[p.r]}${xi.includes(p) ? (xi.roles[xi.indexOf(p)] !== p.r ? `→${ROLE_KO[xi.roles[xi.indexOf(p)]]}` : subOk(p) ? `<small>·${SUB_SHORT[p.sr]}</small>` : "") : " <small>후보</small>"}</td><td><small>${p.id === "me" ? S.look.number : p.id === "rv" ? S.rival.look.number : p.no || ""}</small> ${NATIONS[p.nat].flag}<a class="pl" data-pid="${p.id}">${esc(p.n)}</a>${p.inj > 0 ? " 🚑" : ""}</td><td>${ageOf(p)}</td><td><b>${Math.round(pOvr(p))}</b></td><td>${p.s.ap}</td><td>${p.s.g}</td><td>${p.s.a}</td><td>${p.s.ap ? pAvg(p).toFixed(1) : "-"}</td></tr>`).join("")}</table>`,
     buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }],
   });
   setTimeout(() => bindPlayerLinks($("modal")), 0);

@@ -20,6 +20,7 @@ const GOAL_DEF = {
   df: { e: "🛡️", n: () => T("수비 기여 (태클+가로채기+차단)", "Defensive actions"), v: () => (W && defAct(W.p.me.s)) || 0 },
   ic: { e: "✋", n: () => T("가로채기", "Interceptions"), v: () => (W && W.p.me.s.ic) || 0 },
   dc: { e: "💨", n: () => T("드리블 성공", "Dribbles won"), v: () => (W && W.p.me.s.dc) || 0 },
+  cl: { e: "🧹", n: () => T("걷어내기", "Clearances"), v: () => (W && W.p.me.s.cl) || 0 },
   rt: { e: "⭐", n: () => T("평균 평점 (9경기 이상)", "Avg rating (9+ apps)"), v: () => S.pro.s.ratings.length >= 9 ? Math.round(avg(S.pro.s.ratings) * 100) / 100 : 0, f: (x) => x ? x.toFixed(2) : "-" },
   rk: { e: "🏆", n: () => T("팀 순위", "Team finish"), v: () => S.pro.round ? myRank() : 0, low: true, f: (x) => x ? T(`${x}위`, `#${x}`) : "-" },
 };
@@ -32,15 +33,19 @@ function goalsInit() {
   const cl = (v, a, b) => Math.round(clamp(v, a, b));
   // 포지션(미드필더는 세부 역할)마다 후보 목표가 여러 개 → 매 시즌 하나를 골라요 (지난 시즌과 다른 걸로)
   bestXI(clubPlayers(club), false, formOf(club));   // 감독 포메이션에서 내 세부 역할(공미·중미·수미)을 정해요
-  const sr = S.pos === "mf" ? (W.p.me.sr || "cm") : S.pos;
+  const sr = subOk(W.p.me) ? W.p.me.sr : { mf: "cm", fw: "tg", wg: "if", df: "cb" }[S.pos] || S.pos;
   P.sr = sr;
   const POOL = {
-    fw: [["g", cl(8 + rel * .6, 3, 25)], ["ga", cl(10 + rel * .6, 4, 28)]],
-    wg: [["ga", cl(9 + rel * .6, 4, 28)], ["dc", cl(40 + rel * 1, 20, 70)], ["kp", cl(12 + rel * .5, 6, 26)]],
+    tg: [["g", cl(8 + rel * .6, 3, 25)], ["ga", cl(10 + rel * .6, 4, 28)]],
+    ss: [["ga", cl(8 + rel * .5, 4, 20)], ["kp", cl(6 + rel * .4, 3, 15)], ["dc", cl(35 + rel, 15, 60)]],
+    if: [["g", cl(7 + rel * .5, 3, 20)], ["ga", cl(10 + rel * .6, 4, 26)], ["dc", cl(50 + rel, 25, 80)]],
+    tw: [["ga", cl(9 + rel * .5, 4, 22)], ["kp", cl(14 + rel * .5, 6, 28)], ["dc", cl(50 + rel, 25, 80)]],
     am: [["ga", cl(5 + rel * .35, 3, 14)], ["kp", cl(18 + rel * .5, 10, 32)], ["a", cl(3 + rel * .25, 2, 9)]],
-    cm: [["kp", cl(15 + rel * .5, 8, 28)], ["pp", cl(91 + rel * .3, 87, 96)], ["ga", cl(4 + rel * .3, 2, 10)], ["df", cl(25 + rel * .8, 12, 45)]],
-    dm: [["df", cl(50 + rel * 1.2, 25, 75)], ["ic", cl(25 + rel * .6, 12, 40)], ["pp", cl(91 + rel * .3, 87, 96)], ["tc", cl(25 + rel * .8, 12, 42)]],
-    df: [["tc", cl(38 + rel * .9, 18, 60)], ["df", cl(78 + rel * 1.2, 40, 100)], ["ic", cl(35 + rel * .6, 18, 50)]],
+    cm: [["kp", cl(15 + rel * .5, 8, 28)], ["pp", cl(92 + rel * .3, 88, 96)], ["ga", cl(4 + rel * .3, 2, 10)], ["df", cl(25 + rel * .8, 12, 45)]],
+    dm: [["df", cl(50 + rel * 1.2, 25, 75)], ["ic", cl(25 + rel * .6, 12, 40)], ["pp", cl(92 + rel * .3, 88, 96)], ["tc", cl(25 + rel * .8, 12, 42)]],
+    cb: [["tc", cl(55 + rel, 30, 85)], ["df", cl(105 + rel * 1.2, 60, 140)], ["ic", cl(40 + rel * .6, 22, 55)], ["cl", cl(60 + rel, 35, 90)]],
+    fb: [["df", cl(55 + rel, 30, 80)], ["kp", cl(10 + rel * .5, 5, 22)], ["dc", cl(10 + rel * .5, 5, 25)]],
+    wb: [["df", cl(48 + rel, 25, 75)], ["kp", cl(11 + rel * .5, 5, 24)], ["dc", cl(12 + rel * .5, 6, 28)]],
     gk: [["cs", cl(4 + rel * .2, 2, 9)]],
   }[sr] || [["ga", 8]];
   const lastK = P.prevGoal && P.prevGoal.k;
@@ -50,7 +55,7 @@ function goalsInit() {
   const pvV = P.prevVals && P.prevVals[stat[0]];
   if (pvV && stat[0] !== "pp") stat[1] = Math.max(stat[1], Math.round(pvV * (P.prevVals.club === club ? .85 : .7)));
   const goals = [{ k: stat[0], t: stat[1] }, { k: "rt", t: Math.round(clamp(6.7 + rel * .015, 6.4, 7.4) * 10) / 10 }, { k: "rk", t: exp <= 1 ? 1 : Math.min(LEAGUES[P.league].clubs.length, exp - (Math.random() < .5 ? 1 : 0)) }];
-  if (S.pos === "df") goals.splice(1, 0, { k: "cs", t: cl(4 + (10 - exp) * .5, 2, 9) });
+  if (S.pos === "df" && sr !== "fb" && sr !== "wb") goals.splice(1, 0, { k: "cs", t: cl(4 + (10 - exp) * .5, 2, 9) });
   P.goals = goals.slice(0, 3);
   P.goals.forEach((g) => { g.hit = false; });
 }
@@ -92,7 +97,7 @@ function goalsSettle() {
   addLog(`🎯 ${T("감독 목표", "Coach goals")} ${ok}/${P.goals.length}`);
   P.goalsDone = P.season;
   P.prevGoal = { k: P.goals[0].k, v: GOAL_DEF[P.goals[0].k].v(), club: P.club };
-  P.prevVals = { club: P.club }; for (const k of ["g", "ga", "a", "kp", "dc", "df", "ic", "tc"]) P.prevVals[k] = GOAL_DEF[k].v();
+  P.prevVals = { club: P.club }; for (const k of ["g", "ga", "a", "kp", "dc", "df", "ic", "tc", "cl"]) P.prevVals[k] = GOAL_DEF[k].v();
   P.goalsHTML = `<div class="ss-card goals-card"><h4>🎯 ${T("감독 목표", "Coach's goals")} ${ok}/${P.goals.length}</h4>${rows}
     <p class="small">${ok ? T(`💰 +${fmtMoney(money + (all ? pay * 3 : 0))} · ⭐ 명성 +${fame} · 👔 감독 신뢰 +${4 * ok}`, `💰 +${fmtMoney(money + (all ? pay * 3 : 0))} · ⭐ Fame +${fame} · 👔 Trust +${4 * ok}`) : ""}${fail ? T(` · 못 채운 목표 ${fail}개, 감독 신뢰 -${3 * fail}`, ` · ${fail} missed, trust -${3 * fail}`) : ""}${all ? T(" · 🎉 전부 달성 보너스!", " · 🎉 All-clear bonus!") : ""}</p></div>`;
   return P.goalsHTML;
