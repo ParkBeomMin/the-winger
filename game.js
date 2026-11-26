@@ -1412,7 +1412,20 @@ function leagueAwards(lgId) {
   };
 }
 
+/* 시즌 결산은 한 번만: 결산 화면·월드컵·이적 시장 도중에 앱을 껐다 켜도 기록·상·보상이 두 번 쌓이지 않게 */
+const wcDoneFor = (season) => !!(S.wcWinner && S.wcWinner.season === season + 1);
+async function seasonResume() {
+  const P = S.pro, wcNext = P.season % 4 === 0 && !wcDoneFor(P.season), canRetire = S.age >= 31 && S.osDone !== P.season, mustRetire = S.age >= 36 && S.osDone !== P.season;
+  const v = mustRetire ? "retire" : await modal({ emoji: "📋", title: `${P.season}시즌 결산은 끝났어요`, html: `<p>이어서 ${wcNext ? "🌍 월드컵" : "💼 이적 시장"}으로 갈게요.</p>`,
+    buttons: [{ label: wcNext ? "🌍 월드컵으로 →" : "💼 이적 시장 →", value: "next", cls: "btn-primary" }, ...(canRetire ? [{ label: "🎓 여기서 은퇴하기", value: "retire" }] : [])] });
+  if (v === "retire") return retire();
+  if (wcNext) { await loadingOn("월드컵 여는 중"); await worldCup(); }
+  await loadingOn("이적 시장 여는 중");
+  await offseason();
+  loadingOff();
+}
 async function seasonEnd() {
+  if (S.ssDone === S.pro.season) return seasonResume();
   const P = S.pro, lg = LEAGUES[P.league], rank = myRank(), tbl = sortedTable();
   const myAvg = avg(P.s.ratings), rv = S.rival, rvp = W.p.rv, rs = rvS();
   const AW = Object.fromEntries(LEAGUES.map((l) => [l.id, leagueAwards(l.id)]));
@@ -1509,6 +1522,7 @@ async function seasonEnd() {
   if (awards.some((a) => a.k === "ballon")) { Sfx.goal(); if (Sfx.fanfare) Sfx.fanfare(); }
   addLog(`📋 ${P.season}시즌 ${rank}위 · ⚽${P.s.g} 🅰️${P.s.a}${awards.length ? " · " + awards.map((a) => a.name).join(", ") : ""}`);
   archiveSeason(P.season);
+  S.ssDone = P.season; save();
 
   const canRetire = S.age >= 31, mustRetire = S.age >= 36;
   const wcNext = P.season % 4 === 0;
@@ -1614,8 +1628,9 @@ async function worldCup() {
 async function offseason() {
   const P = S.pro;
   const myAvg = avg(P.s.ratings);
-  S.age++; S.rival.age++;
   const decl = [];
+  if (S.osDone !== P.season) {
+  S.age++; S.rival.age++;
   if (S.age >= 31) {
     for (const k of STAT_KEYS) { const d = (k === "spd" || k === "sta") ? rand(1.5, 3.5) : rand(.4, 1.8); S.stats[k] = clamp(S.stats[k] - d * (1 - trOf(k) * .25), 1, statCap(k)); }
     decl.push("나이가 들며 스피드와 체력이 떨어졌어요");
@@ -1637,8 +1652,10 @@ async function offseason() {
       buttons: [{ label: "이적 시장으로", value: 1, cls: "btn-primary" }] });
     await loadingOn("이적 시장 여는 중");
   } else save();
+  if (S.contract && S.contract.club === P.club) S.contract.years--;
+  S.osDone = P.season; save();
+  }
   const ct = S.contract;
-  if (ct && ct.club === P.club) ct.years--;
   const free = !ct || ct.club !== P.club || ct.years <= 0;
   const oldRv = S.rival.club;
   if (ROVR() > clubStr(S.rival.league, S.rival.club) + 3 || spotRace(S.rival.club, "rv").margin < -4) rivalPickClub();
@@ -1889,6 +1906,24 @@ function openMast(k) {
     buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }] });
 }
 function shortName(n) { return n.length > 7 ? n.slice(0, 7) + "…" : n; }
+function fixDupSeasons() {
+  if (S.dupFix === 1 || S.phase !== "pro" && S.phase !== "retired") return;
+  const c = S.career, seen = new Set(), keep = [];
+  for (const s of c.seasons || []) {
+    if (seen.has(s.season)) { c.apps -= (s.apps || 0) + ((s.cup && s.cup.ap) || 0); c.g -= (s.g || 0) + ((s.cup && s.cup.g) || 0); c.a -= (s.a || 0) + ((s.cup && s.cup.a) || 0); continue; }
+    seen.add(s.season); keep.push(s);
+  }
+  const removed = (c.seasons || []).length - keep.length;
+  c.seasons = keep; c.apps = Math.max(0, c.apps); c.g = Math.max(0, c.g); c.a = Math.max(0, c.a);
+  if (W && W.p) for (const p of Object.values(W.p)) {
+    if (!p.h || !p.h.length) continue;
+    const ss = new Set(), hk = [];
+    for (const e of p.h) { const o = hObj(e); if (ss.has(o.y)) { if (p.id === "rv") { S.rival.career.g = Math.max(0, S.rival.career.g - (o.g || 0)); S.rival.career.a = Math.max(0, S.rival.career.a - (o.a || 0)); } continue; } ss.add(o.y); hk.push(e); }
+    p.h = hk;
+  }
+  if (removed) addLog(`🧹 같은 시즌이 두 번 기록된 것 ${removed}개를 정리했어요`);
+  S.dupFix = 1;
+}
 function migrateLife() {
   S.gear = S.gear || {};
   for (const it of SHOP2) if (S.gear[it.id] == null) S.gear[it.id] = 0;
@@ -1896,6 +1931,8 @@ function migrateLife() {
   if (S.trust == null) S.trust = 50;
   S.mast = S.mast || {}; S.trans = S.trans || {};
   S.rival.mast = S.rival.mast || {}; S.rival.trans = S.rival.trans || {};
+  // 결산이 이미 끝난 시즌인데 "결산 대기"로 저장돼 있으면 표시해 둬요 (다시 결산하지 않게)
+  if (S.phase === "pro" && S.pro && S.ssDone == null) { const last = S.career.seasons[S.career.seasons.length - 1]; if (S.pending === "season" && last && last.season === S.pro.season) { S.ssDone = S.pro.season; if (S.age > last.age) S.osDone = S.pro.season; } }
   // v2.2: ★5 뒤(또는 최대치에서) 쌓아 둔 숙련은 같은 비율만큼 초월 게이지로 옮겨요
   if (S.trV !== 1) {
     for (const E of [S, S.rival]) for (const k of STAT_KEYS) {
@@ -1995,6 +2032,7 @@ async function resume() {
   if (!S.rival.look.face) S.rival.look.face = FACE_IDS[((S.rival.look.hair || 0) * 3 + (S.rival.look.skin || 0) + 7) % FACE_IDS.length];
   migrateLife();
   if (S.phase === "pro") ensureWorld();
+  if (S.phase === "pro") { try { fixDupSeasons(); } catch (e) { console.warn("dupfix", e); } }
   if (S.phase === "pro" && !S.contract && S.pro) S.contract = { club: S.pro.club, years: 2, sal: Math.round(LEAGUES[S.pro.league].pay * Math.pow(OVR() / 65, 2)), rel: Math.max(1, Math.round(marketValue(W.p.me) * 1.6)), since: S.pro.season };
   if (S.phase === "pro") syncTrust();
   show("scr-main"); renderMain();
