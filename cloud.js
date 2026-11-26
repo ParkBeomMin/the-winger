@@ -184,7 +184,8 @@ async function openCloud() {
     ],
   });
   if (v === "make") {
-    if (!S || !S.name) return toast("옮길 진행이 없어요");
+    const sv = S || load();   // 타이틀 화면에선 아직 S를 안 불러왔어요 → 저장된 진행으로 확인
+    if (!sv || !sv.name) return toast("옮길 진행이 없어요");
     toast("코드를 만드는 중…", 1500);
     let code; try { code = await makeTransfer(); } catch { return toast("코드를 만들지 못했어요. 잠시 뒤에 다시 해 주세요"); }
     await modal({ emoji: "📤", title: "이전 코드", html: `<p class="xfer-code">${trFmt(code)}</p><p class="small">다른 기기에서 <b>⚙️ → ☁️ 저장 · 기기 이전 → 📥 이전 코드 입력</b>에 넣어 주세요.<br/>24시간 동안 한 번만 쓸 수 있어요.</p>`, buttons: [{ label: "코드 복사", value: 1, cls: "btn-primary" }, { label: "닫기", value: 0 }] })
