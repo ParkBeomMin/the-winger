@@ -1025,7 +1025,7 @@ function starterProb(club) {
 function coachLine(club) { const co = coachOf(club); return `👔 ${esc(co.n)} ${NATIONS[co.nat] ? NATIONS[co.nat].flag : ""} · <b>${co.f}</b> · ${STYLES[co.s].name}`; }
 function formationHTML(club, xi) {
   const F = FORMS[formOf(club)];
-  return `<div class="fpitch">${xi.map((p, i) => { const [x, y] = F.pos[i] || [.5, .5];
+  return `<div class="fpitch">${xi.map((p, i) => { const [x, y] = F.pos[xi.slots ? xi.slots[i] : i] || [.5, .5];
     return `<span class="fdot ${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}" style="left:${8 + x * 84 / .72}%;top:${y * 100}%"><i>${p.id === "me" ? S.look.number : p.id === "rv" ? S.rival.look.number : p.no || ""}</i><em>${esc(p.n.includes(" ") ? p.n.split(" ").slice(-1)[0] : p.n)}</em></span>`; }).join("")}</div>`;
 }
 function salaryOf(lg) { const c = S.contract; return c && S.pro && c.club === S.pro.club ? c.sal : Math.round(LEAGUES[lg].pay * Math.pow(OVR() / 65, 2)); }

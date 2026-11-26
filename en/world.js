@@ -112,6 +112,15 @@ function subLean(p) { const s = sOf(p); return s.sho * .35 + s.pas * .35 + s.dri
 const fbLean = (p) => { const s = sOf(p); return s.spd * .4 + s.dri * .3 + s.pas * .3 - s.def * .7; };   // 빠르고 공을 다루면 풀백, 수비가 강하면 센터백
 const fwLean = (p) => { const s = sOf(p); return s.sho - (s.pas + s.dri) / 2; };   // 슛이 강하면 타깃형, 패스·드리블이면 세컨드
 const WG_TH = 0, FW_TH = -6;
+/* 같은 포지션 자리끼리 선수를 바꿔 세워서, 세부 역할과 그림 속 자리가 맞게 해요 (자리 구성 kinds는 포메이션 순서) */
+function alignSlots(xi, role, kinds) {
+  const idx = xi.map((p, i) => i).filter((i) => xi.roles[i] === role);
+  if (idx.length !== kinds.length) return;
+  const ps = idx.map((i) => xi[i]), out = new Array(idx.length).fill(null);
+  kinds.forEach((k, j) => { const m = ps.findIndex((p) => p && p.r === role && p.sr === k); if (m >= 0) { out[j] = ps[m]; ps[m] = null; } });
+  kinds.forEach((k, j) => { if (!out[j]) { const m = ps.findIndex((p) => p); out[j] = ps[m]; ps[m] = null; } });
+  idx.forEach((i, j) => { xi[i] = out[j]; });
+}
 function assignSub(xi, form) {
   const F = SUB_SLOTS[form] || SUB_SLOTS["4-3-3"], FP = (FORMS[form] || FORMS["4-3-3"]).pos;
   const at = (role) => xi.filter((p, i) => xi.roles[i] === role && p.r === role);
@@ -122,9 +131,11 @@ function assignSub(xi, form) {
     while (n-- > 0 && left.length) { left.sort((a, b) => kind === "am" ? subLean(b) - subLean(a) : subLean(a) - subLean(b)); left.shift().sr = kind; }
   }
   left.forEach((p) => { p.sr = "cm"; });
+  alignSlots(xi, "mf", F.mf);   // 수미는 가장 뒤 가운데, 공미는 가장 앞 자리에 서게 자리도 맞춰요
   // 수비수: 자리 그대로 (바깥 자리 수만큼 풀백·윙백)
   const dfs = at("df").sort((a, b) => fbLean(b) - fbLean(a)), nWide = F.df.filter((k) => k !== "cb").length, wide = F.df.includes("wb") ? "wb" : "fb";
   dfs.forEach((p, k) => { p.sr = k < nWide ? wide : "cb"; });
+  alignSlots(xi, "df", F.df);   // 풀백·윙백은 바깥, 센터백은 가운데
   // 윙어: 슛 성향 + (내 선수는) 주발이 반대쪽이면 인사이드 포워드
   xi.forEach((p, i) => {
     if (xi.roles[i] !== "wg" || p.r !== "wg") return;
