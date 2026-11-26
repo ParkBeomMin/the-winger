@@ -325,7 +325,7 @@ function renderMain() {
   const hud = $("hud");
   hud.innerHTML = `
     <div class="hud-av" id="hud-av"></div>
-    <div class="hud-id"><b>${esc(S.name)} ${typeof titleTag === "function" ? titleTag() : ""}<small>${POS[S.pos].short} · ${S.age}세</small></b>
+    <div class="hud-id"><b>${esc(S.name)} ${typeof titleTag === "function" ? titleTag() : ""}<small>${POS[S.pos].short}${S.pos === "mf" && S.phase === "pro" && W && W.p.me && W.p.me.sr ? "·" + SUB_SHORT[W.p.me.sr] : ""} · ${S.age}세</small></b>
       <span>${pro ? `${crestHTML(S.pro.club, 15)} ${esc(S.pro.club)}` : `${ORIGINS[S.origin].flag} ${ORIGINS[S.origin].team}`} · 종합 <em>${OVR()}</em></span></div>
     <div class="hud-r"><b>${pro ? `${S.pro.season}시즌` : `${S.year}년차 ${S.month}월`}</b><span>💰 ${fmtMoney(S.money)}</span></div>`;
   $("hud-av").appendChild(avatarCanvas(S.look, myKit(), 48));
@@ -342,7 +342,7 @@ function renderMain() {
   // 라이벌 카드
   const rv = S.rival, my = OVR(), ro = ROVR(), diff = my - ro;
   const rvLine = pro && rv.club
-    ? `${LEAGUES[rv.league].flag} ${esc(rv.club)} · 시즌 ⚽${rvS().g} 🅰️${rvS().a} <small>(나 ⚽${S.pro.s.g} 🅰️${S.pro.s.a}${W && W.p.me && ["mf", "df", "gk"].includes(S.pos) ? ` ${CONTRIB[POS_CONTRIB[S.pos][0]].e}${CONTRIB[POS_CONTRIB[S.pos][0]].v(W.p.me.s)}` : ""})</small>`
+    ? `${LEAGUES[rv.league].flag} ${esc(rv.club)} · 시즌 ⚽${rvS().g} 🅰️${rvS().a} <small>(나 ⚽${S.pro.s.g} 🅰️${S.pro.s.a}${W && W.p.me && ["mf", "df", "gk"].includes(S.pos) ? ` ${CONTRIB[contribKeys(W.p.me)[0]].e}${CONTRIB[contribKeys(W.p.me)[0]].v(W.p.me.s)}` : ""})</small>`
     : `${ORIGINS[rv.origin].flag} ${ORIGINS[rv.origin].team} · ${POS[rv.pos].name}`;
   $("rival-card").innerHTML = `
     <div class="rc-av" id="rc-av"></div>
@@ -1370,7 +1370,11 @@ const CONTRIB = {
   cs: { e: "🧱", n: "무실점", v: (s) => s.cs || 0, only: ["df", "gk"] },
   sv: { e: "🧤", n: "선방", v: (s) => s.sv || 0, only: ["gk"] },
 };
-const POS_CONTRIB = { fw: ["g", "sot", "xg"], wg: ["ga", "dc", "kp"], mf: ["kp", "pp", "df"], df: ["df", "ic", "cs"], gk: ["sv", "cs", "pp"] };
+const POS_CONTRIB = { fw: ["g", "sot", "xg"], wg: ["ga", "dc", "kp"], mf: ["kp", "pp", "df"], df: ["df", "ic", "cs"], gk: ["sv", "cs", "pp"], am: ["ga", "kp", "dc"], cm: ["kp", "pp", "df"], dm: ["df", "ic", "pp"] };
+/* 미드필더 세부 역할 이름 (포메이션 자리 + 능력치로 정해져요) */
+const SUB_NAME = { am: "공격형 미드필더", cm: "중앙 미드필더", dm: "수비형 미드필더" }, SUB_SHORT = { am: "공미", cm: "중미", dm: "수미" };
+const roleName = (p) => p.r === "mf" && p.sr ? SUB_NAME[p.sr] : ROLE_KO[p.r];
+const contribKeys = (p) => (p.r === "mf" && p.sr ? POS_CONTRIB[p.sr] : POS_CONTRIB[p.r]) || POS_CONTRIB.mf;
 function contribRank(p, k) {
   const C = CONTRIB[k], minAp = Math.max(1, Math.min(9, Math.floor(p.s.ap * .6)));
   const ps = leaguePlayers(p.l).filter((q) => q.s.ap >= minAp && (!C.only || C.only.includes(q.r)));
@@ -1380,7 +1384,7 @@ function contribRank(p, k) {
 const rankTxt = (n) => T(` · 리그 ${n}위`, ` · #${n} in league`);
 function contribHTML(p) {
   if (!p || !p.s || !p.s.ap || p.l == null) return "";
-  return `<div class="mystats contrib">${(POS_CONTRIB[p.r] || POS_CONTRIB.mf).map((k) => { const C = CONTRIB[k], r = contribRank(p, k); return `<span class="${r.rank && r.rank <= 3 ? "top" : ""}"><b>${C.e} ${C.f ? C.f(r.v) : r.v}</b><small>${C.n}${r.rank && r.rank <= 20 ? rankTxt(r.rank) : ""}</small></span>`; }).join("")}</div>`;
+  return `<div class="mystats contrib">${contribKeys(p).map((k) => { const C = CONTRIB[k], r = contribRank(p, k); return `<span class="${r.rank && r.rank <= 3 ? "top" : ""}"><b>${C.e} ${C.f ? C.f(r.v) : r.v}</b><small>${C.n}${r.rank && r.rank <= 20 ? rankTxt(r.rank) : ""}</small></span>`; }).join("")}</div>`;
 }
 /* 시즌 활약 점수: 평점 + 포지션 배율을 곱한 공격 포인트 + 도움이 안 된 키패스·수비 기여·무실점 (경기당) */
 function seasonImpact(p) {
@@ -1495,7 +1499,7 @@ async function seasonEnd() {
       <table class="tbl"><tr><th>#</th><th>클럽</th><th>승</th><th>무</th><th>패</th><th>득실</th><th>승점</th></tr>
       ${tbl.map(([n, t], i) => `<tr class="${myRow(n)} ${zoneCls(P.league, i)}"><td>${i + 1}</td><td>${crestHTML(n, 14)} ${esc(n)}${n === rvp.c ? " ⚔️" : ""}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table></div>
     <div class="ss-card"><h4>내 시즌</h4>
-      <p class="label">🎖️ ${ROLE_KO[S.pos]} 핵심 기여</p>${contribHTML(W.p.me)}
+      <p class="label">🎖️ ${roleName(W.p.me)} 핵심 기여</p>${contribHTML(W.p.me)}
       ${seasonStatHTML(W.p.me.s)}
       <div class="ss-me"><div id="ss-av"></div><div>리그 ${P.s.apps}경기 (선발 ${P.s.starts})<br/>⚽ ${P.s.g}골 · 🅰️ ${P.s.a}도움 · MOM ${P.s.mom}<br/>평균 평점 <b>${myAvg ? myAvg.toFixed(2) : "-"}</b>${P.cup.ap ? `<br/>대륙컵 ${P.cup.ap}경기 ⚽ ${P.cup.g} 🅰️ ${P.cup.a}` : ""}<br/>
       ${awards.length ? awards.map((a) => `<span class="aw">${a.name}</span>`).join(" ") : "<small>이번 시즌 수상은 없어요</small>"}
@@ -1739,7 +1743,7 @@ function openSquad(club = S.pro.club) {
     title: `${crestHTML(club, 30)} ${esc(club)}`, wide: true,
     html: `<p class="small coach">${coachLine(club)}</p>${formationHTML(club, xi)}${race ? `<p class="small">${race.slots ? `${ROLE_KO[S.pos]} ${race.slots}자리` : `⚠️ ${race.form}엔 ${ROLE_KO[S.pos]} 자리가 없어요`} · 선발 가능성 <b>${Math.round(race.p * 100)}%</b>${race.kth ? ` · 넘어야 할 상대 <b>${esc(race.kth.n)} ${Math.round(pOvr(race.kth))}</b>` : ""}</p>` : `<p class="small">${LEAGUES[W.c[club].l].flag} ${LEAGUES[W.c[club].l].name} ${rankOf(club)}위</p>`}
       <table class="tbl"><tr><th>자리</th><th>선수</th><th>나이</th><th>능력</th><th>경기</th><th>⚽</th><th>🅰️</th><th>평점</th></tr>${ps.map((p) =>
-        `<tr class="${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}"><td>${ROLE_KO[p.r]}${xi.includes(p) ? (xi.roles[xi.indexOf(p)] !== p.r ? `→${ROLE_KO[xi.roles[xi.indexOf(p)]]}` : "") : " <small>후보</small>"}</td><td><small>${p.id === "me" ? S.look.number : p.id === "rv" ? S.rival.look.number : p.no || ""}</small> ${NATIONS[p.nat].flag}<a class="pl" data-pid="${p.id}">${esc(p.n)}</a>${p.inj > 0 ? " 🚑" : ""}</td><td>${ageOf(p)}</td><td><b>${Math.round(pOvr(p))}</b></td><td>${p.s.ap}</td><td>${p.s.g}</td><td>${p.s.a}</td><td>${p.s.ap ? pAvg(p).toFixed(1) : "-"}</td></tr>`).join("")}</table>`,
+        `<tr class="${p.id === "me" ? "me" : p.id === "rv" ? "rv" : ""}"><td>${ROLE_KO[p.r]}${xi.includes(p) ? (xi.roles[xi.indexOf(p)] !== p.r ? `→${ROLE_KO[xi.roles[xi.indexOf(p)]]}` : p.r === "mf" && p.sr ? `<small>·${SUB_SHORT[p.sr]}</small>` : "") : " <small>후보</small>"}</td><td><small>${p.id === "me" ? S.look.number : p.id === "rv" ? S.rival.look.number : p.no || ""}</small> ${NATIONS[p.nat].flag}<a class="pl" data-pid="${p.id}">${esc(p.n)}</a>${p.inj > 0 ? " 🚑" : ""}</td><td>${ageOf(p)}</td><td><b>${Math.round(pOvr(p))}</b></td><td>${p.s.ap}</td><td>${p.s.g}</td><td>${p.s.a}</td><td>${p.s.ap ? pAvg(p).toFixed(1) : "-"}</td></tr>`).join("")}</table>`,
     buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }],
   });
   setTimeout(() => bindPlayerLinks($("modal")), 0);
@@ -1754,7 +1758,7 @@ function openPlayer(id) {
     title: `${NATIONS[p.nat].flag} ${esc(p.n)}${id === "rv" ? " ⚔️" : ""}`, wide: true,
     html: `<p class="small">${ROLE_KO[p.r]} · ${ageOf(p)}세 · ${NATIONS[p.nat].name} · ${p.c ? `<a class="pl" data-club="${esc(p.c)}">${crestHTML(p.c, 14)} ${esc(p.c)}</a>` : "무소속"} · 종합 <b>${Math.round(pOvr(p))}</b> · 시장가치 <b>${fmtMV(marketValue(p))}</b>${p.inj > 0 ? ` · 🚑 부상 ${p.inj}경기` : ""}</p>
       <div class="roll">${STATS.map((s) => { const t5 = id === "rv" ? S.rival.talent[s.key] === 5 : (aiEnsure(p), aiTal(p, STAT_KEYS.indexOf(s.key)) === 5); return `<div><span>${s.emoji} ${s.name}</span><b class="${st[s.key] > 99 ? "over" : ""}">${Math.round(st[s.key])}</b><i class="${t5 ? "t5" : ""}">${id === "rv" ? talentStr(s.key, S.rival.talent[s.key], trOf(s.key, S.rival)) : aiTalentStr(p, s.key)}</i></div>`; }).join("")}</div>
-      ${p.s.ap ? `<p class="label">이번 시즌 ${ROLE_KO[p.r]} 핵심 기여</p>${contribHTML(p)}<p class="label">이번 시즌 상세</p>${seasonStatHTML(p.s, p.r)}` : ""}
+      ${p.s.ap ? `<p class="label">이번 시즌 ${roleName(p)} 핵심 기여</p>${contribHTML(p)}<p class="label">이번 시즌 상세</p>${seasonStatHTML(p.s, p.r)}` : ""}
       <table class="tbl"><tr><th>시즌</th><th>클럽</th><th>경기</th><th>⚽</th><th>🅰️</th><th>패스%</th><th>키패스</th><th>평점</th></tr>${hist.slice().reverse().map((h) => `<tr><td>${h.y}${h.now ? "*" : ""}</td><td>${esc(shortName(h.c))}</td><td>${h.ap}</td><td>${h.g}</td><td>${h.a}</td><td>${h.now ? passPct(p.s) : h.pp ?? "-"}</td><td>${h.now ? p.s.kp || 0 : h.kp ?? "-"}</td><td>${h.r ? h.r.toFixed(2) : "-"}</td></tr>`).join("")}</table>
       <p class="small">통산 ⚽ ${hist.reduce((s, h) => s + h.g, 0)} · 🅰️ ${hist.reduce((s, h) => s + h.a, 0)} (기록 보관 이후)</p>`,
     buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }],

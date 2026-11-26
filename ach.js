@@ -16,6 +16,10 @@ const GOAL_DEF = {
   cs: { e: "🧱", n: () => T("무실점 경기", "Clean sheets"), v: () => (W && W.p.me.s.cs) || 0 },
   tc: { e: "🛡️", n: () => T("태클 성공", "Tackles won"), v: () => (W && W.p.me.s.tc) || 0 },
   kp: { e: "🎩", n: () => T("키패스 (도움 포함)", "Key passes (incl. assists)"), v: () => (W && W.p.me.s.kp) || 0 },
+  pp: { e: "🧭", n: () => T("패스 성공률 (9경기 이상)", "Pass accuracy (9+ apps)"), v: () => W && S.pro.s.apps >= 9 ? passPct(W.p.me.s) : 0, f: (x) => x ? x + "%" : "-" },
+  df: { e: "🛡️", n: () => T("수비 기여 (태클+가로채기+차단)", "Defensive actions"), v: () => (W && defAct(W.p.me.s)) || 0 },
+  ic: { e: "✋", n: () => T("가로채기", "Interceptions"), v: () => (W && W.p.me.s.ic) || 0 },
+  dc: { e: "💨", n: () => T("드리블 성공", "Dribbles won"), v: () => (W && W.p.me.s.dc) || 0 },
   rt: { e: "⭐", n: () => T("평균 평점 (9경기 이상)", "Avg rating (9+ apps)"), v: () => S.pro.s.ratings.length >= 9 ? Math.round(avg(S.pro.s.ratings) * 100) / 100 : 0, f: (x) => x ? x.toFixed(2) : "-" },
   rk: { e: "🏆", n: () => T("팀 순위", "Team finish"), v: () => S.pro.round ? myRank() : 0, low: true, f: (x) => x ? T(`${x}위`, `#${x}`) : "-" },
 };
@@ -26,10 +30,25 @@ function goalsInit() {
   const order = LEAGUES[P.league].clubs.map((c) => [c[0], clubStr(P.league, c[0])]).sort((a, b) => b[1] - a[1]).map((x) => x[0]);
   const exp = order.indexOf(club) + 1;
   const cl = (v, a, b) => Math.round(clamp(v, a, b));
-  const stat = { fw: ["g", cl(8 + rel * .6, 3, 25)], wg: ["ga", cl(9 + rel * .6, 4, 28)], mf: ["kp", cl(15 + rel * .5, 8, 30)], df: ["tc", cl(36 + rel * .9, 18, 60)], gk: ["cs", cl(4 + rel * .2, 2, 9)] }[S.pos] || ["ga", 8];
-  // 지난 시즌에 해낸 만큼은 기대해요 (같은 팀이면 90%, 팀을 옮겼으면 75%)
-  const pv = P.prevGoal && P.prevGoal.k === stat[0] ? P.prevGoal : null;
-  if (pv) stat[1] = Math.max(stat[1], Math.round(pv.v * (pv.club === club ? .9 : .75)));
+  // 포지션(미드필더는 세부 역할)마다 후보 목표가 여러 개 → 매 시즌 하나를 골라요 (지난 시즌과 다른 걸로)
+  bestXI(clubPlayers(club), false, formOf(club));   // 감독 포메이션에서 내 세부 역할(공미·중미·수미)을 정해요
+  const sr = S.pos === "mf" ? (W.p.me.sr || "cm") : S.pos;
+  P.sr = sr;
+  const POOL = {
+    fw: [["g", cl(8 + rel * .6, 3, 25)], ["ga", cl(10 + rel * .6, 4, 28)]],
+    wg: [["ga", cl(9 + rel * .6, 4, 28)], ["dc", cl(40 + rel * 1, 20, 70)], ["kp", cl(12 + rel * .5, 6, 26)]],
+    am: [["ga", cl(5 + rel * .35, 3, 14)], ["kp", cl(18 + rel * .5, 10, 32)], ["a", cl(3 + rel * .25, 2, 9)]],
+    cm: [["kp", cl(15 + rel * .5, 8, 28)], ["pp", cl(91 + rel * .3, 87, 96)], ["ga", cl(4 + rel * .3, 2, 10)], ["df", cl(25 + rel * .8, 12, 45)]],
+    dm: [["df", cl(50 + rel * 1.2, 25, 75)], ["ic", cl(25 + rel * .6, 12, 40)], ["pp", cl(91 + rel * .3, 87, 96)], ["tc", cl(25 + rel * .8, 12, 42)]],
+    df: [["tc", cl(38 + rel * .9, 18, 60)], ["df", cl(78 + rel * 1.2, 40, 100)], ["ic", cl(35 + rel * .6, 18, 50)]],
+    gk: [["cs", cl(4 + rel * .2, 2, 9)]],
+  }[sr] || [["ga", 8]];
+  const lastK = P.prevGoal && P.prevGoal.k;
+  const cand = POOL.length > 1 ? POOL.filter((x) => x[0] !== lastK) : POOL;
+  const stat = cand[Math.floor(Math.random() * cand.length)].slice();
+  // 지난 시즌에 해낸 만큼은 기대해요 (같은 팀이면 85%, 팀을 옮겼으면 70%) — 비율 목표(패스 성공률)는 빼고
+  const pvV = P.prevVals && P.prevVals[stat[0]];
+  if (pvV && stat[0] !== "pp") stat[1] = Math.max(stat[1], Math.round(pvV * (P.prevVals.club === club ? .85 : .7)));
   const goals = [{ k: stat[0], t: stat[1] }, { k: "rt", t: Math.round(clamp(6.7 + rel * .015, 6.4, 7.4) * 10) / 10 }, { k: "rk", t: exp <= 1 ? 1 : Math.min(LEAGUES[P.league].clubs.length, exp - (Math.random() < .5 ? 1 : 0)) }];
   if (S.pos === "df") goals.splice(1, 0, { k: "cs", t: cl(4 + (10 - exp) * .5, 2, 9) });
   P.goals = goals.slice(0, 3);
@@ -73,6 +92,7 @@ function goalsSettle() {
   addLog(`🎯 ${T("감독 목표", "Coach goals")} ${ok}/${P.goals.length}`);
   P.goalsDone = P.season;
   P.prevGoal = { k: P.goals[0].k, v: GOAL_DEF[P.goals[0].k].v(), club: P.club };
+  P.prevVals = { club: P.club }; for (const k of ["g", "ga", "a", "kp", "dc", "df", "ic", "tc"]) P.prevVals[k] = GOAL_DEF[k].v();
   P.goalsHTML = `<div class="ss-card goals-card"><h4>🎯 ${T("감독 목표", "Coach's goals")} ${ok}/${P.goals.length}</h4>${rows}
     <p class="small">${ok ? T(`💰 +${fmtMoney(money + (all ? pay * 3 : 0))} · ⭐ 명성 +${fame} · 👔 감독 신뢰 +${4 * ok}`, `💰 +${fmtMoney(money + (all ? pay * 3 : 0))} · ⭐ Fame +${fame} · 👔 Trust +${4 * ok}`) : ""}${fail ? T(` · 못 채운 목표 ${fail}개, 감독 신뢰 -${3 * fail}`, ` · ${fail} missed, trust -${3 * fail}`) : ""}${all ? T(" · 🎉 전부 달성 보너스!", " · 🎉 All-clear bonus!") : ""}</p></div>`;
   return P.goalsHTML;

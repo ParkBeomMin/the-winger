@@ -84,6 +84,24 @@ const PASS_ACC = { gk: -.1, df: .07, mf: .05, wg: -.03, fw: -.07 };
 const DRIB_W = { fw: 2.2, wg: 3.2, mf: 1.3, df: .4, gk: 0 };
 const TACK_W = { df: 2.6, mf: 2.2, wg: .9, fw: .5, gk: 0 };
 const ITC_W = { df: 1.7, mf: 1.3, wg: .45, fw: .25, gk: .1 };   // 가로채기
+/* 미드필더 세부 역할: 포메이션 자리와 능력치로 정해져요 (공격형 AM · 중앙 CM · 수비형 DM) */
+const SUB_SLOTS = { "4-3-3": ["cm", "dm", "cm"], "4-2-3-1": ["dm", "dm", "am"], "4-4-2": ["cm", "cm"], "3-5-2": ["cm", "dm", "cm"], "5-3-2": ["cm", "dm", "cm"] };
+const SUB_M = {
+  am: { g: 1.6, a: 1.25, d: .6, p: .95, dr: 1.4, t: .6, i: .7 },
+  cm: { g: 1, a: 1, d: 1, p: 1, dr: 1, t: 1, i: 1 },
+  dm: { g: .45, a: .7, d: 1.5, p: 1.1, dr: .6, t: 1.4, i: 1.4 },
+};
+const rwt = (TB, p, k) => TB[p.r] * (p.r === "mf" ? (SUB_M[p.sr] || SUB_M.cm)[k] : 1);
+function subLean(p) { const s = sOf(p); return s.sho * .35 + s.pas * .35 + s.dri * .3 - (s.def * .55 + s.pas * .25 + s.sta * .2); }   // +면 공격형, -면 수비형
+function assignSub(xi, form) {
+  const subs = SUB_SLOTS[form] || SUB_SLOTS["4-3-3"];
+  const left = xi.filter((p, i) => xi.roles[i] === "mf" && p.r === "mf");
+  for (const kind of ["am", "dm"]) {
+    let n = subs.filter((x) => x === kind).length;
+    while (n-- > 0 && left.length) { left.sort((a, b) => kind === "am" ? subLean(b) - subLean(a) : subLean(a) - subLean(b)); left.shift().sr = kind; }
+  }
+  left.forEach((p) => { p.sr = "cm"; });
+}
 const CLR_W = { df: 3.0, gk: 1.0, mf: .6, wg: .25, fw: .3 };    // 걷어내기
 const passPct = (s) => s && s.pa ? Math.round(s.pc / s.pa * 100) : 0;
 
@@ -245,6 +263,7 @@ function bestXI(players, noisy = true, form = "4-3-3") {
     if (c) { used.add(c[0]); fill[i] = c[0]; }
   });
   fill.forEach((p, i) => { if (p) { xi.push(p); xi.roles.push(roles[i]); } });
+  assignSub(xi, form);
   return xi;
 }
 /* 선발 확률 — 그 감독 포메이션으로 여러 번 뽑아 봐요 */
@@ -393,16 +412,16 @@ function genMatch(H, A) {
     if (Math.random() < .018) {
       const taker = on.filter((p) => p.r !== "gk").sort((a, b) => eff(b, "sho") - eff(a, "sho"))[0];
       const gk = dOn.find((p) => p.r === "gk") || dOn[0];
-      const df = weighted(dOn.filter((p) => p.r !== "gk"), (p) => D_W[p.r]);
+      const df = weighted(dOn.filter((p) => p.r !== "gk"), (p) => rwt(D_W, p, "d"));
       const ev = { min, side, sh: taker, as: null, df, gk, xg: .78, pen: true };
       ev.out = rollShot(ev, 0, true);
       if (taker.id === "me") ev.mom = "pk";
       if (taker.id === "rv") ev.rv = true;
       return ev;
     }
-    const sh = weighted(on, (p) => G_W[p.r] * Math.pow(eff(p, "sho") / 70, 1.5));
-    const as = Math.random() < .72 ? weighted(on.filter((p) => p !== sh), (p) => A_W[p.r] * Math.pow(eff(p, "pas") / 70, 1.5)) : null;
-    const df = weighted(dOn.filter((p) => p.r !== "gk"), (p) => D_W[p.r] * Math.pow(eff(p, "def") / 70, 2));
+    const sh = weighted(on, (p) => rwt(G_W, p, "g") * Math.pow(eff(p, "sho") / 70, 1.5));
+    const as = Math.random() < .72 ? weighted(on.filter((p) => p !== sh), (p) => rwt(A_W, p, "a") * Math.pow(eff(p, "pas") / 70, 1.5)) : null;
+    const df = weighted(dOn.filter((p) => p.r !== "gk"), (p) => rwt(D_W, p, "d") * Math.pow(eff(p, "def") / 70, 2));
     const gk = dOn.find((p) => p.r === "gk") || dOn[0];
     const xg = .06 + Math.pow(Math.random(), 1.6) * .5 + ((side === "home" ? sH : sA).xg || 0);
     const ev = { min, side, sh, as, df, gk, xg };
@@ -480,20 +499,20 @@ function finishMatch(m) {
   for (const [T, side, pos, oppU] of [[m.H, "home", posH, m.uA], [m.A, "away", 1 - posH, m.uH]]) {
     const xs = [...all.values()].filter((x) => x.side === side);
     const total = Math.round(pos * rand(820, 960) * (xs.length >= 11 ? 1 : .9));
-    const wsum = xs.reduce((s, x) => s + PASS_W[x.p.r] * (x.mins / 90) * (.7 + eff(x.p, "pas") / 200), 0) || 1;
+    const wsum = xs.reduce((s, x) => s + rwt(PASS_W, x.p, "p") * (x.mins / 90) * (.7 + eff(x.p, "pas") / 200), 0) || 1;
     const press = oppU ? oppU.mid : 65, oppDef = oppU ? oppU.def : 65, oppAtt = oppU ? oppU.att : 65;
     for (const x of xs) {
       const k = x.mins / 90, r = x.p.r;
-      x.pa = Math.round(total * PASS_W[r] * k * (.7 + eff(x.p, "pas") / 200) / wsum);
+      x.pa = Math.round(total * rwt(PASS_W, x.p, "p") * k * (.7 + eff(x.p, "pas") / 200) / wsum);
       const acc = clamp(.76 + (eff(x.p, "pas") - press) / 220 + PASS_ACC[r] + (pos - .5) * .15 + rand(-.04, .04), .45, .96);
       x.pc = Math.round(x.pa * acc);
-      const da = poisson(k * DRIB_W[r] * eff(x.p, "dri") / 70);
+      const da = poisson(k * rwt(DRIB_W, x.p, "dr") * eff(x.p, "dri") / 70);
       x.da += da; x.dc += Math.round(da * clamp(.45 + (eff(x.p, "dri") - oppDef) / 120, .2, .85));
-      const ta = poisson(k * TACK_W[r] * eff(x.p, "def") / 70) + x.blk;
+      const ta = poisson(k * rwt(TACK_W, x.p, "t") * eff(x.p, "def") / 70) + x.blk;
       x.ta += ta; x.tc += Math.min(ta, x.blk + Math.round((ta - x.blk) * clamp(.55 + (eff(x.p, "def") - oppAtt) / 120, .3, .9)));
       // 수비 기록: 공을 덜 가질수록(상대가 더 공격할수록) 많아져요
       const dfn = k * (1.4 - pos * .8);
-      x.ic += poisson(dfn * ITC_W[r] * eff(x.p, "def") / 70);
+      x.ic += poisson(dfn * rwt(ITC_W, x.p, "i") * eff(x.p, "def") / 70);
       x.cl += poisson(dfn * CLR_W[r] * oppAtt / 70);
     }
     team[side] = { pos: Math.round(pos * 100), sh: xs.reduce((s, x) => s + x.sh, 0), sot: xs.reduce((s, x) => s + x.sot, 0), xg: Math.round(xs.reduce((s, x) => s + x.xg, 0) * 10) / 10,
