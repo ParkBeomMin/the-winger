@@ -184,7 +184,8 @@ async function openCloud() {
     ],
   });
   if (v === "make") {
-    if (!S || !S.name) return toast("No progress to move");
+    const sv = S || load();   // 타이틀 화면에선 아직 S를 안 불러왔어요 → 저장된 진행으로 확인
+    if (!sv || !sv.name) return toast("No progress to move");
     toast("Creating code…", 1500);
     let code; try { code = await makeTransfer(); } catch { return toast("Couldn't create a code. Please try again in a moment"); }
     await modal({ emoji: "📤", title: "Transfer code", html: `<p class="xfer-code">${trFmt(code)}</p><p class="small">On the other device, enter it in <b>⚙️ → ☁️ Save · Device transfer → 📥 Enter transfer code</b>.<br/>It can be used once within 24 hours.</p>`, buttons: [{ label: "Copy code", value: 1, cls: "btn-primary" }, { label: "Close", value: 0 }] })
