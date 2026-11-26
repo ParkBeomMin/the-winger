@@ -84,23 +84,59 @@ const PASS_ACC = { gk: -.1, df: .07, mf: .05, wg: -.03, fw: -.07 };
 const DRIB_W = { fw: 2.2, wg: 3.2, mf: 1.3, df: .4, gk: 0 };
 const TACK_W = { df: 2.6, mf: 2.2, wg: .9, fw: .5, gk: 0 };
 const ITC_W = { df: 1.7, mf: 1.3, wg: .45, fw: .25, gk: .1 };   // 가로채기
-/* 미드필더 세부 역할: 포메이션 자리와 능력치로 정해져요 (공격형 AM · 중앙 CM · 수비형 DM) */
-const SUB_SLOTS = { "4-3-3": ["cm", "dm", "cm"], "4-2-3-1": ["dm", "dm", "am"], "4-4-2": ["cm", "cm"], "3-5-2": ["cm", "dm", "cm"], "5-3-2": ["cm", "dm", "cm"] };
+/* ---------- 세부 역할: 감독 포메이션의 자리 + 선수 능력치로 정해져요 ----------
+ * 미드필더: 공격형 AM · 중앙 CM · 수비형 DM  /  공격수: 타깃형 TG · 세컨드 SS  /  윙어: 인사이드 포워드 IF · 정통 윙어 TW  /  수비수: 센터백 CB · 풀백 FB · 윙백 WB */
+const SUB_SLOTS = {
+  "4-3-3": { mf: ["cm", "dm", "cm"], df: ["fb", "cb", "cb", "fb"] },
+  "4-2-3-1": { mf: ["dm", "dm", "am"], df: ["fb", "cb", "cb", "fb"] },
+  "4-4-2": { mf: ["cm", "cm"], df: ["fb", "cb", "cb", "fb"] },
+  "3-5-2": { mf: ["cm", "dm", "cm"], df: ["cb", "cb", "cb"] },
+  "5-3-2": { mf: ["cm", "dm", "cm"], df: ["wb", "cb", "cb", "cb", "wb"] },
+};
+const SUB_OF = { am: "mf", cm: "mf", dm: "mf", tg: "fw", ss: "fw", if: "wg", tw: "wg", cb: "df", fb: "df", wb: "df" };
 const SUB_M = {
   am: { g: 1.6, a: 1.25, d: .6, p: .95, dr: 1.4, t: .6, i: .7 },
-  cm: { g: 1, a: 1, d: 1, p: 1, dr: 1, t: 1, i: 1 },
+  cm: {},
   dm: { g: .45, a: .7, d: 1.5, p: 1.1, dr: .6, t: 1.4, i: 1.4 },
+  tg: { g: 1.2, a: .75, p: .9, dr: .85 },
+  ss: { g: .8, a: 2.2, p: 1.25, dr: 1.2 },
+  if: { g: 1.3, a: .8, dr: 1.1, p: .95 },
+  tw: { g: .7, a: 1.3, dr: 1, p: 1.05 },
+  cb: { g: .9, a: .5, d: 1.15, p: .95, dr: .3, t: 1.1, i: 1.1, c: 1.25 },
+  fb: { g: 1.1, a: 3, d: .8, p: 1.05, dr: 5, t: .85, i: .85, c: .6 },
+  wb: { g: 1.2, a: 3.4, d: .7, p: 1.05, dr: 5.5, t: .8, i: .8, c: .55 },
 };
-const rwt = (TB, p, k) => TB[p.r] * (p.r === "mf" ? (SUB_M[p.sr] || SUB_M.cm)[k] : 1);
+const subOk = (p) => p.sr && SUB_OF[p.sr] === p.r;
+const rwt = (TB, p, k) => TB[p.r] * (subOk(p) ? (SUB_M[p.sr][k] ?? 1) : 1);
 function subLean(p) { const s = sOf(p); return s.sho * .35 + s.pas * .35 + s.dri * .3 - (s.def * .55 + s.pas * .25 + s.sta * .2); }   // +면 공격형, -면 수비형
+const fbLean = (p) => { const s = sOf(p); return s.spd * .4 + s.dri * .3 + s.pas * .3 - s.def * .7; };   // 빠르고 공을 다루면 풀백, 수비가 강하면 센터백
+const fwLean = (p) => { const s = sOf(p); return s.sho - (s.pas + s.dri) / 2; };   // 슛이 강하면 타깃형, 패스·드리블이면 세컨드
+const WG_TH = 0, FW_TH = -6;
 function assignSub(xi, form) {
-  const subs = SUB_SLOTS[form] || SUB_SLOTS["4-3-3"];
-  const left = xi.filter((p, i) => xi.roles[i] === "mf" && p.r === "mf");
+  const F = SUB_SLOTS[form] || SUB_SLOTS["4-3-3"], FP = (FORMS[form] || FORMS["4-3-3"]).pos;
+  const at = (role) => xi.filter((p, i) => xi.roles[i] === role && p.r === role);
+  // 미드필더
+  const left = at("mf");
   for (const kind of ["am", "dm"]) {
-    let n = subs.filter((x) => x === kind).length;
+    let n = F.mf.filter((x) => x === kind).length;
     while (n-- > 0 && left.length) { left.sort((a, b) => kind === "am" ? subLean(b) - subLean(a) : subLean(a) - subLean(b)); left.shift().sr = kind; }
   }
   left.forEach((p) => { p.sr = "cm"; });
+  // 수비수: 자리 그대로 (바깥 자리 수만큼 풀백·윙백)
+  const dfs = at("df").sort((a, b) => fbLean(b) - fbLean(a)), nWide = F.df.filter((k) => k !== "cb").length, wide = F.df.includes("wb") ? "wb" : "fb";
+  dfs.forEach((p, k) => { p.sr = k < nWide ? wide : "cb"; });
+  // 윙어: 슛 성향 + (내 선수는) 주발이 반대쪽이면 인사이드 포워드
+  xi.forEach((p, i) => {
+    if (xi.roles[i] !== "wg" || p.r !== "wg") return;
+    const s = sOf(p), slot = xi.slots ? xi.slots[i] : i, isLeft = FP[slot] ? FP[slot][1] < .5 : i % 2 === 0;
+    let lean = s.sho - s.pas;
+    if (p.id === "me" && S.foot) lean += (isLeft ? S.foot === "R" : S.foot === "L") ? 8 : -8;
+    p.sr = lean > WG_TH ? "if" : "tw";
+  });
+  // 공격수: 투톱이면 슛 성향이 강한 쪽이 타깃형, 다른 쪽이 세컨드
+  const fws = at("fw").sort((a, b) => fwLean(b) - fwLean(a));
+  if (fws.length >= 2) fws.forEach((p, k) => { p.sr = k === 0 ? "tg" : "ss"; });
+  else if (fws.length === 1) fws[0].sr = fwLean(fws[0]) > FW_TH ? "tg" : "ss";
 }
 const CLR_W = { df: 3.0, gk: 1.0, mf: .6, wg: .25, fw: .3 };    // 걷어내기
 const passPct = (s) => s && s.pa ? Math.round(s.pc / s.pa * 100) : 0;
@@ -242,7 +278,7 @@ function bestXI(players, noisy = true, form = "4-3-3") {
   });
   const roles = (FORMS[form] || FORMS["4-3-3"]).roles;
   const used = new Set(), xi = [];
-  xi.roles = [];
+  xi.roles = []; xi.slots = [];
   // 1) 자리마다 원래 포지션 선수부터 (윙어 자리는 윙어로). 2) 벤치의 다른 포지션 선수가 확실히(+3) 나으면 교체.
   // 3) 그래도 빈 자리만 적성 맞는 다른 포지션 선수로. 원래 자리 주전이 엉뚱한 자리로 밀려나지 않게.
   const fill = new Array(roles.length).fill(null), fv = new Array(roles.length).fill(0);
@@ -262,7 +298,7 @@ function bestXI(players, noisy = true, form = "4-3-3") {
     if (!c) c = byV(scored.filter(([p]) => !used.has(p) && (role === "gk" ? true : p.r !== "gk")))[0];
     if (c) { used.add(c[0]); fill[i] = c[0]; }
   });
-  fill.forEach((p, i) => { if (p) { xi.push(p); xi.roles.push(roles[i]); } });
+  fill.forEach((p, i) => { if (p) { xi.push(p); xi.roles.push(roles[i]); xi.slots.push(i); } });
   assignSub(xi, form);
   return xi;
 }
@@ -513,7 +549,7 @@ function finishMatch(m) {
       // 수비 기록: 공을 덜 가질수록(상대가 더 공격할수록) 많아져요
       const dfn = k * (1.4 - pos * .8);
       x.ic += poisson(dfn * rwt(ITC_W, x.p, "i") * eff(x.p, "def") / 70);
-      x.cl += poisson(dfn * CLR_W[r] * oppAtt / 70);
+      x.cl += poisson(dfn * rwt(CLR_W, x.p, "c") * oppAtt / 70);
     }
     team[side] = { pos: Math.round(pos * 100), sh: xs.reduce((s, x) => s + x.sh, 0), sot: xs.reduce((s, x) => s + x.sot, 0), xg: Math.round(xs.reduce((s, x) => s + x.xg, 0) * 10) / 10,
       pa: xs.reduce((s, x) => s + x.pa, 0), pc: xs.reduce((s, x) => s + x.pc, 0), ta: xs.reduce((s, x) => s + x.ta, 0) };
