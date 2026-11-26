@@ -15,16 +15,18 @@ const GOAL_DEF = {
   a: { e: "🅰️", n: () => T("리그 도움", "League assists"), v: () => S.pro.s.a },
   cs: { e: "🧱", n: () => T("무실점 경기", "Clean sheets"), v: () => (W && W.p.me.s.cs) || 0 },
   tc: { e: "🛡️", n: () => T("태클 성공", "Tackles won"), v: () => (W && W.p.me.s.tc) || 0 },
+  kp: { e: "🎩", n: () => T("키패스 (도움 포함)", "Key passes (incl. assists)"), v: () => (W && W.p.me.s.kp) || 0 },
   rt: { e: "⭐", n: () => T("평균 평점 (9경기 이상)", "Avg rating (9+ apps)"), v: () => S.pro.s.ratings.length >= 9 ? Math.round(avg(S.pro.s.ratings) * 100) / 100 : 0, f: (x) => x ? x.toFixed(2) : "-" },
   rk: { e: "🏆", n: () => T("팀 순위", "Team finish"), v: () => S.pro.round ? myRank() : 0, low: true, f: (x) => x ? T(`${x}위`, `#${x}`) : "-" },
 };
 function goalsInit() {
   if (S.phase !== "pro" || !W) return;
-  const P = S.pro, club = P.club, rel = OVR() - clubStr(P.league, club);
+  // 팀보다 내가 너무 강해도 동료가 받쳐줘야 기록이 나와요 → 목표 계산에 쓰는 차이는 12까지만
+  const P = S.pro, club = P.club, rel = Math.min(12, OVR() - clubStr(P.league, club));
   const order = LEAGUES[P.league].clubs.map((c) => [c[0], clubStr(P.league, c[0])]).sort((a, b) => b[1] - a[1]).map((x) => x[0]);
   const exp = order.indexOf(club) + 1;
   const cl = (v, a, b) => Math.round(clamp(v, a, b));
-  const stat = { fw: ["g", cl(8 + rel * .6, 3, 25)], wg: ["ga", cl(9 + rel * .6, 4, 28)], mf: ["a", cl(5 + rel * .35, 2, 15)], df: ["tc", cl(36 + rel * .9, 18, 60)], gk: ["cs", cl(4 + rel * .2, 2, 9)] }[S.pos] || ["ga", 8];
+  const stat = { fw: ["g", cl(8 + rel * .6, 3, 25)], wg: ["ga", cl(9 + rel * .6, 4, 28)], mf: ["kp", cl(15 + rel * .5, 8, 30)], df: ["tc", cl(36 + rel * .9, 18, 60)], gk: ["cs", cl(4 + rel * .2, 2, 9)] }[S.pos] || ["ga", 8];
   // 지난 시즌에 해낸 만큼은 기대해요 (같은 팀이면 90%, 팀을 옮겼으면 75%)
   const pv = P.prevGoal && P.prevGoal.k === stat[0] ? P.prevGoal : null;
   if (pv) stat[1] = Math.max(stat[1], Math.round(pv.v * (pv.club === club ? .9 : .75)));

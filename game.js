@@ -342,7 +342,7 @@ function renderMain() {
   // 라이벌 카드
   const rv = S.rival, my = OVR(), ro = ROVR(), diff = my - ro;
   const rvLine = pro && rv.club
-    ? `${LEAGUES[rv.league].flag} ${esc(rv.club)} · 시즌 ⚽${rvS().g} 🅰️${rvS().a} <small>(나 ⚽${S.pro.s.g} 🅰️${S.pro.s.a})</small>`
+    ? `${LEAGUES[rv.league].flag} ${esc(rv.club)} · 시즌 ⚽${rvS().g} 🅰️${rvS().a} <small>(나 ⚽${S.pro.s.g} 🅰️${S.pro.s.a}${W && W.p.me && ["mf", "df", "gk"].includes(S.pos) ? ` ${CONTRIB[POS_CONTRIB[S.pos][0]].e}${CONTRIB[POS_CONTRIB[S.pos][0]].v(W.p.me.s)}` : ""})</small>`
     : `${ORIGINS[rv.origin].flag} ${ORIGINS[rv.origin].team} · ${POS[rv.pos].name}`;
   $("rival-card").innerHTML = `
     <div class="rc-av" id="rc-av"></div>
@@ -1353,11 +1353,49 @@ function openBallonInfo() {
     buttons: [{ label: T("닫기", "Close"), value: 1, cls: "btn-primary" }] });
 }
 function ballonScore(o) { const B = BALLON_W; return o.ovr * B.ovr + o.tier * B.tier + (o.avg - 6.5) * B.rate + (o.g + (o.bg || 0) * B.big + o.a * .8) * (POS_F[o.pos] || 1) * B.ga + (o.champ ? B.champ : 0) + (o.boot ? B.boot : 0) + (o.ast ? B.ast : 0) + (o.mvp ? B.mvp : 0) + (o.cup || 0) + (o.wc || 0) - (o.rc || 0) * B.red; }
+/* ---------- 🎖️ 포지션별 기여 ----------
+ * 포지션마다 "잘한 것"이 달라요: 공격수는 골, 윙어는 공격 포인트·드리블, 미드는 키패스·패스·수비 가담, 수비는 수비 기여, 골키퍼는 선방·무실점.
+ * 리그 순위와 함께 보여줘서 골·도움이 적어도 내 기여가 보이게 해요. */
+const defAct = (s) => (s.tc || 0) + (s.ic || 0) + (s.bk || 0);
+const CONTRIB = {
+  g: { e: "⚽", n: "골", v: (s) => s.g },
+  ga: { e: "🔥", n: "공격 포인트", v: (s) => s.g + s.a },
+  sot: { e: "🎯", n: "유효 슈팅", v: (s) => s.sot || 0 },
+  xg: { e: "📈", n: "xG", v: (s) => (s.xg || 0) / 100, f: (x) => x.toFixed(1) },
+  dc: { e: "💨", n: "드리블 성공", v: (s) => s.dc || 0 },
+  kp: { e: "🎩", n: "키패스", v: (s) => s.kp || 0 },
+  pp: { e: "🧭", n: "패스 성공률", v: (s) => (s.pa || 0) >= s.ap * 20 ? passPct(s) : 0, f: (x) => x + "%" },
+  df: { e: "🛡️", n: "수비 기여", v: defAct },
+  ic: { e: "✋", n: "가로채기", v: (s) => s.ic || 0 },
+  cs: { e: "🧱", n: "무실점", v: (s) => s.cs || 0, only: ["df", "gk"] },
+  sv: { e: "🧤", n: "선방", v: (s) => s.sv || 0, only: ["gk"] },
+};
+const POS_CONTRIB = { fw: ["g", "sot", "xg"], wg: ["ga", "dc", "kp"], mf: ["kp", "pp", "df"], df: ["df", "ic", "cs"], gk: ["sv", "cs", "pp"] };
+function contribRank(p, k) {
+  const C = CONTRIB[k], minAp = Math.max(1, Math.min(9, Math.floor(p.s.ap * .6)));
+  const ps = leaguePlayers(p.l).filter((q) => q.s.ap >= minAp && (!C.only || C.only.includes(q.r)));
+  const v = C.v(p.s);
+  return { v, rank: v > 0 ? 1 + ps.filter((q) => C.v(q.s) > v).length : 0 };
+}
+const rankTxt = (n) => T(` · 리그 ${n}위`, ` · #${n} in league`);
+function contribHTML(p) {
+  if (!p || !p.s || !p.s.ap || p.l == null) return "";
+  return `<div class="mystats contrib">${(POS_CONTRIB[p.r] || POS_CONTRIB.mf).map((k) => { const C = CONTRIB[k], r = contribRank(p, k); return `<span class="${r.rank && r.rank <= 3 ? "top" : ""}"><b>${C.e} ${C.f ? C.f(r.v) : r.v}</b><small>${C.n}${r.rank && r.rank <= 20 ? rankTxt(r.rank) : ""}</small></span>`; }).join("")}</div>`;
+}
+/* 시즌 활약 점수: 평점 + 포지션 배율을 곱한 공격 포인트 + 도움이 안 된 키패스·수비 기여·무실점 (경기당) */
+function seasonImpact(p) {
+  const s = p.s, ap = Math.max(1, s.ap);
+  return pAvg(p) + (s.g + s.a * .7) * (POS_F[p.r] || 1) / ap * .45 + (Math.max(0, (s.kp || 0) - s.a) * .12 + defAct(s) * .02 + (p.r === "gk" ? (s.cs || 0) * .3 : 0)) / ap;
+}
+function topByF(lgId, fn, n, only) {
+  return leaguePlayers(lgId).filter((p) => p.s.ap >= Math.max(3, Math.floor((S.pro.round || ROUNDS) * .55)) && (!only || only.includes(p.r))).sort((a, b) => fn(b.s) - fn(a.s) || pAvg(b) - pAvg(a)).slice(0, n);
+}
+
 /* 리그 MVP 점수: 평균 평점 + 공격 포인트(경기당) + 팀 성적. 꼴찌 팀에서 평점만 높은 선수가 받기 어렵게 (실제 MVP처럼 우승 경쟁 팀 · 결과 중심) */
 function mvpScore(p, lgId) {
   const n = Object.keys(S.lgs[lgId].table).length, r = rankOf(p.c), ap = Math.max(1, p.s.ap);
   const teamAdj = r === 1 ? .35 : r <= 3 ? .2 : r <= n / 2 ? .05 : r > n - 2 ? -.3 : -.1;
-  return pAvg(p) + (p.s.g + p.s.a * .7) * (POS_F[p.r] || 1) / ap * .45 + teamAdj;   // 포지션 배율: 수비·미드의 공격 포인트는 더 크게
+  return seasonImpact(p) + teamAdj;   // 포지션 배율: 수비·미드의 공격 포인트는 더 크게 + 키패스·수비 기여
 }
 function leagueAwards(lgId) {
   const ps = leaguePlayers(lgId).filter((p) => p.s.ap >= 9);
@@ -1367,6 +1405,9 @@ function leagueAwards(lgId) {
     ast: best((a, b) => b.s.a - a.s.a || b.s.g - a.s.g || pAvg(b) - pAvg(a)),
     mvp: best((a, b) => mvpScore(b, lgId) - mvpScore(a, lgId)),
     young: ps.filter((p) => ageOf(p) <= 22).sort((a, b) => pAvg(b) - pAvg(a))[0],
+    pm: best((a, b) => (b.s.kp || 0) - (a.s.kp || 0) || b.s.a - a.s.a),
+    wall: ps.filter((p) => p.r === "df" || p.r === "mf").sort((a, b) => defAct(b.s) - defAct(a.s))[0],
+    glove: ps.filter((p) => p.r === "gk").sort((a, b) => (b.s.cs || 0) - (a.s.cs || 0) || (b.s.sv || 0) - (a.s.sv || 0))[0],
     champ: sortedTable(lgId)[0][0],
   };
 }
@@ -1381,6 +1422,8 @@ async function seasonEnd() {
   if (mineAw.ast && mineAw.ast.id === "me" && P.s.a >= 4) awards.push({ k: "ast", name: "🎯 도움왕", w: 6 * lg.prestige });
   if (mineAw.mvp && mineAw.mvp.id === "me") awards.push({ k: "mvp", name: "👑 리그 MVP", w: 10 * lg.prestige });
   if (mineAw.young && mineAw.young.id === "me") awards.push({ k: "young", name: "🌟 영플레이어상", w: 6 });
+  const posAw = (A, id) => [A.pm && A.pm.id === id && (A.pm.s.kp || 0) >= 15 ? "🎩 플레이메이커상" : "", A.wall && A.wall.id === id && defAct(A.wall.s) >= 40 ? "🛡️ 수비왕" : "", A.glove && A.glove.id === id && (A.glove.s.cs || 0) >= 5 ? "🧤 골든글러브" : ""].filter(Boolean);
+  for (const n of posAw(mineAw, "me")) awards.push({ k: "pos", name: n, w: 5 * lg.prestige });
   if (rank === 1) { awards.push({ k: "title", name: `🏆 ${lg.name} 우승`, w: 8 * lg.prestige }); S.career.trophies.push(`${P.season}시즌 ${lg.name}`); }
   const rvAwards = [];
   const RA = rvp.l != null ? AW[rvp.l] : null;
@@ -1388,6 +1431,7 @@ async function seasonEnd() {
     if (RA.boot && RA.boot.id === "rv") rvAwards.push("👟 득점왕");
     if (RA.ast && RA.ast.id === "rv") rvAwards.push("🎯 도움왕");
     if (RA.mvp && RA.mvp.id === "rv") rvAwards.push("👑 리그 MVP");
+    rvAwards.push(...posAw(RA, "rv"));
     if (RA.champ === rvp.c) { rvAwards.push("🏆 리그 우승"); rv.career.trophies++; }
   }
   for (const [k, c] of Object.entries(S.cups)) if (c.winner === rvp.c) rvAwards.push(`${CUPS[k].emoji} ${CUPS[k].name} 우승`);
@@ -1423,6 +1467,8 @@ async function seasonEnd() {
   achNew.forEach((m) => addLog(m));
   for (const l of LEAGUES) news(`🏆 ${l.flag} ${l.name} ${P.season}시즌 우승: ${AW[l.id].champ}${AW[l.id].boot ? ` · 득점왕 ${AW[l.id].boot.n} ${AW[l.id].boot.s.g}골` : ""}`);
 
+  const myI = seasonImpact(W.p.me), rvI = rvp.s && rvp.s.ap ? seasonImpact(rvp) : 0, dI = myI - rvI;
+  const impVerdict = `${!rvI || dI > .05 ? "🔥 이번 시즌은 내가 이겼어요!" : dI < -.05 ? "😤 이번 시즌은 라이벌이 앞섰어요" : "🤝 막상막하"} <small>(활약 점수 ${myI.toFixed(2)} : ${rvI ? rvI.toFixed(2) : "-"})</small>`;
   show("scr-season");
   $("ss-title").textContent = `📋 ${P.season}시즌 결산 · ${S.age}세`;
   const myRow = (n) => n === P.club ? "me" : n === rvp.c ? "rv" : "";
@@ -1436,6 +1482,7 @@ async function seasonEnd() {
       <table class="tbl"><tr><th>#</th><th>클럽</th><th>승</th><th>무</th><th>패</th><th>득실</th><th>승점</th></tr>
       ${tbl.map(([n, t], i) => `<tr class="${myRow(n)} ${zoneCls(P.league, i)}"><td>${i + 1}</td><td>${crestHTML(n, 14)} ${esc(n)}${n === rvp.c ? " ⚔️" : ""}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table></div>
     <div class="ss-card"><h4>내 시즌</h4>
+      <p class="label">🎖️ ${ROLE_KO[S.pos]} 핵심 기여</p>${contribHTML(W.p.me)}
       ${seasonStatHTML(W.p.me.s)}
       <div class="ss-me"><div id="ss-av"></div><div>리그 ${P.s.apps}경기 (선발 ${P.s.starts})<br/>⚽ ${P.s.g}골 · 🅰️ ${P.s.a}도움 · MOM ${P.s.mom}<br/>평균 평점 <b>${myAvg ? myAvg.toFixed(2) : "-"}</b>${P.cup.ap ? `<br/>대륙컵 ${P.cup.ap}경기 ⚽ ${P.cup.g} 🅰️ ${P.cup.a}` : ""}<br/>
       ${awards.length ? awards.map((a) => `<span class="aw">${a.name}</span>`).join(" ") : "<small>이번 시즌 수상은 없어요</small>"}
@@ -1443,10 +1490,13 @@ async function seasonEnd() {
     ${goalsHTML}${achNew.length ? `<div class="ss-card"><h4>🏅</h4>${achNew.map((m) => `<div class="small">${m}</div>`).join("")}</div>` : ""}
     <div class="ss-card two"><div><h4>👟 득점 순위</h4>${topBy(P.league, "g", 5).map((p) => plRow(p, p.s.g + "골")).join("")}</div>
       <div><h4>🎯 도움 순위</h4>${topBy(P.league, "a", 5).map((p) => plRow(p, p.s.a + "도움")).join("")}</div></div>
+    <div class="ss-card two"><div><h4>🎩 키패스 순위</h4>${topBy(P.league, "kp", 5).map((p) => plRow(p, (p.s.kp || 0) + "회")).join("")}</div>
+      ${S.pos === "gk" ? `<div><h4>🧱 무실점 순위</h4>${topByF(P.league, (s) => s.cs || 0, 5, ["gk"]).map((p) => plRow(p, (p.s.cs || 0) + "경기")).join("")}</div>` : `<div><h4>🛡️ 수비 기여 순위</h4>${topByF(P.league, defAct, 5).map((p) => plRow(p, defAct(p.s) + "회")).join("")}</div>`}</div>
     <div class="ss-card rvc"><h4>⚔️ 라이벌 ${esc(rv.name)}</h4>
       <div>${LEAGUES[rvp.l].flag} ${esc(rvp.c)} (${rankOf(rvp.c)}위) · ${rs.ap}경기 · ⚽ ${rs.g} · 🅰️ ${rs.a} · 평균 ${rs.avg ? rs.avg.toFixed(2) : "-"}<br/>
       ${rvAwards.length ? rvAwards.map((a) => `<span class="aw rv">${a}</span>`).join(" ") : "<small>수상 없음</small>"}</div>
-      <div class="ss-vs">${P.s.g + P.s.a > rs.g + rs.a ? "🔥 이번 시즌은 내가 이겼어요!" : P.s.g + P.s.a < rs.g + rs.a ? "😤 이번 시즌은 라이벌이 앞섰어요" : "🤝 막상막하"}</div></div>
+      ${contribHTML(rvp)}
+      <div class="ss-vs">${impVerdict}</div><p class="small">활약 점수 = 평균 평점 + 포지션에 맞춘 공격 포인트·키패스·수비 기여 (경기당)</p></div>
     <div class="ss-card"><h4>🌍 세계 축구</h4>${TOP_LEAGUES.filter((l) => l.id !== P.league).map(awLine).join("")}${cupLine}</div>
     <div class="ss-card"><h4>🔁 승격 · 강등</h4>${promoPreview().map((x) => `<div class="small">${LEAGUES[x.lg].flag} ⬆️ ${x.up.map((n) => `<b class="${n === P.club ? "me-t" : ""}">${esc(n)}</b>`).join(", ")} · ⬇️ ${x.down.map((n) => `<b class="${n === P.club ? "me-t" : ""}">${esc(n)}</b>`).join(", ")}</div>`).join("")}</div>
     <div class="ss-card"><h4>🏅 발롱도르 순위</h4>
@@ -1687,7 +1737,7 @@ function openPlayer(id) {
     title: `${NATIONS[p.nat].flag} ${esc(p.n)}${id === "rv" ? " ⚔️" : ""}`, wide: true,
     html: `<p class="small">${ROLE_KO[p.r]} · ${ageOf(p)}세 · ${NATIONS[p.nat].name} · ${p.c ? `<a class="pl" data-club="${esc(p.c)}">${crestHTML(p.c, 14)} ${esc(p.c)}</a>` : "무소속"} · 종합 <b>${Math.round(pOvr(p))}</b> · 시장가치 <b>${fmtMV(marketValue(p))}</b>${p.inj > 0 ? ` · 🚑 부상 ${p.inj}경기` : ""}</p>
       <div class="roll">${STATS.map((s) => { const t5 = id === "rv" ? S.rival.talent[s.key] === 5 : (aiEnsure(p), aiTal(p, STAT_KEYS.indexOf(s.key)) === 5); return `<div><span>${s.emoji} ${s.name}</span><b class="${st[s.key] > 99 ? "over" : ""}">${Math.round(st[s.key])}</b><i class="${t5 ? "t5" : ""}">${id === "rv" ? talentStr(s.key, S.rival.talent[s.key], trOf(s.key, S.rival)) : aiTalentStr(p, s.key)}</i></div>`; }).join("")}</div>
-      ${p.s.ap ? `<p class="label">이번 시즌 상세</p>${seasonStatHTML(p.s, p.r)}` : ""}
+      ${p.s.ap ? `<p class="label">이번 시즌 ${ROLE_KO[p.r]} 핵심 기여</p>${contribHTML(p)}<p class="label">이번 시즌 상세</p>${seasonStatHTML(p.s, p.r)}` : ""}
       <table class="tbl"><tr><th>시즌</th><th>클럽</th><th>경기</th><th>⚽</th><th>🅰️</th><th>패스%</th><th>키패스</th><th>평점</th></tr>${hist.slice().reverse().map((h) => `<tr><td>${h.y}${h.now ? "*" : ""}</td><td>${esc(shortName(h.c))}</td><td>${h.ap}</td><td>${h.g}</td><td>${h.a}</td><td>${h.now ? passPct(p.s) : h.pp ?? "-"}</td><td>${h.now ? p.s.kp || 0 : h.kp ?? "-"}</td><td>${h.r ? h.r.toFixed(2) : "-"}</td></tr>`).join("")}</table>
       <p class="small">통산 ⚽ ${hist.reduce((s, h) => s + h.g, 0)} · 🅰️ ${hist.reduce((s, h) => s + h.a, 0)} (기록 보관 이후)</p>`,
     buttons: [{ label: "닫기", value: 1, cls: "btn-primary" }],
