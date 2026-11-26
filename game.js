@@ -768,6 +768,19 @@ async function showResult(r, lines, btnLabel = "계속") {
   if (r.mom) Sfx.good();
   await new Promise((res) => ($("b-res").onclick = res));
 }
+/* ⭐ 경기 명성: 지금 명성 등급에 걸맞은 활약을 해야 올라요.
+ * 기대 평점 = 6.3 + 등급×0.07 (+ 리그 수준보다 높은 등급이면 등급마다 0.4씩 더 엄격하게)
+ * 그보다 못하면 명성이 깎이고, 팀이 지면 조금 더 깎여요. 유명할수록 비판도 커요. */
+const FAME_RES = { W: 1, D: 0, L: -1.5 };
+function fameCapG(prestige) { return Math.round(3 + prestige * 2.7); }   // K리그1 6(국가대표급) · 네덜란드·포르투갈 8(월드스타) · 스페인·프리미어 11
+function fameDelta(r, prestige) {
+  const gi = fameGrade(S.fame).i, cap = fameCapG(prestige), ov = Math.max(0, gi - cap);
+  const bar = 6.3 + gi * .07 + ov * .4;
+  let d = (r.rating - bar) * 3 + r.goals * 2 + r.assists * 1.5 + (r.mom ? 3 : 0) + (S.phase === "pro" ? FAME_RES[r.res] || 0 : 0);
+  if (d < 0) d *= 1 + gi * .06;                        // 유명할수록 부진에 대한 비판이 커요
+  else d *= Math.pow(.5, Math.max(0, gi - cap + 1));    // 리그 수준에 닿으면 더 오르기 어려워요
+  return d - ov * 3;                                    // 리그 수준보다 높은 명성은 서서히 내려와요
+}
 function applyMatch(r, opts = {}) {
   const lines = [];
   if (opts.rival) {
@@ -776,9 +789,14 @@ function applyMatch(r, opts = {}) {
     if (r.rivalGoal) lines.push(`😤 ${esc(S.rival.name)}에게 골을 허용했어요`);
   }
   lines.push(...(r.cards || []));
-  if (!r.played) return lines;
   const prestige = opts.prestige || 1;
-  const f = Math.round(((r.rating - 6.3) * 3 + r.goals * 2 + r.assists * 1.5 + (r.mom ? 3 : 0)) * ORIGINS[S.origin].fame * (S.phase === "youth" ? .6 : .6 + prestige * .2) * (opts.big || 1));
+  if (!r.played) {
+    /* 유명한 선수가 계속 못 뛰면 조금씩 잊혀요 (리그의 얼굴 이상) */
+    const gi = fameGrade(S.fame).i;
+    if (S.phase === "pro" && gi >= 7 && !opts.big) { const d = Math.round(gi * .4); S.fame = Math.max(0, S.fame - d); lines.push(`⭐ 명성 -${d} (결장)`); }
+    return lines;
+  }
+  const f = Math.round(fameDelta(r, prestige) * ORIGINS[S.origin].fame * (S.phase === "youth" ? .6 : .6 + prestige * .2) * (opts.big || 1));
   const fb = typeof F === "function" ? F("fame") : 0;
   const f2 = f > 0 && fb ? Math.round(f * (1 + fb)) : f;
   S.fame = Math.max(0, S.fame + f2);
@@ -1846,7 +1864,7 @@ function openHelp() {
       <p><b>🏋️ 훈련과 컨디션</b><br/>훈련하면 능력치↑ 컨디션↓. 컨디션 50 아래면 효율이 떨어지고, 30 아래로 내려가는 훈련은 부상 위험이 있어요. 버튼에 위험도가 떠요.</p>
       <p><b>👔 감독 신뢰 · ✍️ 계약</b><br/>경기 평점과 선택에 따라 감독 신뢰가 오르내리고, 선발 경쟁에 반영돼요. 감독이 바뀌거나 이적하면 다시 쌓아야 해요. 프로 계약은 기간·수당·바이아웃이 있고, 계약 중 이적은 구단이 동의해야 해요. 계약이 끝나면 재계약하거나 자유 이적할 수 있어요.</p>
       <p><b>📡 방금 일어난 일</b><br/>해트트릭, 연패, 감독 교체, 결승 진출, 라이벌 부상, A매치 발탁처럼 실제 경기·세계에서 생긴 일이 다음 턴 이벤트로 이어져요.</p>
-      <p><b>🛍️ 상점 · ⭐ 명성 등급</b><br/>장비는 영구, 전담팀은 시즌마다 유지비, 소모품은 바로 써요. 기부는 명성을 올려요. 명성은 무명 → 유망주 → … → 축구 아이콘 등급으로 보여요.</p>
+      <p><b>🛍️ 상점 · ⭐ 명성 등급</b><br/>장비는 영구, 전담팀은 시즌마다 유지비, 소모품은 바로 써요. 기부는 명성을 올려요. 명성은 무명 → 유망주 → … → 축구 아이콘 등급으로 보여요. 등급이 높을수록 기대치도 높아서, 부진하거나 팀이 지면 명성이 깎여요. 리그 수준보다 높은 등급은 유지하기 더 어려워요.</p>
       <p><b>🎉 피버 타임 · 📢 공지 · 🏛️ 세계 명예의 전당</b><br/>운영 이벤트 기간에는 화면 위에 피버 띠가 뜨고 훈련·숙련·명성·수당 보너스가 붙어요. 공지는 타이틀과 📢 버튼에서 봐요. 은퇴하면 커리어가 세계 명예의 전당 랭킹에 올라가요.</p>
       <p><b>🏆 유스 대회</b><br/>8팀이 2개 조 풀리그를 치르고 조 1·2위가 4강, 결승으로 가요. 라이벌 팀과는 조별리그, 4강, 결승 어디서든 만날 수 있어요.</p>
       <p><b>☁️ 저장</b><br/>매 경기 결과가 바로 저장되고, 자동 클라우드 백업이 돼요. ⚙️ → ☁️에서 8자리 이전 코드로 다른 기기에서 이어하거나 구글 계정에 연동할 수 있어요.</p>

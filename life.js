@@ -217,7 +217,7 @@ function checkFameUp() {
   const g = fameGrade(S.fame).i;
   if (S.fameI == null || S.fameV !== 2) { S.fameI = g; S.fameV = 2; return; }   // v2: 등급이 14단계로 늘어 옛 번호는 다시 맞춰요
   if (g > S.fameI) { S.fameI = g; const n = FAME_GRADES[g][1]; addLog(`⭐ 명성 등급 상승: ${n}`); toast(`⭐ 명성 등급 UP! ${n}`, 3000); if (g >= 4) news(`⭐ ${S.name}, 이제 '${n.replace(/^\S+\s/, "")}'`); }
-  else if (g < S.fameI) S.fameI = g;
+  else if (g < S.fameI) { S.fameI = g; const n = FAME_GRADES[g][1]; addLog(`⭐ 명성 등급 하락: ${n}`); toast(`⭐ 명성 등급 DOWN… ${n}`, 3000); }
 }
 
 /* ---------- 🧬 재능 각성 · 🌌 초월 ----------
